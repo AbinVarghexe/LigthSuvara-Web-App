@@ -1,5 +1,5 @@
 import { RouterProvider } from 'react-router';
-import { router } from './utils/routes';
+import { router } from './routes';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
 
@@ -7,7 +7,7 @@ export default function App() {
   return (
     <AuthProvider>
       <RouterProvider router={router} />
-      <Toaster position="top-right" />
+      <Toaster position="bottom-right" />
     </AuthProvider>
   );
 }
