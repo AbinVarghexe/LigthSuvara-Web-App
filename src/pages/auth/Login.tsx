@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
-import { Loader2, GalleryVerticalEnd } from 'lucide-react';
+import { Loader2, GalleryVerticalEnd, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { login, isAdmin } from '../../features/auth/services/authService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -12,6 +12,7 @@ import { Separator } from '../../components/ui/separator';
 
 export function Login() {
     const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -51,12 +52,6 @@ export function Login() {
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-gray-900">
-            <div className="flex items-center gap-2 mb-8 font-medium text-gray-900">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white">
-                    <GalleryVerticalEnd className="size-4" />
-                </div>
-                Acme Inc.
-            </div>
 
             <Card className="w-full max-w-[400px] bg-white border-gray-200 shadow-xl">
                 <CardHeader className="text-center space-y-2 pb-6">
@@ -127,13 +122,26 @@ export function Login() {
                                     Forgot your password?
                                 </a>
                             </div>
-                            <Input
-                                id="password"
-                                {...register('password', { required: 'Password is required' })}
-                                type="password"
-                                className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus-visible:ring-blue-600"
-                                placeholder="••••••••"
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="password"
+                                    {...register('password', { required: 'Password is required' })}
+                                    type={showPassword ? "text" : "password"}
+                                    className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus-visible:ring-blue-600 pr-10"
+                                    placeholder="••••••••"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+                                >
+                                    {showPassword ? (
+                                        <EyeOff className="w-4 h-4" />
+                                    ) : (
+                                        <Eye className="w-4 h-4" />
+                                    )}
+                                </button>
+                            </div>
                             {errors.password && (
                                 <p className="text-sm text-red-500">{errors.password.message as string}</p>
                             )}
@@ -155,21 +163,9 @@ export function Login() {
                         </Button>
                     </form>
 
-                    <div className="text-center text-sm text-gray-500">
-                        Don't have an account?{" "}
-                        <a href="#" className="text-blue-600 hover:underline">
-                            Sign up
-                        </a>
-                    </div>
                 </CardContent>
             </Card>
 
-            <div className="mt-8 text-center text-xs text-gray-500 max-w-[300px]">
-                By clicking continue, you agree to our{" "}
-                <a href="#" className="hover:text-gray-700 underline underline-offset-4">Terms of Service</a>
-                {" "}and{" "}
-                <a href="#" className="hover:text-gray-700 underline underline-offset-4">Privacy Policy</a>.
-            </div>
         </div>
     );
 }

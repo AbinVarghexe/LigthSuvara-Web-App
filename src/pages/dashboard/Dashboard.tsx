@@ -93,8 +93,8 @@ export function Dashboard() {
     };
 
     return (
-        <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                 <StatCard
                     title="Total Events"
                     value={events.length}
@@ -175,50 +175,52 @@ export function Dashboard() {
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <Card className="lg:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+                <Card className="lg:col-span-2 overflow-hidden">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Recent Events</CardTitle>
                         <Link to="/events" className="text-sm text-blue-600 hover:underline">
                             View All
                         </Link>
                     </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Title</TableHead>
-                                    <TableHead>School</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Status</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredEvents.slice(0, 5).map((event) => (
-                                    <TableRow key={event.id}>
-                                        <TableCell className="font-medium">
-                                            <Link to={`/events/${event.id}`} className="hover:underline text-blue-600">
-                                                {event.title}
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell>{event.creatorSchoolName}</TableCell>
-                                        <TableCell>
-                                            {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {events.length === 0 && (
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center text-gray-500 py-8">
-                                            No events found
-                                        </TableCell>
+                                        <TableHead className="min-w-[200px]">Title</TableHead>
+                                        <TableHead className="min-w-[150px]">School</TableHead>
+                                        <TableHead className="min-w-[100px]">Date</TableHead>
+                                        <TableHead className="min-w-[100px]">Status</TableHead>
                                     </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredEvents.slice(0, 5).map((event) => (
+                                        <TableRow key={event.id}>
+                                            <TableCell className="font-medium">
+                                                <Link to={`/events/${event.id}`} className="hover:underline text-blue-600">
+                                                    {event.title}
+                                                </Link>
+                                            </TableCell>
+                                            <TableCell>{event.creatorSchoolName}</TableCell>
+                                            <TableCell>
+                                                {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
+                                            </TableCell>
+                                            <TableCell>
+                                                <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {events.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center text-gray-500 py-8">
+                                                No events found
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
 

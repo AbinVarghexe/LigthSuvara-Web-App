@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -7,6 +8,7 @@ const pageTitles: Record<string, string> = {
     '/': 'Dashboard',
     '/events': 'Events',
     '/events/new': 'Create Event',
+    '/events/approvals': 'Event Approvals',
     '/users': 'Users',
     '/notifications': 'Notifications',
     '/reports': 'Reports',
@@ -15,6 +17,7 @@ const pageTitles: Record<string, string> = {
 
 export function Layout() {
     const location = useLocation();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     // Get title based on path
     let title = pageTitles[location.pathname] || 'Dashboard';
@@ -29,11 +32,11 @@ export function Layout() {
     }
 
     return (
-        <div className="flex min-h-screen">
-            <Sidebar />
-            <div className="flex-1 flex flex-col ml-64">
-                <Header title={title} />
-                <main className="flex-1 p-8">
+        <div className="flex min-h-screen bg-gray-50">
+            <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+            <div className="flex-1 flex flex-col lg:ml-64">
+                <Header title={title} onMenuClick={() => setIsSidebarOpen(true)} />
+                <main className="flex-1 p-4 sm:p-6 lg:p-8">
                     <Outlet />
                 </main>
             </div>
