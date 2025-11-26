@@ -1,195 +1,175 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, Filter, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
-import { Eye, Edit, Trash2, Plus, Globe, FileText } from 'lucide-react';
+import { StatusBadge } from '../components/StatusBadge';
+import { getEvents, EventData } from '../services/eventService';
+import { Card, CardContent } from '../components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { StatusBadge } from '../components/StatusBadge';
-import { mockEvents, categories, statuses } from '../data/mockData';
-import { toast } from 'sonner@2.0.3';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../components/ui/alert-dialog';
 
 export function Events() {
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('All');
-  const [status, setStatus] = useState('All');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [events, setEvents] = useState<EventData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
 
-  const filteredEvents = mockEvents.filter((event) => {
-    const matchesSearch = event.title.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = category === 'All' || event.category === category;
-    const matchesStatus = status === 'All' || event.status === status;
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const eventsData = await getEvents();
+        setEvents(eventsData as EventData[]);
+      } catch (error) {
+        console.error("Error fetching events:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  const filteredEvents = events.filter(event => {
+    const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilter === 'All' || event.category.toLowerCase() === categoryFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'All' ||
+      (statusFilter === 'Public' && event.isPublic) ||
+      (statusFilter === 'Draft' && !event.isPublic);
+
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  const handleTogglePublish = (eventId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'Public' ? 'Draft' : 'Public';
-    toast.success(`Event ${newStatus === 'Public' ? 'published' : 'unpublished'} successfully`);
-  };
-
-  const handleDelete = () => {
-    toast.success('Event deleted successfully');
-    setDeleteId(null);
-  };
+  if (loading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">Events</h1>
+        <Link to="/events/new">
+          <Button className="bg-blue-600 hover:bg-blue-700">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Event
+          </Button>
+        </Link>
+      </div>
+
+      {/* Filters and Search */}
+      <Card>
+        <CardContent className="p-4 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               type="text"
               placeholder="Search events..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-10"
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="h-10">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {cat}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger className="h-10">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              {statuses.map((stat) => (
-                <SelectItem key={stat} value={stat}>
-                  {stat}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+          <div className="flex gap-4">
+            <div className="relative min-w-[140px]">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <select
+                className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                <option value="cml">CML</option>
+                <option value="suvara">Suvara</option>
+              </select>
+            </div>
+            <div className="relative min-w-[140px]">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <select
+                className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="All">All Status</option>
+                <option value="Public">Public</option>
+                <option value="Draft">Draft</option>
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Events Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Image</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Title</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Category</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Status</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Created By</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Event Date</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      {/* Events List */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[300px]">Event Details</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Created By</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filteredEvents.map((event) => (
-                <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4">
-                    <img
-                      src={event.image}
-                      alt={event.title}
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
-                  </td>
-                  <td className="py-3 px-4">
-                    <Link to={`/events/${event.id}`} className="text-[#1E40AF] hover:underline font-medium">
-                      {event.title}
-                    </Link>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="inline-flex px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                      {event.category}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <StatusBadge status={event.status} />
-                  </td>
-                  <td className="py-3 px-4 text-gray-700">{event.schoolName}</td>
-                  <td className="py-3 px-4 text-gray-700">
-                    {new Date(event.eventDate).toLocaleDateString()}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <Link to={`/events/${event.id}`}>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => handleTogglePublish(event.id, event.status)}
-                      >
-                        {event.status === 'Public' ? (
-                          <FileText className="w-4 h-4 text-gray-600" />
+                <TableRow key={event.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden">
+                        {event.imageUrl ? (
+                          <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
                         ) : (
-                          <Globe className="w-4 h-4 text-green-600" />
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
                         )}
-                      </Button>
-                      <Link to={`/events/${event.id}/edit`}>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <Edit className="w-4 h-4 text-blue-600" />
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => setDeleteId(event.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </Button>
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-900">{event.title}</h3>
+                        <p className="text-sm text-gray-500 truncate max-w-[200px]">{event.place}</p>
+                      </div>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="uppercase">
+                      {event.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-gray-600">
+                    {event.creatorSchoolName}
+                  </TableCell>
+                  <TableCell className="text-gray-600">
+                    {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={event.isPublic ? 'Public' : 'Draft'} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      to={`/events/${event.id}`}
+                      className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                    >
+                      View
+                    </Link>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Floating Add Button */}
-      <Link to="/events/new">
-        <Button className="fixed bottom-8 right-8 h-14 px-6 bg-[#1E40AF] hover:bg-[#1E40AF]/90 rounded-full shadow-lg">
-          <Plus className="w-5 h-5 mr-2" />
-          Add Event
-        </Button>
-      </Link>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the event.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              {filteredEvents.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center text-gray-500">
+                    No events found matching your filters.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

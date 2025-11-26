@@ -10,6 +10,8 @@ import { UserDetail } from '../pages/UserDetail';
 import { Notifications } from '../pages/Notifications';
 import { Reports } from '../pages/Reports';
 import { Settings } from '../pages/Settings';
+import { ProtectedRoute } from '../components/ProtectedRoute';
+import { NotAuthorized } from '../pages/NotAuthorized';
 
 export const router = createBrowserRouter([
   {
@@ -17,19 +19,29 @@ export const router = createBrowserRouter([
     Component: Login,
   },
   {
+    path: '/not-authorized',
+    Component: NotAuthorized,
+  },
+  {
     path: '/',
-    Component: Layout,
+    Component: ProtectedRoute,
     children: [
-      { index: true, Component: Dashboard },
-      { path: 'events', Component: Events },
-      { path: 'events/new', Component: EventForm },
-      { path: 'events/:id', Component: EventDetail },
-      { path: 'events/:id/edit', Component: EventForm },
-      { path: 'users', Component: Users },
-      { path: 'users/:id', Component: UserDetail },
-      { path: 'notifications', Component: Notifications },
-      { path: 'reports', Component: Reports },
-      { path: 'settings', Component: Settings },
+      {
+        path: '/',
+        Component: Layout,
+        children: [
+          { index: true, Component: Dashboard },
+          { path: 'events', Component: Events },
+          { path: 'events/new', Component: EventForm },
+          { path: 'events/:id', Component: EventDetail },
+          { path: 'events/:id/edit', Component: EventForm },
+          { path: 'users', Component: Users },
+          { path: 'users/:id', Component: UserDetail },
+          { path: 'notifications', Component: Notifications },
+          { path: 'reports', Component: Reports },
+          { path: 'settings', Component: Settings },
+        ],
+      },
     ],
   },
 ]);

@@ -1,160 +1,305 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
-import { Upload } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, Link } from 'react-router';
+import { useForm } from 'react-hook-form';
+import { ArrowLeft, Calendar, Image as ImageIcon, Loader2, MapPin, Save } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { mockEvents } from '../data/mockData';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { createEvent, getEvent, updateEvent, EventData } from '../services/eventService';
+import { useAuth } from '../context/AuthContext';
 
 export function EventForm() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const isEdit = !!id;
-  const event = isEdit ? mockEvents.find((e) => e.id === id) : null;
+  const { currentUser } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(!!id);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
-    title: event?.title || '',
-    description: event?.description || '',
-    venue: event?.venue || '',
-    eventDate: event?.eventDate || '',
-    category: event?.category || 'General',
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<EventData>({
+    defaultValues: {
+      category: 'cml',
+      isPublic: false
+    }
   });
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  useEffect(() => {
+    const fetchEvent = async () => {
+      if (!id) return;
+      try {
+        const eventData = await getEvent(id);
+        // Populate form
+        setValue('title', eventData.title);
+        setValue('description', eventData.description);
+        setValue('place', eventData.place);
+        setValue('category', eventData.category);
+        setValue('isPublic', eventData.isPublic);
+
+        // Handle date
+        if (eventData.date) {
+          const dateObj = (eventData.date as any).seconds
+            ? new Date((eventData.date as any).seconds * 1000)
+            : new Date(eventData.date);
+          setValue('date', dateObj.toISOString().split('T')[0] as any);
+        }
+
+        if (eventData.imageUrl) {
+          setImagePreview(eventData.imageUrl);
+          setValue('imageUrl', eventData.imageUrl);
+        }
+      } catch (error) {
+        console.error("Error fetching event:", error);
+        toast.error("Failed to load event details");
+        navigate('/events');
+      } finally {
+        setIsFetching(false);
+      }
+    };
+
+    fetchEvent();
+  }, [id, setValue, navigate]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size should be less than 5MB");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+        // In a real app, we would upload to storage here or on submit
+        // For now, we'll just use the data URL or a placeholder if it's too large for Firestore
+        // Ideally, upload to Firebase Storage and get URL
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const handleSaveDraft = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success('Event saved as draft successfully');
-    navigate('/events');
+  const onSubmit = async (data: any) => {
+    if (!currentUser) {
+      toast.error("You must be logged in to create an event");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Prepare event data
+      const eventData: EventData = {
+        title: data.title,
+        description: data.description,
+        place: data.place,
+        date: new Date(data.date),
+        category: data.category,
+        isPublic: data.isPublic || false,
+        creatorId: currentUser.uid,
+        creatorSchoolName: 'Admin', // Or fetch from user profile
+        imageUrl: imagePreview || undefined
+      };
+
+      if (id) {
+        await updateEvent(id, eventData);
+        toast.success('Event updated successfully');
+      } else {
+        await createEvent(eventData);
+        toast.success('Event created successfully');
+      }
+      navigate('/events');
+    } catch (error) {
+      console.error("Error saving event:", error);
+      toast.error("Failed to save event");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handlePublish = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success('Event published successfully');
-    navigate('/events');
-  };
+  if (isFetching) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Back button */}
-      <Link to="/events" className="text-[#3B82F6] hover:underline inline-flex items-center gap-2">
-        ← Back to Events
-      </Link>
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-center gap-4 mb-8">
+        <Link
+          to="/events"
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5 text-gray-600" />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {id ? 'Edit Event' : 'Create New Event'}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Fill in the details below to {id ? 'update the' : 'create a new'} event
+          </p>
+        </div>
+      </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-        <h2 className="mb-6">{isEdit ? 'Edit Event' : 'Create New Event'}</h2>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        {/* Basic Info Section */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
+          <h2 className="text-lg font-semibold border-b border-gray-100 pb-4">
+            Basic Information
+          </h2>
 
-        <form className="space-y-6">
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title">Event Title *</Label>
-            <Input
-              id="title"
-              type="text"
-              placeholder="Enter event title"
-              value={formData.title}
-              onChange={(e) => handleChange('title', e.target.value)}
-              className="h-11"
-              required
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Description *</Label>
-            <Textarea
-              id="description"
-              placeholder="Enter event description"
-              value={formData.description}
-              onChange={(e) => handleChange('description', e.target.value)}
-              rows={5}
-              required
-            />
-          </div>
-
-          {/* Venue */}
-          <div className="space-y-2">
-            <Label htmlFor="venue">Venue *</Label>
-            <Input
-              id="venue"
-              type="text"
-              placeholder="Enter event venue"
-              value={formData.venue}
-              onChange={(e) => handleChange('venue', e.target.value)}
-              className="h-11"
-              required
-            />
-          </div>
-
-          {/* Date & Category */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="eventDate">Event Date & Time *</Label>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="title">Event Title</Label>
               <Input
-                id="eventDate"
-                type="date"
-                value={formData.eventDate}
-                onChange={(e) => handleChange('eventDate', e.target.value)}
-                className="h-11"
-                required
+                id="title"
+                {...register('title', { required: 'Title is required' })}
+                placeholder="e.g., Annual Sunday School Day"
               />
+              {errors.title && (
+                <p className="text-sm text-red-500">{errors.title.message}</p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category">Category *</Label>
-              <Select value={formData.category} onValueChange={(val) => handleChange('category', val)}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
+              <Label htmlFor="category">Category</Label>
+              <Select
+                onValueChange={(value) => setValue('category', value as 'cml' | 'suvara')}
+                defaultValue={watch('category')}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CML">CML</SelectItem>
-                  <SelectItem value="Suvara">Suvara</SelectItem>
-                  <SelectItem value="General">General</SelectItem>
+                  <SelectItem value="cml">CML</SelectItem>
+                  <SelectItem value="suvara">Suvara</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          {/* Image Upload */}
-          <div className="space-y-2">
-            <Label>Event Banner Image</Label>
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-[#3B82F6] transition-colors cursor-pointer">
-              <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 mb-1">
-                Drag and drop your image here, or click to browse
-              </p>
-              <p className="text-gray-500 text-sm">
-                Supported formats: JPG, PNG, GIF (Max 5MB)
-              </p>
-              <input type="file" className="hidden" accept="image/*" />
+            <div className="space-y-2">
+              <Label htmlFor="date">Date</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  id="date"
+                  type="date"
+                  className="pl-10"
+                  {...register('date', { required: 'Date is required' })}
+                />
+              </div>
+              {errors.date && (
+                <p className="text-sm text-red-500">{errors.date.message as string}</p>
+              )}
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="place">Venue / Location</Label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  id="place"
+                  className="pl-10"
+                  placeholder="e.g., St. Mary's Church Hall"
+                  {...register('place', { required: 'Location is required' })}
+                />
+              </div>
+              {errors.place && (
+                <p className="text-sm text-red-500">{errors.place.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Enter detailed event description..."
+                className="min-h-[120px]"
+                {...register('description', { required: 'Description is required' })}
+              />
+              {errors.description && (
+                <p className="text-sm text-red-500">{errors.description.message}</p>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-6 border-t border-gray-200">
-            <Button
-              type="button"
-              onClick={handleSaveDraft}
-              variant="outline"
-              className="px-6"
-            >
-              Save as Draft
-            </Button>
-            <Button
-              type="button"
-              onClick={handlePublish}
-              className="bg-[#1E40AF] hover:bg-[#1E40AF]/90 px-6"
-            >
-              Publish Event
-            </Button>
+        {/* Media Section */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
+          <h2 className="text-lg font-semibold border-b border-gray-100 pb-4">
+            Event Media
+          </h2>
+
+          <div className="space-y-4">
+            <Label>Event Image</Label>
+            <div className="flex items-center gap-6">
+              <div className="relative w-40 h-40 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden group hover:border-blue-400 transition-colors">
+                {imagePreview ? (
+                  <>
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <p className="text-white text-xs font-medium">Change Image</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center p-4">
+                    <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Click to upload</p>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  onChange={handleImageChange}
+                />
+              </div>
+              <div className="flex-1 text-sm text-gray-500">
+                <p className="font-medium text-gray-700 mb-1">Upload Guidelines</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Recommended size: 1200x630px</li>
+                  <li>Max file size: 5MB</li>
+                  <li>Supported formats: JPG, PNG, WEBP</li>
+                </ul>
+              </div>
+            </div>
           </div>
-        </form>
-      </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-4">
+          <Link to="/events">
+            <Button type="button" variant="outline" className="px-6">
+              Cancel
+            </Button>
+          </Link>
+          <Button
+            type="submit"
+            className="px-8 bg-blue-600 hover:bg-blue-700"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                {id ? 'Update Event' : 'Create Event'}
+              </>
+            )}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

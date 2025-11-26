@@ -1,232 +1,284 @@
-import { useState } from 'react';
-import { Trash2, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Bell, Send, Users, Globe, School, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Checkbox } from '../components/ui/checkbox';
-import { mockNotifications, schools } from '../data/mockData';
-import { toast } from 'sonner@2.0.3';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../components/ui/alert-dialog';
+import { toast } from 'sonner';
+import { sendBroadcast, sendToAll, sendToSpecific, getNotifications } from '../services/notificationService';
+import { getUsers, UserData } from '../services/userService';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Badge } from '../components/ui/badge';
 
 export function Notifications() {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [audienceType, setAudienceType] = useState('Public');
+  const [audience, setAudience] = useState('public');
   const [selectedSchools, setSelectedSchools] = useState<string[]>([]);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [schools, setSchools] = useState<UserData[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const handleSchoolToggle = (school: string) => {
-    setSelectedSchools((prev) =>
-      prev.includes(school)
-        ? prev.filter((s) => s !== school)
-        : [...prev, school]
+  useEffect(() => {
+    const fetchSchools = async () => {
+      try {
+        const users = await getUsers();
+        setSchools(users.filter(u => u.role === 'school'));
+      } catch (error) {
+        console.error("Error fetching schools:", error);
+      }
+    };
+    fetchSchools();
+  }, []);
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const data = await getNotifications();
+      setNotifications(data);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !message) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (audience === 'public') {
+        await sendBroadcast(title, message);
+        toast.success('Broadcast sent successfully');
+      } else if (audience === 'all') {
+        await sendToAll(title, message);
+        toast.success('Notification sent to all users');
+      } else if (audience === 'specific') {
+        if (selectedSchools.length === 0) {
+          toast.error('Please select at least one school');
+          setIsLoading(false);
+          return;
+        }
+        await sendToSpecific(title, message, selectedSchools);
+        toast.success(`Notification sent to ${selectedSchools.length} schools`);
+      }
+
+      // Reset form
+      setTitle('');
+      setMessage('');
+      setSelectedSchools([]);
+      setAudience('public');
+    } catch (error) {
+      console.error("Error sending notification:", error);
+      toast.error("Failed to send notification");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleSchool = (schoolId: string) => {
+    setSelectedSchools(prev =>
+      prev.includes(schoolId)
+        ? prev.filter(id => id !== schoolId)
+        : [...prev, schoolId]
     );
   };
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success('Notification sent successfully');
-    setTitle('');
-    setBody('');
-    setAudienceType('Public');
-    setSelectedSchools([]);
-  };
-
-  const handleDelete = () => {
-    toast.success('Notification deleted successfully');
-    setDeleteId(null);
-  };
-
   return (
-    <div className="max-w-5xl mx-auto">
-      <Tabs defaultValue="create" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="create">Create Notification</TabsTrigger>
-          <TabsTrigger value="history">Notification History</TabsTrigger>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+          <p className="text-gray-500 mt-1">Send updates and announcements to your users</p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="compose" className="w-full" onValueChange={(value) => {
+        if (value === 'history') fetchHistory();
+      }}>
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="compose">Compose</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        {/* Create Notification Tab */}
-        <TabsContent value="create">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-            <h3 className="mb-6">Send New Notification</h3>
-            
-            <form onSubmit={handleSend} className="space-y-6">
-              {/* Title */}
-              <div className="space-y-2">
-                <Label htmlFor="title">Notification Title *</Label>
-                <Input
-                  id="title"
-                  type="text"
-                  placeholder="Enter notification title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="h-11"
-                  required
-                />
-              </div>
-
-              {/* Body */}
-              <div className="space-y-2">
-                <Label htmlFor="body">Message Body *</Label>
-                <Textarea
-                  id="body"
-                  placeholder="Enter notification message"
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={5}
-                  required
-                />
-              </div>
-
-              {/* Audience Selector */}
-              <div className="space-y-4">
-                <Label>Audience *</Label>
-                <RadioGroup value={audienceType} onValueChange={setAudienceType}>
-                  <div className="flex items-center space-x-2 p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <RadioGroupItem value="Public" id="public" />
-                    <Label htmlFor="public" className="flex-1 cursor-pointer">
-                      <div>
-                        <p className="font-medium">Public Announcement</p>
-                        <p className="text-sm text-gray-600">
-                          Broadcast to all as a public announcement
-                        </p>
+        <TabsContent value="compose">
+          <Card>
+            <CardContent className="p-6">
+              <form onSubmit={handleSend} className="space-y-8">
+                {/* Audience Selection */}
+                <div className="space-y-4">
+                  <Label className="text-base">Target Audience</Label>
+                  <RadioGroup value={audience} onValueChange={setAudience} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${audience === 'public' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="public" id="public" className="mt-1" />
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="public" className="font-semibold cursor-pointer">Public Broadcast</Label>
+                        <p className="text-sm text-muted-foreground">Visible to everyone, including guests without an account.</p>
                       </div>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <RadioGroupItem value="All" id="all" />
-                    <Label htmlFor="all" className="flex-1 cursor-pointer">
-                      <div>
-                        <p className="font-medium">All Users</p>
-                        <p className="text-sm text-gray-600">
-                          Send to all registered users' notifications
-                        </p>
-                      </div>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-start space-x-2 p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <RadioGroupItem value="Specific" id="specific" className="mt-1" />
-                    <Label htmlFor="specific" className="flex-1 cursor-pointer">
-                      <div>
-                        <p className="font-medium mb-3">Specific Schools</p>
-                        {audienceType === 'Specific' && (
-                          <div className="space-y-2 mt-2">
-                            {schools.map((school) => (
-                              <div key={school} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={school}
-                                  checked={selectedSchools.includes(school)}
-                                  onCheckedChange={() => handleSchoolToggle(school)}
-                                />
-                                <label
-                                  htmlFor={school}
-                                  className="text-sm text-gray-700 cursor-pointer"
-                                >
-                                  {school}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {/* Send Button */}
-              <div className="pt-4">
-                <Button type="submit" className="bg-[#1E40AF] hover:bg-[#1E40AF]/90 px-8">
-                  <Send className="w-4 h-4 mr-2" />
-                  Send Notification
-                </Button>
-              </div>
-            </form>
-          </div>
-        </TabsContent>
-
-        {/* History Tab */}
-        <TabsContent value="history">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="mb-4">Notification History</h3>
-            
-            <div className="space-y-3">
-              {mockNotifications.map((notif) => (
-                <div
-                  key={notif.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h4 className="text-base">{notif.title}</h4>
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          notif.type === 'Public'
-                            ? 'bg-green-100 text-green-800'
-                            : notif.type === 'All'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {notif.type}
-                        </span>
-                      </div>
-                      <p className="text-gray-700 text-sm mb-2">{notif.body}</p>
-                      {notif.targets && (
-                        <p className="text-gray-500 text-xs mb-2">
-                          Sent to: {notif.targets.join(', ')}
-                        </p>
-                      )}
-                      <p className="text-gray-500 text-xs">
-                        Sent: {new Date(notif.sentTime).toLocaleString()}
-                      </p>
+                      <Globe className={`absolute right-4 top-4 w-5 h-5 ${audience === 'public' ? 'text-primary' : 'text-muted-foreground'}`} />
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteId(notif.id)}
-                      className="text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+
+                    <div className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${audience === 'all' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="all" id="all" className="mt-1" />
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="all" className="font-semibold cursor-pointer">All Users</Label>
+                        <p className="text-sm text-muted-foreground">Sent to all registered school accounts and admins.</p>
+                      </div>
+                      <Users className={`absolute right-4 top-4 w-5 h-5 ${audience === 'all' ? 'text-primary' : 'text-muted-foreground'}`} />
+                    </div>
+
+                    <div className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${audience === 'specific' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="specific" id="specific" className="mt-1" />
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="specific" className="font-semibold cursor-pointer">Specific Schools</Label>
+                        <p className="text-sm text-muted-foreground">Select specific schools to receive this notification.</p>
+                      </div>
+                      <School className={`absolute right-4 top-4 w-5 h-5 ${audience === 'specific' ? 'text-primary' : 'text-muted-foreground'}`} />
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {/* School Picker (Only visible when 'specific' is selected) */}
+                {audience === 'specific' && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-4">
+                    <Label>Select Schools</Label>
+                    <div className="border border-border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2 bg-muted/50">
+                      {schools.map((school) => (
+                        <div key={school.id} className="flex items-center space-x-2 bg-background p-3 rounded-md border border-border">
+                          <Checkbox
+                            id={school.id}
+                            checked={selectedSchools.includes(school.id)}
+                            onCheckedChange={() => toggleSchool(school.id)}
+                          />
+                          <Label htmlFor={school.id} className="flex-1 cursor-pointer font-normal">
+                            {school.schoolname || school.schoolName || school.fullName || school.email}
+                          </Label>
+                        </div>
+                      ))}
+                      {schools.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-2">No schools found.</p>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground text-right">
+                      {selectedSchools.length} schools selected
+                    </p>
+                  </div>
+                )}
+
+                {/* Message Content */}
+                <div className="space-y-6 pt-4 border-t border-border">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Notification Title</Label>
+                    <Input
+                      id="title"
+                      placeholder="e.g., Important Update: Sunday School Exam"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="message">Message Body</Label>
+                    <Textarea
+                      id="message"
+                      placeholder="Type your message here..."
+                      className="min-h-[150px]"
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+
+                <div className="flex justify-end pt-4">
+                  <Button
+                    type="submit"
+                    className="bg-primary hover:bg-primary/90 min-w-[150px]"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Notification
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <Card>
+            <CardContent className="p-0">
+              {loadingHistory ? (
+                <div className="p-12 flex justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {notifications.map((notif) => (
+                    <div key={notif.id} className="p-6 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-semibold text-foreground">{notif.title}</h3>
+                        <span className="text-xs text-muted-foreground">
+                          {notif.timestamp ? new Date(notif.timestamp.seconds * 1000).toLocaleString() : 'Just now'}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground text-sm mb-4">{notif.body}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={notif.isBroadcast ? "default" : "secondary"}
+                            className="gap-1.5"
+                          >
+                            {notif.isBroadcast ? (
+                              <>
+                                <Globe className="w-3 h-3" />
+                                Broadcast
+                              </>
+                            ) : (
+                              <>
+                                <School className="w-3 h-3" />
+                                Specific
+                              </>
+                            )}
+                          </Badge>
+                          {!notif.isBroadcast && notif.recipientId !== 'all' && (
+                            <span className="text-xs text-muted-foreground">
+                              To: {notif.recipientId}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {notifications.length === 0 && (
+                    <div className="p-12 text-center text-muted-foreground">
+                      <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                      <p>No notifications sent yet</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Notification</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this notification from history?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

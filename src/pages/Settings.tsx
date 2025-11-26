@@ -1,237 +1,271 @@
-import { useState } from 'react';
-import { Edit, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { User, Lock, Save, Loader2, LogOut, Camera } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { toast } from 'sonner';
+import { useAuth } from '../context/AuthContext';
+import { resetPassword, logout } from '../services/authService';
+import { updateUserProfile, uploadProfileImage } from '../services/userService';
+import { useNavigate } from 'react-router';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { toast } from 'sonner@2.0.3';
 
 export function Settings() {
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
-  
-  const [profileData, setProfileData] = useState({
-    name: 'Admin User',
-    email: 'admin@lightsuvara.com',
-    phone: '+1 234-567-8900',
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const { register, handleSubmit, formState: { errors }, setValue } = useForm({
+    defaultValues: {
+      email: currentUser?.email || '',
+      fullName: currentUser?.displayName || '',
+    }
   });
 
-  const [passwordData, setPasswordData] = useState({
-    current: '',
-    new: '',
-    confirm: '',
-  });
+  useEffect(() => {
+    if (currentUser?.photoURL) {
+      setImagePreview(currentUser.photoURL);
+    }
+    if (currentUser?.displayName) {
+      setValue('fullName', currentUser.displayName);
+    }
+  }, [currentUser, setValue]);
 
-  const handleProfileUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success('Profile updated successfully');
-    setIsEditOpen(false);
+  const handlePasswordReset = async () => {
+    if (!currentUser?.email) return;
+    setIsLoading(true);
+    try {
+      await resetPassword(currentUser.email);
+      toast.success('Password reset email sent to your email address');
+    } catch (error) {
+      console.error("Error sending reset email:", error);
+      toast.error("Failed to send password reset email");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handlePasswordChange = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordData.new !== passwordData.confirm) {
-      toast.error('New passwords do not match');
-      return;
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Error logging out:", error);
+      toast.error("Failed to logout");
     }
-    toast.success('Password changed successfully');
-    setIsPasswordOpen(false);
-    setPasswordData({ current: '', new: '', confirm: '' });
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size should be less than 5MB");
+        return;
+      }
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const onSubmitProfile = async (data: any) => {
+    if (!currentUser) return;
+    setIsSavingProfile(true);
+    try {
+      let imageUrl = currentUser.photoURL;
+
+      if (selectedFile) {
+        imageUrl = await uploadProfileImage(currentUser.uid, selectedFile);
+      }
+
+      await updateUserProfile(currentUser.uid, {
+        fullName: data.fullName,
+        profileImageUrl: imageUrl || undefined
+      });
+
+      toast.success("Profile updated successfully");
+      // Force reload to see changes if needed, though AuthContext should handle it
+      // window.location.reload(); 
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Admin Profile Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-        <h3 className="mb-6">Admin Profile</h3>
-        
-        <div className="flex items-start gap-8">
-          {/* Profile Picture */}
-          <div className="text-center">
-            <Avatar className="h-32 w-32 mb-4">
-              <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200" alt="Admin" />
-              <AvatarFallback className="text-3xl">AU</AvatarFallback>
-            </Avatar>
-            <Button variant="outline" size="sm">
-              Change Photo
-            </Button>
-          </div>
-
-          {/* Profile Details */}
-          <div className="flex-1 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <Label className="text-gray-600 mb-2 block">Full Name</Label>
-                <p className="font-medium text-gray-900">{profileData.name}</p>
-              </div>
-              <div>
-                <Label className="text-gray-600 mb-2 block">Email Address</Label>
-                <p className="font-medium text-gray-900">{profileData.email}</p>
-              </div>
-              <div>
-                <Label className="text-gray-600 mb-2 block">Phone Number</Label>
-                <p className="font-medium text-gray-900">{profileData.phone}</p>
-              </div>
-              <div>
-                <Label className="text-gray-600 mb-2 block">Role</Label>
-                <p className="font-medium text-gray-900">System Administrator</p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogTrigger asChild>
-                  <Button className="bg-[#1E40AF] hover:bg-[#1E40AF]/90">
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Profile
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[500px]">
-                  <DialogHeader>
-                    <DialogTitle>Edit Profile</DialogTitle>
-                    <DialogDescription>
-                      Update your profile information below
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleProfileUpdate}>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-name">Full Name</Label>
-                        <Input
-                          id="edit-name"
-                          value={profileData.name}
-                          onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                          className="h-11"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-email">Email Address</Label>
-                        <Input
-                          id="edit-email"
-                          type="email"
-                          value={profileData.email}
-                          onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                          className="h-11"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-phone">Phone Number</Label>
-                        <Input
-                          id="edit-phone"
-                          value={profileData.phone}
-                          onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                          className="h-11"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="bg-[#1E40AF] hover:bg-[#1E40AF]/90">
-                        Save Changes
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <Lock className="w-4 h-4 mr-2" />
-                    Change Password
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[500px]">
-                  <DialogHeader>
-                    <DialogTitle>Change Password</DialogTitle>
-                    <DialogDescription>
-                      Enter your current password and a new password
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handlePasswordChange}>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="current-password">Current Password</Label>
-                        <Input
-                          id="current-password"
-                          type="password"
-                          value={passwordData.current}
-                          onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
-                          className="h-11"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="new-password">New Password</Label>
-                        <Input
-                          id="new-password"
-                          type="password"
-                          value={passwordData.new}
-                          onChange={(e) => setPasswordData({ ...passwordData, new: e.target.value })}
-                          className="h-11"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="confirm-password">Confirm New Password</Label>
-                        <Input
-                          id="confirm-password"
-                          type="password"
-                          value={passwordData.confirm}
-                          onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
-                          className="h-11"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsPasswordOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="bg-[#1E40AF] hover:bg-[#1E40AF]/90">
-                        Change Password
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-        </div>
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-500 mt-1">Manage your account and application preferences</p>
       </div>
 
-      {/* System Information */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-        <h3 className="mb-6">System Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <Label className="text-gray-600 mb-2 block">System Version</Label>
-            <p className="font-medium text-gray-900">v2.1.0</p>
-          </div>
-          <div>
-            <Label className="text-gray-600 mb-2 block">Last Login</Label>
-            <p className="font-medium text-gray-900">
-              {new Date().toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </p>
-          </div>
-          <div>
-            <Label className="text-gray-600 mb-2 block">Platform</Label>
-            <p className="font-medium text-gray-900">Light Suvara Admin Panel</p>
-          </div>
-          <div>
-            <Label className="text-gray-600 mb-2 block">Status</Label>
-            <p className="font-medium text-green-600">● Active</p>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Sidebar Navigation (if needed in future) */}
+        <div className="md:col-span-1 space-y-2">
+          <Button variant="secondary" className="w-full justify-start text-primary font-medium">
+            General
+          </Button>
+        </div>
+
+        {/* Main Content */}
+        <div className="md:col-span-2 space-y-6">
+          {/* Profile Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <User className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Profile Information</CardTitle>
+                  <CardDescription>Update your account details</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmitProfile)} className="space-y-6">
+                {/* Profile Image Upload */}
+                <div className="flex flex-col items-center sm:flex-row gap-6">
+                  <div className="relative group">
+                    <Avatar className="w-24 h-24 border-2 border-gray-100">
+                      <AvatarImage src={imagePreview || ''} alt="Profile" />
+                      <AvatarFallback className="text-2xl bg-gray-100 text-gray-400">
+                        {currentUser?.email?.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <label
+                      htmlFor="profile-upload"
+                      className="absolute bottom-0 right-0 p-1.5 bg-blue-600 rounded-full text-white cursor-pointer hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <input
+                        id="profile-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageChange}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h3 className="font-medium text-gray-900">Profile Picture</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Upload a new profile picture. Recommended size: 400x400px.
+                      <br />
+                      Max file size: 5MB.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full Name</Label>
+                    <Input
+                      id="fullName"
+                      {...register('fullName')}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      {...register('email')}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-xs text-muted-foreground">Email cannot be changed directly.</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={isSavingProfile}
+                  >
+                    {isSavingProfile ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Security Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-purple-50 rounded-lg">
+                  <Lock className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Security</CardTitle>
+                  <CardDescription>Manage your password and access</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  To change your password, we will send a password reset link to your email address.
+                </p>
+                <Button
+                  onClick={handlePasswordReset}
+                  variant="outline"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Password Reset Email'
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Logout Section */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Sign Out</h2>
+                  <p className="text-sm text-muted-foreground">Sign out of your admin account</p>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
