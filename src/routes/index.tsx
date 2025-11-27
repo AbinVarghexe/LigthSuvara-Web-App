@@ -26,11 +26,11 @@ export const router = createBrowserRouter([
         Component: NotAuthorized,
     },
     {
-        path: '/',
+        path: '/privacy-policy',
         Component: LegalLayout,
         children: [
             {
-                path: 'privacy-policy',
+                index: true,
                 Component: PrivacyPolicy,
             },
         ],
