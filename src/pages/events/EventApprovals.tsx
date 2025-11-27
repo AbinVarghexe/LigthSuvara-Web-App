@@ -21,14 +21,14 @@ export function EventApprovals() {
 
     const fetchPendingEvents = async () => {
         try {
-            // Fetch all events and filter for pending
-            // Ideally, getEvents should support filtering by status at the API level
-            // For now, we'll fetch all and filter client-side or use the existing getEvents(status) if available
-            const allEvents = await getEvents('pending');
-            setEvents(allEvents as EventData[]);
+            // Fetch all events and filter for draft events (isPublic: false)
+            const allEvents = await getEvents();
+            // Filter for draft events
+            const draftEvents = (allEvents as EventData[]).filter(event => !event.isPublic);
+            setEvents(draftEvents);
         } catch (error) {
-            console.error("Error fetching pending events:", error);
-            toast.error("Failed to load pending events");
+            console.error("Error fetching draft events:", error);
+            toast.error("Failed to load draft events");
         } finally {
             setLoading(false);
         }
