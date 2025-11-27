@@ -13,6 +13,8 @@ import { Reports } from '../pages/reports/Reports';
 import { Settings } from '../pages/settings/Settings';
 import { ProtectedRoute } from '../components/layout/ProtectedRoute';
 import { NotAuthorized } from '../pages/auth/NotAuthorized';
+import { PrivacyPolicy } from '../pages/legal/PrivacyPolicy';
+import { LegalLayout } from '../components/layout/LegalLayout';
 
 export const router = createBrowserRouter([
     {
@@ -22,6 +24,16 @@ export const router = createBrowserRouter([
     {
         path: '/not-authorized',
         Component: NotAuthorized,
+    },
+    {
+        path: '/',
+        Component: LegalLayout,
+        children: [
+            {
+                path: 'privacy-policy',
+                Component: PrivacyPolicy,
+            },
+        ],
     },
     {
         path: '/',
