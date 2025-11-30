@@ -20,7 +20,7 @@ export function Settings() {
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-    const { register, handleSubmit, formState: { errors }, setValue } = useForm({
+    const { register, handleSubmit, setValue } = useForm({
         defaultValues: {
             email: currentUser?.email || '',
             fullName: currentUser?.displayName || '',
@@ -160,7 +160,7 @@ export function Settings() {
                                 <div className="flex flex-col items-center sm:flex-row gap-6">
                                     <div className="relative group">
                                         <Avatar className="w-24 h-24 border-2 border-gray-100">
-                                            <AvatarImage src={imagePreview || ''} alt="Profile" />
+                                            <AvatarImage src={imagePreview || ''} alt="Profile" loading="lazy" />
                                             <AvatarFallback className="text-2xl bg-gray-100 text-gray-400">
                                                 {currentUser?.email?.charAt(0).toUpperCase()}
                                             </AvatarFallback>

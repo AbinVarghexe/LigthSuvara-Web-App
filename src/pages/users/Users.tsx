@@ -240,7 +240,7 @@ export function Users() {
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex items-center gap-4">
                                     <Avatar className="h-12 w-12">
-                                        <AvatarImage src={user.profileImageUrl} alt={user.fullName || 'User'} />
+                                        <AvatarImage src={user.profileImageUrl} alt={user.fullName || 'User'} loading="lazy" />
                                         <AvatarFallback>{(user.fullName || user.email || 'U').charAt(0).toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     <div>

@@ -5,8 +5,6 @@ import {
     Calendar,
     MapPin,
     User,
-    Globe,
-    FileText,
     Edit,
     Trash2,
     Loader2,
@@ -28,11 +26,12 @@ import {
 } from '../../components/ui/alert-dialog';
 import { getEvent, deleteEvent, publishEvent, unpublishEvent, updateEventStatus, EventData } from '../../features/events/services/eventService';
 import { useAuth } from '../../context/AuthContext';
+import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
 export function EventDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { isAdminUser } = useAuth();
+    const { isAdminUser, currentUser } = useAuth();
     const [event, setEvent] = useState<EventData | null>(null);
     const [loading, setLoading] = useState(true);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -55,6 +54,22 @@ export function EventDetail() {
 
         fetchEvent();
     }, [id, navigate]);
+
+    useEffect(() => {
+        if (!event || loading) return;
+
+        if (!isAdminUser) {
+            // Check if user is creator
+            const isCreator = currentUser && event.creatorId === currentUser.uid;
+            // Check if event is approved/public
+            const isApproved = event.status === 'approved' || (event.isPublic && !event.status);
+
+            if (!isCreator && !isApproved) {
+                toast.error("You are not authorized to view this event.");
+                navigate('/events');
+            }
+        }
+    }, [event, loading, isAdminUser, currentUser, navigate]);
 
     const handleApprove = async () => {
         if (!event || !event.id) return;
@@ -183,7 +198,7 @@ export function EventDetail() {
                     {/* Image */}
                     <div className="aspect-video w-full bg-gray-100 rounded-xl overflow-hidden">
                         {event.imageUrl ? (
-                            <img
+                            <ImageWithFallback
                                 src={event.imageUrl}
                                 alt={event.title}
                                 className="w-full h-full object-cover"

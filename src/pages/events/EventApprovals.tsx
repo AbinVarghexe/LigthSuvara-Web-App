@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../context/AuthContext';
+import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
 export function EventApprovals() {
     const { isAdminUser } = useAuth();
@@ -98,7 +99,7 @@ export function EventApprovals() {
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden">
                                                 {event.imageUrl ? (
-                                                    <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                                    <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
                                                 )}

@@ -234,10 +234,10 @@ export function Dashboard() {
                     <CardContent>
                         <div className="space-y-4">
                             {notifications.slice(0, 5).map((notif) => (
-                                <div key={notif.id} className="flex flex-col gap-1 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <div key={notif.id} className="flex flex-col gap-1 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                                     <h4 className="font-medium text-sm">{notif.title}</h4>
-                                    <p className="text-gray-500 text-xs line-clamp-2">{notif.body}</p>
-                                    <span className="text-xs text-gray-400 mt-1">
+                                    <p className="text-muted-foreground text-xs line-clamp-2">{notif.body}</p>
+                                    <span className="text-xs text-muted-foreground/70 mt-1">
                                         {notif.timestamp ? new Date(notif.timestamp.seconds * 1000).toLocaleString() : 'Just now'}
                                     </span>
                                 </div>

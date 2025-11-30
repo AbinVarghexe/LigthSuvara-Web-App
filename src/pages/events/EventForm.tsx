@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
 // ... (imports)
 
@@ -237,7 +238,7 @@ export function EventForm() {
                             <div className="relative w-40 h-40 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden group hover:border-blue-400 transition-colors">
                                 {imagePreview ? (
                                     <>
-                                        <img
+                                        <ImageWithFallback
                                             src={imagePreview}
                                             alt="Preview"
                                             className="w-full h-full object-cover"

@@ -37,27 +37,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {/* Sidebar */}
             <div className={`
-                w-64 bg-white border-r border-gray-200 h-screen flex flex-col 
+                w-64 bg-card border-r border-border h-screen flex flex-col 
                 fixed left-0 top-0 overflow-y-auto z-50 transition-transform duration-300
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             `}>
                 {/* Mobile Close Button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-100 lg:hidden"
+                    className="absolute top-4 right-4 p-2 rounded-lg hover:bg-accent lg:hidden"
                 >
-                    <X className="w-5 h-5 text-gray-600" />
+                    <X className="w-5 h-5 text-muted-foreground" />
                 </button>
 
                 {/* Logo */}
-                <div className="p-6 border-b border-gray-200">
+                <div className="p-6 border-b border-border">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-[#1E40AF] to-[#3B82F6] rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-xl">LS</span>
+                        <div className="w-10 h-10 bg-gradient-to-br from-primary to-blue-600 rounded-lg flex items-center justify-center">
+                            <span className="text-primary-foreground font-bold text-xl">LS</span>
                         </div>
                         <div>
-                            <h2 className="text-lg text-[#1E40AF]">Light Suvara</h2>
-                            <p className="text-xs text-gray-500">Admin Panel</p>
+                            <h2 className="text-lg text-primary font-semibold">Light Suvara</h2>
+                            <p className="text-xs text-muted-foreground">Admin Panel</p>
                         </div>
                     </div>
                 </div>
@@ -74,8 +74,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                                         to={item.href}
                                         onClick={() => onClose()}
                                         className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                                ? 'bg-[#1E40AF] text-white'
-                                                : 'text-gray-700 hover:bg-gray-100'
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                                             }`}
                                     >
                                         <item.icon className="w-5 h-5" />
@@ -88,10 +88,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </nav>
 
                 {/* Logout */}
-                <div className="p-4 border-t border-gray-200">
+                <div className="p-4 border-t border-border">
                     <button
                         onClick={handleLogout}
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full transition-colors"
+                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-destructive hover:bg-destructive/10 w-full transition-colors"
                     >
                         <LogOut className="w-5 h-5" />
                         <span className="font-medium">Logout</span>

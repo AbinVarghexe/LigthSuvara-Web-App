@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Send, Users, Globe, School, Loader2, Trash2 } from 'lucide-react';
+import { Bell, Send, Users, Globe, School, Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -9,7 +9,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { toast } from 'sonner';
 import { sendBroadcast, sendToAll, sendToSpecific, getNotifications } from '../../features/notifications/services/notificationService';
 import { getUsers, UserData } from '../../features/users/services/userService';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';
 
@@ -54,6 +54,18 @@ export function Notifications() {
             return;
         }
 
+        // Rate Limiting Check
+        const lastSent = localStorage.getItem('lastNotificationSent');
+        if (lastSent) {
+            const timeSinceLast = Date.now() - parseInt(lastSent);
+            const cooldown = 60000; // 1 minute
+            if (timeSinceLast < cooldown) {
+                const remaining = Math.ceil((cooldown - timeSinceLast) / 1000);
+                toast.error(`Please wait ${remaining} seconds before sending another notification.`);
+                return;
+            }
+        }
+
         setIsLoading(true);
         try {
             if (audience === 'public') {
@@ -72,11 +84,17 @@ export function Notifications() {
                 toast.success(`Notification sent to ${selectedSchools.length} schools`);
             }
 
+            // Update Rate Limit Timestamp
+            localStorage.setItem('lastNotificationSent', Date.now().toString());
+
             // Reset form
             setTitle('');
             setMessage('');
             setSelectedSchools([]);
             setAudience('public');
+
+            // Switch to history tab to show the new notification
+            fetchHistory();
         } catch (error) {
             console.error("Error sending notification:", error);
             toast.error("Failed to send notification");
@@ -97,18 +115,75 @@ export function Notifications() {
         <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-                    <p className="text-gray-500 mt-1">Send updates and announcements to your users</p>
+                    <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+                    <p className="text-muted-foreground mt-1">Send updates and announcements to your users</p>
                 </div>
             </div>
 
-            <Tabs defaultValue="compose" className="w-full" onValueChange={(value) => {
+            <Tabs defaultValue="history" className="w-full" onValueChange={(value) => {
                 if (value === 'history') fetchHistory();
             }}>
                 <TabsList className="grid w-full grid-cols-2 mb-6">
-                    <TabsTrigger value="compose">Compose</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
+                    <TabsTrigger value="compose">Compose</TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="history">
+                    <Card>
+                        <CardContent className="p-0">
+                            {loadingHistory ? (
+                                <div className="p-12 flex justify-center">
+                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-border">
+                                    {notifications.map((notif) => (
+                                        <div key={notif.id} className="p-6 hover:bg-muted/50 transition-colors">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <h3 className="font-semibold text-foreground">{notif.title}</h3>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {notif.timestamp ? new Date(notif.timestamp.seconds * 1000).toLocaleString() : 'Just now'}
+                                                </span>
+                                            </div>
+                                            <p className="text-muted-foreground text-sm mb-4">{notif.body}</p>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge
+                                                        variant={notif.isBroadcast ? "default" : "secondary"}
+                                                        className="gap-1.5"
+                                                    >
+                                                        {notif.isBroadcast ? (
+                                                            <>
+                                                                <Globe className="w-3 h-3" />
+                                                                Broadcast
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <School className="w-3 h-3" />
+                                                                Specific
+                                                            </>
+                                                        )}
+                                                    </Badge>
+                                                    {!notif.isBroadcast && notif.recipientId !== 'all' && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            To: {notif.recipientId}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {notifications.length === 0 && (
+                                        <div className="p-12 text-center text-muted-foreground">
+                                            <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                                            <p>No notifications sent yet</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                 <TabsContent value="compose">
                     <Card>
@@ -218,63 +293,6 @@ export function Notifications() {
                                     </Button>
                                 </div>
                             </form>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="history">
-                    <Card>
-                        <CardContent className="p-0">
-                            {loadingHistory ? (
-                                <div className="p-12 flex justify-center">
-                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-border">
-                                    {notifications.map((notif) => (
-                                        <div key={notif.id} className="p-6 hover:bg-muted/50 transition-colors">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <h3 className="font-semibold text-foreground">{notif.title}</h3>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {notif.timestamp ? new Date(notif.timestamp.seconds * 1000).toLocaleString() : 'Just now'}
-                                                </span>
-                                            </div>
-                                            <p className="text-muted-foreground text-sm mb-4">{notif.body}</p>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <Badge
-                                                        variant={notif.isBroadcast ? "default" : "secondary"}
-                                                        className="gap-1.5"
-                                                    >
-                                                        {notif.isBroadcast ? (
-                                                            <>
-                                                                <Globe className="w-3 h-3" />
-                                                                Broadcast
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <School className="w-3 h-3" />
-                                                                Specific
-                                                            </>
-                                                        )}
-                                                    </Badge>
-                                                    {!notif.isBroadcast && notif.recipientId !== 'all' && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            To: {notif.recipientId}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {notifications.length === 0 && (
-                                        <div className="p-12 text-center text-muted-foreground">
-                                            <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-                                            <p>No notifications sent yet</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

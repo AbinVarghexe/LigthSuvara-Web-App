@@ -9,6 +9,7 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useAuth } from '../../context/AuthContext';
+import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
 export function Events() {
     const { isAdminUser, currentUser } = useAuth();
@@ -37,8 +38,10 @@ export function Events() {
         // Visibility Check
         if (!isAdminUser) {
             const isCreator = currentUser && event.creatorId === currentUser.uid;
+            const isRejected = event.status === 'rejected';
             const isApproved = event.status === 'approved' || (event.isPublic && !event.status);
-            if (!isCreator && !isApproved) return false;
+
+            if (!isCreator && (!isApproved || isRejected)) return false;
         }
 
         const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase());
@@ -138,7 +141,7 @@ export function Events() {
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
                                                 {event.imageUrl ? (
-                                                    <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                                    <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
                                                 )}

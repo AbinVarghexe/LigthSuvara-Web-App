@@ -45,10 +45,13 @@ import {
 import { toast } from 'sonner';
 import { getUser, updateUserRole, deleteUser, getEventsByUser, updateUserProfile, UserData } from '../../features/users/services/userService';
 import { EventData } from '../../features/events/services/eventService';
+import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
+import { useAuth } from '../../context/AuthContext';
 
 export function UserDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { isAdminUser, currentUser } = useAuth();
     const [user, setUser] = useState<UserData | null>(null);
     const [userEvents, setUserEvents] = useState<EventData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -214,7 +217,7 @@ export function UserDetail() {
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
                         <div className="w-24 h-24 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4 overflow-hidden">
                             {user.profileImageUrl ? (
-                                <img src={user.profileImageUrl} alt="Profile" className="w-full h-full object-cover" />
+                                <ImageWithFallback src={user.profileImageUrl} alt="Profile" className="w-full h-full object-cover" />
                             ) : (
                                 <UserIcon className="w-12 h-12 text-gray-400" />
                             )}
@@ -266,7 +269,7 @@ export function UserDetail() {
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                             <p className="text-sm text-gray-500 mb-1">Public Events</p>
                             <p className="text-2xl font-bold text-green-600">
-                                {userEvents.filter(e => e.isPublic).length}
+                                {userEvents.filter(e => e.isPublic && e.status !== 'rejected').length}
                             </p>
                         </div>
                     </div>
@@ -277,12 +280,18 @@ export function UserDetail() {
                             <h3 className="font-semibold text-gray-900">Created Events</h3>
                         </div>
                         <div className="divide-y divide-gray-100">
-                            {userEvents.map((event) => (
+                            {userEvents.filter(event => {
+                                if (isAdminUser) return true;
+                                if (currentUser && user && currentUser.uid === user.id) return true;
+                                const isRejected = event.status === 'rejected';
+                                const isApproved = event.status === 'approved' || (event.isPublic && !event.status);
+                                return !isRejected && isApproved;
+                            }).map((event) => (
                                 <div key={event.id} className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between">
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                                             {event.imageUrl ? (
-                                                <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                                <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
                                             )}
@@ -295,7 +304,7 @@ export function UserDetail() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4">
-                                        <StatusBadge status={event.isPublic ? 'Public' : 'Draft'} />
+                                        <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
                                         <Link
                                             to={`/events/${event.id}`}
                                             className="text-blue-600 hover:text-blue-700 text-sm font-medium"

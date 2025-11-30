@@ -11,6 +11,7 @@ import { Label } from '../../components/ui/label';
 import logoDark from '../../assets/Logo-dark.png';
 import logoWhite from '../../assets/Logo-white.png';
 import { useTheme } from '../../components/theme-provider';
+import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
 export function Login() {
     const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +64,7 @@ export function Login() {
             <Card className="w-full max-w-[400px] shadow-xl">
                 <CardHeader className="text-center space-y-2 flex flex-col items-center">
                     <div className="relative w-16 h-16 mb-2">
-                        <img
+                        <ImageWithFallback
                             src={logoSrc}
                             alt="Light Suvara Logo"
                             className="absolute inset-0 w-full h-full object-contain"

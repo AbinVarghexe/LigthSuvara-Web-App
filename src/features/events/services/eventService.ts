@@ -83,7 +83,13 @@ export const updateEvent = async (eventId: string, eventData: Partial<EventData>
 };
 
 export const updateEventStatus = async (eventId: string, status: EventStatus) => {
-    return await updateEvent(eventId, { status });
+    const updates: Partial<EventData> = { status };
+    if (status === 'rejected') {
+        updates.isPublic = false;
+    } else if (status === 'approved') {
+        updates.isPublic = true;
+    }
+    return await updateEvent(eventId, updates);
 };
 
 export const deleteEvent = async (eventId: string) => {
@@ -91,7 +97,8 @@ export const deleteEvent = async (eventId: string) => {
 };
 
 export const publishEvent = async (eventId: string) => {
-    return await updateEvent(eventId, { isPublic: true });
+    // Ensure status is approved when publishing
+    return await updateEvent(eventId, { isPublic: true, status: 'approved' });
 };
 
 export const unpublishEvent = async (eventId: string) => {

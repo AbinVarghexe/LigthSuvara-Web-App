@@ -9,8 +9,10 @@ import jsPDF from 'jspdf';
 import { getEvents, EventData } from '../../features/events/services/eventService';
 import { getUsers, UserData } from '../../features/users/services/userService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { useAuth } from '../../context/AuthContext';
 
 export function Reports() {
+    const { isAdminUser } = useAuth();
     const [events, setEvents] = useState<EventData[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -157,6 +159,14 @@ export function Reports() {
         return (
             <div className="h-full w-full flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+        );
+    }
+
+    if (!isAdminUser) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <p className="text-red-500">Access Denied. Admin privileges required.</p>
             </div>
         );
     }

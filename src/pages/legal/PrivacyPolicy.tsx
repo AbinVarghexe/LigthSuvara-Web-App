@@ -53,7 +53,7 @@ export const PrivacyPolicy = () => {
                             <section id="section-1" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">1. INTRODUCTION</h3>
                                 <p className="text-sm text-muted-foreground leading-relaxed">
-                                    Welcome to Light Suvara ("we," "our," or "us"). We are committed to protecting
+                                    Welcome to Light Suvara. We are committed to protecting
                                     your privacy and ensuring the security of your personal information. This
                                     Privacy Policy explains how we collect, use, disclose, and safeguard your
                                     information when you use our mobile application "Light Suvara" (the "App").
