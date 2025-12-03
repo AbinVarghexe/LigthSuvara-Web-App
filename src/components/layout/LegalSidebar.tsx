@@ -1,12 +1,11 @@
 import { Link, useLocation } from 'react-router';
-import { Shield, ArrowLeft, X } from 'lucide-react';
+import { Shield, FileText, ArrowLeft, X } from 'lucide-react';
 import logoDark from '../../assets/Logo-dark.png';
 import logoWhite from '../../assets/Logo-white.png';
 import { TocItem } from './LegalLayout';
 import { cn } from '../../lib/utils';
 import { useEffect, useState } from 'react';
 import { useTheme } from '../theme-provider';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
 
 interface LegalSidebarProps {
     isOpen: boolean;
@@ -83,7 +82,7 @@ export function LegalSidebar({ isOpen, onClose, tocItems = [] }: LegalSidebarPro
                 <div className="p-6 border-b border-border">
                     <div className="flex items-center gap-3">
                         <div className="relative w-20 h-20">
-                            <ImageWithFallback
+                            <img
                                 src={logoSrc}
                                 alt="Light Suvara Logo"
                                 className="absolute inset-0 w-full h-full object-contain"

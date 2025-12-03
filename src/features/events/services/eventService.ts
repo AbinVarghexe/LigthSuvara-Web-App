@@ -30,6 +30,7 @@ export interface EventData {
     creatorId: string;
     creatorSchoolName: string;
     timestamp?: Timestamp;
+    updatedAt?: Timestamp;
 }
 
 export const getEvents = async (status?: EventStatus) => {
@@ -73,13 +74,17 @@ export const createEvent = async (eventData: EventData) => {
     return await addDoc(collection(db, 'events'), {
         ...eventData,
         status: eventData.status || 'pending', // Default to pending if not specified
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
+        updatedAt: serverTimestamp()
     });
 };
 
 export const updateEvent = async (eventId: string, eventData: Partial<EventData>) => {
     const docRef = doc(db, 'events', eventId);
-    return await updateDoc(docRef, eventData);
+    return await updateDoc(docRef, {
+        ...eventData,
+        updatedAt: serverTimestamp()
+    });
 };
 
 export const updateEventStatus = async (eventId: string, status: EventStatus) => {

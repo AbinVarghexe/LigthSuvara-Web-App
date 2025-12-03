@@ -11,7 +11,8 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile, User } from 'firebase/auth';
-import { db, storage, auth } from '../../../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, storage, auth, functions } from '../../../config/firebase';
 
 export interface UserData {
     id: string;
@@ -76,18 +77,25 @@ export const updateUserProfile = async (userId: string, data: Partial<UserData>)
     }
 };
 
-export const bulkCreateUsers = async (users: Partial<UserData>[]) => {
-    const batch = writeBatch(db);
+export interface BulkCreateResponse {
+    success: boolean;
+    created: number;
+    failed: number;
+    errors: Array<{ email: string; error: string }>;
+}
 
-    users.forEach((user) => {
-        // Create a new document reference with an auto-generated ID
-        const newUserRef = doc(collection(db, 'users'));
-        batch.set(newUserRef, {
-            ...user,
-            uid: newUserRef.id, // Use doc ID as UID for now since we can't create Auth users in bulk client-side easily
-            createdAt: new Date().toISOString()
-        });
-    });
+export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkCreateResponse> => {
+    // Call the Cloud Function to securely create users with Firebase Auth
+    const bulkCreateUsersFunction = httpsCallable<{ users: Partial<UserData>[] }, BulkCreateResponse>(
+        functions,
+        'bulkCreateUsers'
+    );
 
-    await batch.commit();
+    try {
+        const result = await bulkCreateUsersFunction({ users });
+        return result.data;
+    } catch (error: any) {
+        console.error('Error calling bulkCreateUsers function:', error);
+        throw new Error(error.message || 'Failed to create users');
+    }
 };

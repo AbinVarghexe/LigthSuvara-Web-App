@@ -58,9 +58,9 @@ export function Users() {
     });
 
     const downloadTemplate = () => {
-        const headers = ['email,fullName,role,schoolName,phoneNumber'];
-        const sample = ['teacher@example.com,John Doe,school,St. Marys School,1234567890'];
-        const csvContent = "data:text/csv;charset=utf-8," + headers.join('\n') + '\n' + sample.join('\n');
+        const headers = ['email', 'fullName', 'role', 'schoolName', 'phoneNumber', 'password'];
+        const sample = ['teacher@example.com,John Doe,school,St. Marys School,1234567890,ChangeMe123!'];
+        const csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + '\n' + sample.join('\n');
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
@@ -105,8 +105,17 @@ export function Users() {
                 }
 
                 if (newUsers.length > 0) {
-                    await bulkCreateUsers(newUsers);
-                    toast.success(`Successfully uploaded ${newUsers.length} users`);
+                    const result = await bulkCreateUsers(newUsers);
+                    
+                    if (result.success) {
+                        toast.success(`Successfully created ${result.created} users`);
+                    } else {
+                        toast.warning(
+                            `Created ${result.created} users, ${result.failed} failed. Check console for details.`
+                        );
+                        console.log('Failed users:', result.errors);
+                    }
+                    
                     setIsDialogOpen(false);
                     fetchUsers(); // Refresh list
                 } else {

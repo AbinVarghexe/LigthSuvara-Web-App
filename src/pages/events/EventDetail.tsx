@@ -25,6 +25,7 @@ import {
     AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 import { getEvent, deleteEvent, publishEvent, unpublishEvent, updateEventStatus, EventData } from '../../features/events/services/eventService';
+import { getUser } from '../../features/users/services/userService';
 import { useAuth } from '../../context/AuthContext';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
@@ -33,6 +34,7 @@ export function EventDetail() {
     const navigate = useNavigate();
     const { isAdminUser, currentUser } = useAuth();
     const [event, setEvent] = useState<EventData | null>(null);
+    const [creatorName, setCreatorName] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
@@ -41,8 +43,25 @@ export function EventDetail() {
         const fetchEvent = async () => {
             if (!id) return;
             try {
-                const eventData = await getEvent(id);
-                setEvent(eventData as EventData);
+                const eventData = await getEvent(id) as EventData;
+                setEvent(eventData);
+
+                // Fetch creator details if needed
+                if (eventData.creatorId) {
+                    try {
+                        const user = await getUser(eventData.creatorId);
+                        const name = eventData.creatorSchoolName && eventData.creatorSchoolName !== 'Admin'
+                            ? eventData.creatorSchoolName
+                            : (user?.schoolName || user?.schoolname || user?.fullName || 'Unknown');
+                        setCreatorName(name);
+                    } catch (err) {
+                        console.error("Error fetching creator:", err);
+                        setCreatorName(eventData.creatorSchoolName || 'Unknown');
+                    }
+                } else {
+                    setCreatorName(eventData.creatorSchoolName || 'Unknown');
+                }
+
             } catch (error) {
                 console.error("Error fetching event:", error);
                 toast.error("Failed to load event details");
@@ -70,6 +89,22 @@ export function EventDetail() {
             }
         }
     }, [event, loading, isAdminUser, currentUser, navigate]);
+
+    const formatDate = (date: any) => {
+        if (!date) return 'N/A';
+        try {
+            // Handle Firestore Timestamp
+            if (date.seconds) {
+                return new Date(date.seconds * 1000).toLocaleDateString();
+            }
+            // Handle Date object or string
+            const d = new Date(date);
+            if (isNaN(d.getTime())) return 'Invalid Date';
+            return d.toLocaleDateString();
+        } catch (e) {
+            return 'Error';
+        }
+    };
 
     const handleApprove = async () => {
         if (!event || !event.id) return;
@@ -230,12 +265,38 @@ export function EventDetail() {
                                     <Calendar className="w-5 h-5 text-blue-600" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-gray-900">Date & Time</p>
+                                    <p className="text-sm font-medium text-gray-900">Event Date</p>
                                     <p className="text-sm text-gray-600">
-                                        {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleString() : 'N/A'}
+                                        {formatDate(event.date)}
                                     </p>
                                 </div>
                             </div>
+
+                            <div className="flex items-start gap-3">
+                                <div className="p-2 bg-green-50 rounded-lg">
+                                    <Calendar className="w-5 h-5 text-green-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-gray-900">Created At</p>
+                                    <p className="text-sm text-gray-600">
+                                        {formatDate(event.timestamp)}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {event.updatedAt && (
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 bg-orange-50 rounded-lg">
+                                        <Calendar className="w-5 h-5 text-orange-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-900">Last Updated</p>
+                                        <p className="text-sm text-gray-600">
+                                            {formatDate(event.updatedAt)}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex items-start gap-3">
                                 <div className="p-2 bg-purple-50 rounded-lg">
@@ -253,7 +314,7 @@ export function EventDetail() {
                                 </div>
                                 <div>
                                     <p className="text-sm font-medium text-gray-900">Created By</p>
-                                    <p className="text-sm text-gray-600">{event.creatorSchoolName}</p>
+                                    <p className="text-sm text-gray-600">{creatorName}</p>
                                 </div>
                             </div>
 

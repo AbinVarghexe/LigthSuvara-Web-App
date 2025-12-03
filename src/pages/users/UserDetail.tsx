@@ -158,6 +158,22 @@ export function UserDetail() {
         }
     };
 
+    const formatDate = (date: any) => {
+        if (!date) return 'N/A';
+        try {
+            // Handle Firestore Timestamp
+            if (date.seconds) {
+                return new Date(date.seconds * 1000).toLocaleDateString();
+            }
+            // Handle Date object or string
+            const d = new Date(date);
+            if (isNaN(d.getTime())) return 'Invalid Date';
+            return d.toLocaleDateString();
+        } catch (e) {
+            return 'Error';
+        }
+    };
+
     if (loading) {
         return (
             <div className="h-full w-full flex items-center justify-center">
@@ -299,7 +315,7 @@ export function UserDetail() {
                                         <div>
                                             <h4 className="font-medium text-gray-900">{event.title}</h4>
                                             <p className="text-sm text-gray-500">
-                                                {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
+                                                {formatDate(event.date)}
                                             </p>
                                         </div>
                                     </div>

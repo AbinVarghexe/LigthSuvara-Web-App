@@ -9,6 +9,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { createEvent, getEvent, updateEvent, EventData } from '../../features/events/services/eventService';
+import { getUser } from '../../features/users/services/userService';
 import { useAuth } from '../../context/AuthContext';
 
 import { AlertCircle } from 'lucide-react';
@@ -74,6 +75,10 @@ export function EventForm() {
 
         setIsLoading(true);
         try {
+            // Fetch user details to get school name
+            const userDetails = await getUser(currentUser.uid);
+            const schoolName = userDetails?.schoolName || userDetails?.schoolname || userDetails?.fullName || 'Unknown';
+
             // Prepare event data
             const eventData: EventData = {
                 title: data.title,
@@ -84,7 +89,7 @@ export function EventForm() {
                 isPublic: data.isPublic || false,
                 status: isAdminUser ? 'approved' : 'pending', // Set status based on role
                 creatorId: currentUser.uid,
-                creatorSchoolName: 'Admin', // Or fetch from user profile
+                creatorSchoolName: schoolName,
                 imageUrl: imagePreview || undefined
             };
 

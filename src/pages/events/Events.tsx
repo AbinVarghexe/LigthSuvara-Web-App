@@ -3,6 +3,7 @@ import { Plus, Search, Filter, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { getEvents, EventData } from '../../features/events/services/eventService';
+import { getUsers, UserData } from '../../features/users/services/userService';
 import { Card, CardContent } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
@@ -14,16 +15,21 @@ import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 export function Events() {
     const { isAdminUser, currentUser } = useAuth();
     const [events, setEvents] = useState<EventData[]>([]);
+    const [users, setUsers] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
 
     useEffect(() => {
-        const fetchEvents = async () => {
+        const fetchData = async () => {
             try {
-                const eventsData = await getEvents();
+                const [eventsData, usersData] = await Promise.all([
+                    getEvents(),
+                    getUsers()
+                ]);
                 setEvents(eventsData as EventData[]);
+                setUsers(usersData);
             } catch (error) {
                 console.error("Error fetching events:", error);
             } finally {
@@ -31,7 +37,7 @@ export function Events() {
             }
         };
 
-        fetchEvents();
+        fetchData();
     }, []);
 
     const filteredEvents = events.filter(event => {
@@ -55,6 +61,22 @@ export function Events() {
 
         return matchesSearch && matchesCategory && matchesStatus;
     });
+
+    const formatDate = (date: any) => {
+        if (!date) return 'N/A';
+        try {
+            // Handle Firestore Timestamp
+            if (date.seconds) {
+                return new Date(date.seconds * 1000).toLocaleDateString();
+            }
+            // Handle Date object or string
+            const d = new Date(date);
+            if (isNaN(d.getTime())) return 'Invalid Date';
+            return d.toLocaleDateString();
+        } catch (e) {
+            return 'Error';
+        }
+    };
 
     if (loading) {
         return (
@@ -129,53 +151,67 @@ export function Events() {
                                 <TableHead className="w-[300px]">Event Details</TableHead>
                                 <TableHead>Category</TableHead>
                                 <TableHead>Created By</TableHead>
-                                <TableHead>Date</TableHead>
+                                <TableHead>Created</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredEvents.map((event) => (
-                                <TableRow key={event.id}>
-                                    <TableCell>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
-                                                {event.imageUrl ? (
-                                                    <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
+                            {filteredEvents.map((event) => {
+                                const creator = users.find(u => u.id === event.creatorId);
+                                const schoolName = event.creatorSchoolName && event.creatorSchoolName !== 'Admin'
+                                    ? event.creatorSchoolName
+                                    : (creator?.schoolName || creator?.schoolname || creator?.fullName || 'Unknown');
+
+                                return (
+                                    <TableRow key={event.id}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                                                    {event.imageUrl ? (
+                                                        <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-medium text-gray-900">{event.title}</h3>
+                                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">{event.place}</p>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary" className="uppercase">
+                                                {event.category}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-gray-600">
+                                            {schoolName}
+                                        </TableCell>
+                                        <TableCell className="text-gray-600">
+                                            <div className="flex flex-col">
+                                                <span>{formatDate(event.timestamp)}</span>
+                                                {event.updatedAt && (
+                                                    <span className="text-xs text-gray-400">
+                                                        Updated: {formatDate(event.updatedAt)}
+                                                    </span>
                                                 )}
                                             </div>
-                                            <div>
-                                                <h3 className="font-medium text-gray-900">{event.title}</h3>
-                                                <p className="text-sm text-gray-500 truncate max-w-[200px]">{event.place}</p>
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="secondary" className="uppercase">
-                                            {event.category}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-gray-600">
-                                        {event.creatorSchoolName}
-                                    </TableCell>
-                                    <TableCell className="text-gray-600">
-                                        {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Link
-                                            to={`/events/${event.id}`}
-                                            className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                                        >
-                                            View
-                                        </Link>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                        <TableCell>
+                                            <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Link
+                                                to={`/events/${event.id}`}
+                                                className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                                            >
+                                                View
+                                            </Link>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                             {filteredEvents.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={6} className="h-24 text-center text-gray-500">

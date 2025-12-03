@@ -190,27 +190,57 @@ export function Dashboard() {
                                     <TableRow>
                                         <TableHead className="min-w-[200px]">Title</TableHead>
                                         <TableHead className="min-w-[150px]">School</TableHead>
-                                        <TableHead className="min-w-[100px]">Date</TableHead>
+                                        <TableHead className="min-w-[100px]">Created</TableHead>
                                         <TableHead className="min-w-[100px]">Status</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredEvents.slice(0, 5).map((event) => (
-                                        <TableRow key={event.id}>
-                                            <TableCell className="font-medium">
-                                                <Link to={`/events/${event.id}`} className="hover:underline text-blue-600">
-                                                    {event.title}
-                                                </Link>
-                                            </TableCell>
-                                            <TableCell>{event.creatorSchoolName}</TableCell>
-                                            <TableCell>
-                                                {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
-                                            </TableCell>
-                                            <TableCell>
-                                                <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {filteredEvents.slice(0, 5).map((event) => {
+                                        const creator = users.find(u => u.id === event.creatorId);
+                                        const schoolName = event.creatorSchoolName && event.creatorSchoolName !== 'Admin'
+                                            ? event.creatorSchoolName
+                                            : (creator?.schoolName || creator?.schoolname || creator?.fullName || 'Unknown');
+
+                                        const formatDate = (date: any) => {
+                                            if (!date) return 'N/A';
+                                            try {
+                                                // Handle Firestore Timestamp
+                                                if (date.seconds) {
+                                                    return new Date(date.seconds * 1000).toLocaleDateString();
+                                                }
+                                                // Handle Date object or string
+                                                const d = new Date(date);
+                                                if (isNaN(d.getTime())) return 'Invalid Date';
+                                                return d.toLocaleDateString();
+                                            } catch (e) {
+                                                return 'Error';
+                                            }
+                                        };
+
+                                        return (
+                                            <TableRow key={event.id}>
+                                                <TableCell className="font-medium">
+                                                    <Link to={`/events/${event.id}`} className="hover:underline text-blue-600">
+                                                        {event.title}
+                                                    </Link>
+                                                </TableCell>
+                                                <TableCell>{schoolName}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span>{formatDate(event.timestamp)}</span>
+                                                        {event.updatedAt && (
+                                                            <span className="text-xs text-gray-400">
+                                                                Upd: {formatDate(event.updatedAt)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                                     {events.length === 0 && (
                                         <TableRow>
                                             <TableCell colSpan={4} className="text-center text-gray-500 py-8">
