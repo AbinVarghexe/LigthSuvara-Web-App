@@ -35,6 +35,11 @@ export function Notifications() {
         fetchSchools();
     }, []);
 
+    // Fetch notification history on component mount
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
     const fetchHistory = async () => {
         setLoadingHistory(true);
         try {
