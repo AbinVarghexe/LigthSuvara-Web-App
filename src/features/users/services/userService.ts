@@ -18,7 +18,7 @@ export interface UserData {
     id: string;
     uid: string;
     email: string;
-    role: 'admin' | 'school';
+    role: 'admin' | 'school' | 'animator';
     schoolname?: string;
     schoolName?: string;
     fullName?: string;
@@ -42,7 +42,7 @@ export const getUser = async (userId: string) => {
     }
 };
 
-export const updateUserRole = async (userId: string, newRole: 'admin' | 'school') => {
+export const updateUserRole = async (userId: string, newRole: 'admin' | 'school' | 'animator') => {
     return await updateDoc(doc(db, 'users', userId), { role: newRole });
 };
 

@@ -21,7 +21,6 @@ export function Events() {
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
     const [foraneFilter, setForaneFilter] = useState('All');
-    const [currentUserForane, setCurrentUserForane] = useState<string | null>(null);
 
     // Hardcoded forane names
     const foraneNames = [
@@ -53,13 +52,13 @@ export function Events() {
                     const currentUserData = usersData.find(u => u.uid === currentUser.uid);
                     if (currentUserData?.forane) {
                         userForane = currentUserData.forane;
-                        setCurrentUserForane(userForane);
                     }
                 }
                 
-                // Fetch events with forane filter
-                const foraneToQuery = foraneFilter !== 'All' ? foraneFilter : (isAdminUser ? undefined : userForane || undefined);
-                const eventsData = await getEvents(undefined, foraneToQuery);
+                // Fetch events based on user role
+                // If admin, fetch all (undefined). If user, fetch only their forane.
+                const foraneScope = isAdminUser ? undefined : userForane || undefined;
+                const eventsData = await getEvents(undefined, foraneScope);
                 const typedEvents = eventsData as EventData[];
                 setEvents(typedEvents);
             } catch (error) {
@@ -70,7 +69,7 @@ export function Events() {
         };
 
         fetchData();
-    }, [currentUser, foraneFilter, isAdminUser]);
+    }, [currentUser, isAdminUser]);
 
     const filteredEvents = events.filter(event => {
         // Visibility Check
@@ -84,6 +83,9 @@ export function Events() {
 
         const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = categoryFilter === 'All' || event.category.toLowerCase() === categoryFilter.toLowerCase();
+        const matchesForane = foraneFilter === 'All' || 
+                            event.creatorForane === foraneFilter || 
+                            (event.place && event.place.toLowerCase().includes(foraneFilter.toLowerCase()));
 
         let matchesStatus = true;
         if (statusFilter !== 'All') {
@@ -91,7 +93,7 @@ export function Events() {
             else matchesStatus = event.status === statusFilter;
         }
 
-        return matchesSearch && matchesCategory && matchesStatus;
+        return matchesSearch && matchesCategory && matchesStatus && matchesForane;
     });
 
     const formatDate = (date: any) => {

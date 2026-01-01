@@ -103,8 +103,8 @@ export function Dashboard() {
     };
 
     return (
-        <div className="space-y-6 sm:space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="space-y-4 sm:space-y-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6">
                 <StatCard
                     title="Total Events"
                     value={events.length}
@@ -136,7 +136,7 @@ export function Dashboard() {
             </div>
 
             {isAdminUser && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6">
                     <StatCard
                         title="Active Programs"
                         value={activePrograms}
@@ -177,7 +177,7 @@ export function Dashboard() {
                     <CardDescription>Event creation trend over the last 6 months</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                    <ChartContainer config={chartConfig} className="h-[250px] sm:h-[300px] w-full aspect-auto">
                         <LineChart data={chartData}>
                             <CartesianGrid vertical={false} strokeDasharray="3 3" />
                             <XAxis
@@ -211,7 +211,7 @@ export function Dashboard() {
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
                 <Card className="lg:col-span-2 overflow-hidden">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Recent Events</CardTitle>
@@ -286,33 +286,6 @@ export function Dashboard() {
                                     )}
                                 </TableBody>
                             </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle>Recent Notifications</CardTitle>
-                        <Link to="/notifications" className="text-sm text-blue-600 hover:underline">
-                            View All
-                        </Link>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {notifications.slice(0, 5).map((notif) => (
-                                <div key={notif.id} className="flex flex-col gap-1 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                                    <h4 className="font-medium text-sm">{notif.title}</h4>
-                                    <p className="text-muted-foreground text-xs line-clamp-2">{notif.body}</p>
-                                    <span className="text-xs text-muted-foreground/70 mt-1">
-                                        {notif.timestamp ? new Date(notif.timestamp.seconds * 1000).toLocaleString() : 'Just now'}
-                                    </span>
-                                </div>
-                            ))}
-                            {notifications.length === 0 && (
-                                <div className="text-center text-gray-500 py-8">
-                                    No notifications sent yet
-                                </div>
-                            )}
                         </div>
                     </CardContent>
                 </Card>

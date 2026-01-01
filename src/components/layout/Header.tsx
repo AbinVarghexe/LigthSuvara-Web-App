@@ -1,6 +1,9 @@
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Menu } from 'lucide-react';
+import { Menu, Bell } from 'lucide-react';
+import { Link, useLocation } from 'react-router';
 import { ModeToggle } from '../mode-toggle';
+import { useEffect, useState } from 'react';
+import { getNotifications } from '../../features/notifications/services/notificationService';
 
 interface HeaderProps {
     title: string;
@@ -8,6 +11,41 @@ interface HeaderProps {
 }
 
 export function Header({ title, onMenuClick }: HeaderProps) {
+    const location = useLocation();
+    const [hasUnread, setHasUnread] = useState(false);
+
+    useEffect(() => {
+        const checkNotifications = async () => {
+            try {
+                const notifications = await getNotifications();
+                if (notifications.length > 0) {
+                    const latestNotif = notifications[0] as any;
+                    const lastReadTime = localStorage.getItem('lastNotificationReadTime');
+                    
+                    if (!lastReadTime) {
+                        setHasUnread(true);
+                    } else {
+                        const latestTimestamp = latestNotif.timestamp?.seconds * 1000 || Date.now();
+                        if (latestTimestamp > parseInt(lastReadTime)) {
+                            setHasUnread(true);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Error checking notifications:", error);
+            }
+        };
+
+        checkNotifications();
+    }, []);
+
+    useEffect(() => {
+        if (location.pathname === '/notifications') {
+            setHasUnread(false);
+            localStorage.setItem('lastNotificationReadTime', Date.now().toString());
+        }
+    }, [location.pathname]);
+
     return (
         <div className="bg-background border-b border-border px-4 sm:px-8 py-4">
             <div className="flex items-center justify-between">
@@ -22,6 +60,14 @@ export function Header({ title, onMenuClick }: HeaderProps) {
                     <h1 className="text-xl sm:text-2xl font-semibold text-foreground">{title}</h1>
                 </div>
                 <div className="flex items-center gap-3">
+                    {/* Notifications */}
+                    <Link to="/notifications" className="relative p-2 rounded-full hover:bg-accent transition-colors">
+                        <Bell className="w-5 h-5 text-foreground" />
+                        {hasUnread && (
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                        )}
+                    </Link>
+
                     {/* Theme Toggle */}
                     <ModeToggle />
 

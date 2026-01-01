@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Home, Calendar, Users, Bell, BarChart3, Settings, LogOut, CheckCircle, X, GraduationCap, HelpCircle, UserCheck, ClipboardList } from 'lucide-react';
+import { Home, Calendar, Users, BarChart3, Settings, LogOut, CheckCircle, X, GraduationCap, HelpCircle, UserCheck, ClipboardList, MessageSquare } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const navigation = [
@@ -11,7 +11,7 @@ const navigation = [
     { name: 'Questions', href: '/questions', icon: HelpCircle, adminOnly: true },
     { name: 'Animators', href: '/animators', icon: UserCheck, adminOnly: true },
     { name: 'Marks', href: '/marks', icon: ClipboardList, adminOnly: true },
-    { name: 'Notifications', href: '/notifications', icon: Bell },
+    { name: 'Messages', href: '/messages', icon: MessageSquare },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];

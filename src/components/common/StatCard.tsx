@@ -12,14 +12,14 @@ interface StatCardProps {
 export function StatCard({ title, value, icon: Icon, iconColor, iconBg }: StatCardProps) {
     return (
         <Card className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
+            <CardContent className="p-3 sm:p-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <p className="text-gray-600 text-sm font-medium">{title}</p>
-                        <h3 className="mt-2 text-2xl font-bold">{value}</h3>
+                        <p className="text-gray-600 text-xs sm:text-sm font-medium">{title}</p>
+                        <h3 className="mt-1 sm:mt-2 text-xl sm:text-2xl font-bold">{value}</h3>
                     </div>
-                    <div className={`${iconBg} ${iconColor} p-3 rounded-lg`}>
-                        <Icon className="w-6 h-6" />
+                    <div className={`${iconBg} ${iconColor} p-2 sm:p-3 rounded-lg`}>
+                        <Icon className="w-4 h-4 sm:w-6 sm:h-6" />
                     </div>
                 </div>
             </CardContent>

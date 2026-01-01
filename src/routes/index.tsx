@@ -15,6 +15,7 @@ import { Programs } from '../pages/programs/Programs';
 import { Questions } from '../pages/questions/Questions';
 import { Animators } from '../pages/animators/Animators';
 import { Marks } from '../pages/marks/Marks';
+import { Messages } from '../pages/messages/Messages';
 import { ProtectedRoute } from '../components/layout/ProtectedRoute';
 import { NotAuthorized } from '../pages/auth/NotAuthorized';
 import { PrivacyPolicy } from '../pages/legal/PrivacyPolicy';
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
                     { path: 'questions', Component: Questions },
                     { path: 'animators', Component: Animators },
                     { path: 'marks', Component: Marks },
+                    { path: 'messages', Component: Messages },
                     { path: 'notifications', Component: Notifications },
                     { path: 'reports', Component: Reports },
                     { path: 'settings', Component: Settings },
