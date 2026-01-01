@@ -1,13 +1,38 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, FileText, Download, Eye, Lock, Unlock, Filter } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { 
+    Search, 
+    Loader2, 
+    FileText, 
+    Download, 
+    Eye, 
+    Lock, 
+    Unlock, 
+    TrendingUp,
+    CheckCircle2,
+    Clock,
+    BarChart3,
+    Calendar,
+    User,
+    Building2,
+    GraduationCap,
+    ChevronRight,
+    Sparkles,
+    LayoutGrid,
+    LayoutList
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { Progress } from '../../components/ui/progress';
+import { Separator } from '../../components/ui/separator';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
+import { Avatar, AvatarFallback } from '../../components/ui/avatar';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import { 
@@ -29,6 +54,7 @@ export function Marks() {
     const [availableYears, setAvailableYears] = useState<string[]>([]);
     const [selectedMarks, setSelectedMarks] = useState<MarksWithDetails | null>(null);
     const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+    const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
     const [stats, setStats] = useState({
         totalSubmissions: 0,
         lockedSubmissions: 0,
@@ -166,259 +192,542 @@ export function Marks() {
     const formatDate = (date: Timestamp | undefined) => {
         if (!date) return 'N/A';
         try {
-            return date.toDate().toLocaleDateString();
+            return date.toDate().toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
         } catch {
             return 'Invalid Date';
         }
     };
 
+    const getScoreColor = (percentage: number) => {
+        if (percentage >= 80) return 'text-green-600 dark:text-green-400';
+        if (percentage >= 60) return 'text-blue-600 dark:text-blue-400';
+        if (percentage >= 40) return 'text-yellow-600 dark:text-yellow-400';
+        return 'text-red-600 dark:text-red-400';
+    };
+
+    const getScoreBgColor = (percentage: number) => {
+        if (percentage >= 80) return 'bg-green-100 dark:bg-green-900/30';
+        if (percentage >= 60) return 'bg-blue-100 dark:bg-blue-900/30';
+        if (percentage >= 40) return 'bg-yellow-100 dark:bg-yellow-900/30';
+        return 'bg-red-100 dark:bg-red-900/30';
+    };
+
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    };
+
     if (loading) {
         return (
-            <div className="h-full w-full flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <div className="h-full w-full flex flex-col items-center justify-center gap-4">
+                <div className="relative">
+                    <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping"></div>
+                    <Loader2 className="h-10 w-10 animate-spin text-blue-600 relative z-10" />
+                </div>
+                <p className="text-sm text-muted-foreground animate-pulse">Loading marks data...</p>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Marks Viewer</h1>
+        <div className="space-y-6 pb-8">
+            {/* Hero Header Section */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-6 md:p-8">
+                <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]"></div>
+                <div className="relative z-10">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
+                                <BarChart3 className="h-8 w-8" />
+                                Assessment Marks
+                            </h1>
+                            <p className="text-white/80 mt-1">View and analyze student assessment records</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="bg-white/20 text-white border-white/30 hover:bg-white/30">
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                {selectedYear === 'all' ? 'All Years' : selectedYear}
+                            </Badge>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="text-2xl font-bold">{stats.totalSubmissions}</div>
-                        <p className="text-sm text-gray-500">Total Submissions</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-indigo-500">
+                    <CardContent className="p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">Total Submissions</p>
+                                <p className="text-3xl font-bold tracking-tight">{stats.totalSubmissions}</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+                                <FileText className="h-6 w-6" />
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-green-600">{stats.lockedSubmissions}</div>
-                        <p className="text-sm text-gray-500">Finalized</p>
+
+                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-green-500">
+                    <CardContent className="p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">Finalized</p>
+                                <p className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">{stats.lockedSubmissions}</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
+                                <CheckCircle2 className="h-6 w-6" />
+                            </div>
+                        </div>
+                        <div className="mt-3">
+                            <Progress 
+                                value={stats.totalSubmissions > 0 ? (stats.lockedSubmissions / stats.totalSubmissions) * 100 : 0} 
+                                className="h-1.5 bg-green-100 dark:bg-green-900/30"
+                            />
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-orange-600">{stats.unlockedSubmissions}</div>
-                        <p className="text-sm text-gray-500">In Progress</p>
+
+                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-orange-500">
+                    <CardContent className="p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">In Progress</p>
+                                <p className="text-3xl font-bold tracking-tight text-orange-600 dark:text-orange-400">{stats.unlockedSubmissions}</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
+                                <Clock className="h-6 w-6" />
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-blue-600">{stats.averagePercentage.toFixed(1)}%</div>
-                        <p className="text-sm text-gray-500">Average Score</p>
+
+                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-blue-500">
+                    <CardContent className="p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">Average Score</p>
+                                <p className="text-3xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+                                    {stats.averagePercentage.toFixed(1)}%
+                                </p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                                <TrendingUp className="h-6 w-6" />
+                            </div>
+                        </div>
+                        <div className="mt-3">
+                            <Progress value={stats.averagePercentage} className="h-1.5" />
+                        </div>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Filters */}
-            <Card>
-                <CardContent className="p-4 flex flex-col md:flex-row gap-4">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                            type="text"
-                            placeholder="Search by parish, school, or animator..."
-                            className="pl-9"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex gap-4">
-                        <div className="relative min-w-[140px]">
-                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                <SelectTrigger className="pl-9">
-                                    <SelectValue placeholder="Year" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Years</SelectItem>
-                                    {availableYears.map(year => (
-                                        <SelectItem key={year} value={year}>{year}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+            {/* Filters & Controls */}
+            <Card className="border-dashed">
+                <CardContent className="p-4">
+                    <div className="flex flex-col md:flex-row gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                                type="text"
+                                placeholder="Search by parish, school, or animator..."
+                                className="pl-10 bg-muted/50 border-0 focus-visible:ring-2"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Marks Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Assessment Records</CardTitle>
-                    <CardDescription>View and download assessment marks submitted by animators</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {marks.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p>No marks records found</p>
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Parish</TableHead>
-                                    <TableHead>Sunday School</TableHead>
-                                    <TableHead>Animator</TableHead>
-                                    <TableHead>Year</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Submitted</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {marks.map((mark) => (
-                                    <TableRow key={mark.id}>
-                                        <TableCell className="font-medium">{mark.parish}</TableCell>
-                                        <TableCell>{mark.sundaySchool}</TableCell>
-                                        <TableCell>{mark.animatorName}</TableCell>
-                                        <TableCell>{mark.year}</TableCell>
-                                        <TableCell>
-                                            {mark.locked ? (
-                                                <Badge variant="default" className="gap-1">
-                                                    <Lock className="h-3 w-3" />
-                                                    Finalized
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="secondary" className="gap-1">
-                                                    <Unlock className="h-3 w-3" />
-                                                    In Progress
-                                                </Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>{formatDate(mark.submittedAt)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => handleViewDetails(mark.id!)}
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </Button>
-                                                {mark.pdfUrl && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        asChild
-                                                    >
-                                                        <a href={mark.pdfUrl} target="_blank" rel="noopener noreferrer">
-                                                            <Download className="h-4 w-4" />
-                                                        </a>
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Detail Dialog */}
-            <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>Marks Details</DialogTitle>
-                    </DialogHeader>
-                    {selectedMarks && (
-                        <div className="space-y-6">
-                            {/* Info */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-gray-500">Parish</p>
-                                    <p className="font-medium">{selectedMarks.parish}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-500">Sunday School</p>
-                                    <p className="font-medium">{selectedMarks.sundaySchool}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-500">Animator</p>
-                                    <p className="font-medium">{selectedMarks.animatorName}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-500">Year</p>
-                                    <p className="font-medium">{selectedMarks.year}</p>
-                                </div>
+                        <div className="flex gap-3 flex-wrap">
+                            <div className="relative min-w-[160px]">
+                                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                    <SelectTrigger className="bg-muted/50 border-0">
+                                        <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+                                        <SelectValue placeholder="Year" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Years</SelectItem>
+                                        {availableYears.map(year => (
+                                            <SelectItem key={year} value={year}>{year}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
+                            <Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as 'table' | 'cards')} className="hidden md:block">
+                                <TabsList className="bg-muted/50">
+                                    <TabsTrigger value="table" className="data-[state=active]:bg-background">
+                                        <LayoutList className="h-4 w-4" />
+                                    </TabsTrigger>
+                                    <TabsTrigger value="cards" className="data-[state=active]:bg-background">
+                                        <LayoutGrid className="h-4 w-4" />
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
-                            {/* Score Summary */}
-                            <Card>
-                                <CardContent className="pt-6">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm font-medium">Total Score</span>
-                                        <span className="text-lg font-bold">
-                                            {selectedMarks.totalMarks} / {selectedMarks.maxTotalMarks}
-                                        </span>
-                                    </div>
-                                    <Progress value={selectedMarks.percentage} className="h-3" />
-                                    <p className="text-sm text-gray-500 mt-2 text-right">
-                                        {selectedMarks.percentage.toFixed(1)}%
-                                    </p>
-                                </CardContent>
-                            </Card>
-
-                            {/* Marks Table */}
+            {/* Main Content */}
+            {marks.length === 0 ? (
+                <Card className="border-dashed">
+                    <CardContent className="flex flex-col items-center justify-center py-16">
+                        <div className="rounded-full bg-muted p-4 mb-4">
+                            <FileText className="h-10 w-10 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-lg font-semibold mb-1">No Records Found</h3>
+                        <p className="text-muted-foreground text-center max-w-sm">
+                            No marks records match your search criteria. Try adjusting your filters.
+                        </p>
+                    </CardContent>
+                </Card>
+            ) : viewMode === 'table' ? (
+                /* Table View */
+                <Card>
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-xl">Assessment Records</CardTitle>
+                                <CardDescription>
+                                    {marks.length} record{marks.length !== 1 ? 's' : ''} found
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <ScrollArea className="w-full">
                             <Table>
                                 <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-[50px]">#</TableHead>
-                                        <TableHead>Question</TableHead>
-                                        <TableHead className="w-[80px] text-right">Marks</TableHead>
-                                        <TableHead className="w-[80px] text-right">Max</TableHead>
+                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                        <TableHead className="font-semibold">Parish</TableHead>
+                                        <TableHead className="font-semibold">Sunday School</TableHead>
+                                        <TableHead className="font-semibold">Animator</TableHead>
+                                        <TableHead className="font-semibold">Year</TableHead>
+                                        <TableHead className="font-semibold">Status</TableHead>
+                                        <TableHead className="font-semibold">Submitted</TableHead>
+                                        <TableHead className="text-right font-semibold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {selectedMarks.questions.map((question, index) => {
-                                        const marks = question.id ? selectedMarks.marks[question.id] : 0;
-                                        return (
-                                            <TableRow key={question.id}>
-                                                <TableCell>{index + 1}</TableCell>
-                                                <TableCell className="text-sm">{question.text}</TableCell>
-                                                <TableCell className="text-right font-medium">{marks || 0}</TableCell>
-                                                <TableCell className="text-right text-gray-500">{question.maxMarks}</TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                    <TableRow className="bg-gray-50 dark:bg-gray-800">
-                                        <TableCell></TableCell>
-                                        <TableCell className="font-bold">Total</TableCell>
-                                        <TableCell className="text-right font-bold">{selectedMarks.totalMarks}</TableCell>
-                                        <TableCell className="text-right font-bold">{selectedMarks.maxTotalMarks}</TableCell>
-                                    </TableRow>
+                                    {marks.map((mark, index) => (
+                                        <TableRow 
+                                            key={mark.id} 
+                                            className="group cursor-pointer hover:bg-muted/50 transition-colors"
+                                            onClick={() => handleViewDetails(mark.id!)}
+                                        >
+                                            <TableCell>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs font-semibold">
+                                                        {index + 1}
+                                                    </div>
+                                                    <span className="font-medium">{mark.parish}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                                                    {mark.sundaySchool}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Avatar className="h-7 w-7">
+                                                        <AvatarFallback className="text-xs bg-muted">
+                                                            {getInitials(mark.animatorName)}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <span className="text-sm">{mark.animatorName}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="font-mono">
+                                                    {mark.year}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {mark.locked ? (
+                                                    <Badge className="gap-1.5 bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">
+                                                        <Lock className="h-3 w-3" />
+                                                        Finalized
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="secondary" className="gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400">
+                                                        <Unlock className="h-3 w-3" />
+                                                        In Progress
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground text-sm">
+                                                {formatDate(mark.submittedAt)}
+                                            </TableCell>
+                                            <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                                <TooltipProvider>
+                                                    <div className="flex justify-end gap-1">
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    onClick={() => handleViewDetails(mark.id!)}
+                                                                >
+                                                                    <Eye className="h-4 w-4" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>View Details</TooltipContent>
+                                                        </Tooltip>
+                                                        {mark.pdfUrl && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        asChild
+                                                                    >
+                                                                        <a href={mark.pdfUrl} target="_blank" rel="noopener noreferrer">
+                                                                            <Download className="h-4 w-4" />
+                                                                        </a>
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Download PDF</TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                        <ChevronRight className="h-4 w-4 text-muted-foreground ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    </div>
+                                                </TooltipProvider>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
                                 </TableBody>
                             </Table>
+                        </ScrollArea>
+                    </CardContent>
+                    <CardFooter className="border-t py-3 bg-muted/30">
+                        <p className="text-sm text-muted-foreground">
+                            Showing {marks.length} of {stats.totalSubmissions} total submissions
+                        </p>
+                    </CardFooter>
+                </Card>
+            ) : (
+                /* Cards View */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {marks.map((mark) => (
+                        <Card 
+                            key={mark.id} 
+                            className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                            onClick={() => handleViewDetails(mark.id!)}
+                        >
+                            <CardHeader className="pb-3">
+                                <div className="flex items-start justify-between">
+                                    <div className="space-y-1">
+                                        <CardTitle className="text-base">{mark.parish}</CardTitle>
+                                        <CardDescription className="flex items-center gap-1">
+                                            <GraduationCap className="h-3 w-3" />
+                                            {mark.sundaySchool}
+                                        </CardDescription>
+                                    </div>
+                                    {mark.locked ? (
+                                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                            <Lock className="h-3 w-3 mr-1" />
+                                            Finalized
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                                            <Clock className="h-3 w-3 mr-1" />
+                                            In Progress
+                                        </Badge>
+                                    )}
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pb-3">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarFallback className="text-xs bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                                            {getInitials(mark.animatorName)}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                        <p className="text-sm font-medium">{mark.animatorName}</p>
+                                        <p className="text-xs text-muted-foreground">{formatDate(mark.submittedAt)}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                            <CardFooter className="border-t pt-3 flex items-center justify-between">
+                                <Badge variant="outline" className="font-mono text-xs">
+                                    {mark.year}
+                                </Badge>
+                                <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                    View Details
+                                    <ChevronRight className="h-4 w-4 ml-1" />
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    ))}
+                </div>
+            )}
 
-                            {/* Remarks */}
-                            {selectedMarks.remarks && (
-                                <div>
-                                    <p className="text-sm font-medium mb-2">Remarks</p>
-                                    <p className="text-sm text-gray-600 bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                                        {selectedMarks.remarks}
-                                    </p>
+            {/* Detail Dialog */}
+            <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+                <DialogContent className="max-w-3xl max-h-[90vh] p-0 overflow-hidden">
+                    <ScrollArea className="max-h-[90vh]">
+                        <div className="p-6">
+                            <DialogHeader className="pb-4">
+                                <DialogTitle className="text-xl flex items-center gap-2">
+                                    <BarChart3 className="h-5 w-5 text-primary" />
+                                    Assessment Details
+                                </DialogTitle>
+                                <DialogDescription>
+                                    Complete breakdown of assessment marks and questions
+                                </DialogDescription>
+                            </DialogHeader>
+                            
+                            {selectedMarks && (
+                                <div className="space-y-6">
+                                    {/* Info Cards */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                <Building2 className="h-3.5 w-3.5" />
+                                                <span className="text-xs font-medium">Parish</span>
+                                            </div>
+                                            <p className="font-semibold text-sm truncate">{selectedMarks.parish}</p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                <GraduationCap className="h-3.5 w-3.5" />
+                                                <span className="text-xs font-medium">School</span>
+                                            </div>
+                                            <p className="font-semibold text-sm truncate">{selectedMarks.sundaySchool}</p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                <User className="h-3.5 w-3.5" />
+                                                <span className="text-xs font-medium">Animator</span>
+                                            </div>
+                                            <p className="font-semibold text-sm truncate">{selectedMarks.animatorName}</p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                <Calendar className="h-3.5 w-3.5" />
+                                                <span className="text-xs font-medium">Year</span>
+                                            </div>
+                                            <p className="font-semibold text-sm">{selectedMarks.year}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Score Summary */}
+                                    <Card className={`border-2 ${getScoreBgColor(selectedMarks.percentage)}`}>
+                                        <CardContent className="p-5">
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                <div className="space-y-1">
+                                                    <p className="text-sm font-medium text-muted-foreground">Total Score</p>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className={`text-4xl font-bold ${getScoreColor(selectedMarks.percentage)}`}>
+                                                            {selectedMarks.totalMarks}
+                                                        </span>
+                                                        <span className="text-lg text-muted-foreground">
+                                                            / {selectedMarks.maxTotalMarks}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <div className={`text-3xl font-bold ${getScoreColor(selectedMarks.percentage)}`}>
+                                                        {selectedMarks.percentage.toFixed(1)}%
+                                                    </div>
+                                                    <Progress 
+                                                        value={selectedMarks.percentage} 
+                                                        className="h-2 w-32" 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Questions Table */}
+                                    <div className="space-y-3">
+                                        <h4 className="font-semibold flex items-center gap-2">
+                                            <FileText className="h-4 w-4" />
+                                            Question-wise Breakdown
+                                        </h4>
+                                        <div className="border rounded-xl overflow-hidden">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted/50">
+                                                        <TableHead className="w-12 font-semibold">#</TableHead>
+                                                        <TableHead className="font-semibold">Question</TableHead>
+                                                        <TableHead className="w-20 text-right font-semibold">Marks</TableHead>
+                                                        <TableHead className="w-20 text-right font-semibold">Max</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {selectedMarks.questions.map((question, index) => {
+                                                        const questionMarks = question.id ? selectedMarks.marks[question.id] : 0;
+                                                        const percentage = (questionMarks / question.maxMarks) * 100;
+                                                        return (
+                                                            <TableRow key={question.id}>
+                                                                <TableCell className="font-medium text-muted-foreground">
+                                                                    {index + 1}
+                                                                </TableCell>
+                                                                <TableCell className="text-sm">{question.text}</TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <Badge variant="outline" className={getScoreBgColor(percentage)}>
+                                                                        {questionMarks || 0}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell className="text-right text-muted-foreground">
+                                                                    {question.maxMarks}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                    <TableRow className="bg-muted/50 font-semibold">
+                                                        <TableCell></TableCell>
+                                                        <TableCell>Total</TableCell>
+                                                        <TableCell className="text-right">{selectedMarks.totalMarks}</TableCell>
+                                                        <TableCell className="text-right">{selectedMarks.maxTotalMarks}</TableCell>
+                                                    </TableRow>
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+
+                                    {/* Remarks */}
+                                    {selectedMarks.remarks && (
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold">Remarks</h4>
+                                            <div className="p-4 rounded-xl bg-muted/50 border-l-4 border-l-primary">
+                                                <p className="text-sm text-muted-foreground italic">
+                                                    "{selectedMarks.remarks}"
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <Separator />
+
+                                    {/* Actions */}
+                                    <div className="flex flex-col sm:flex-row justify-end gap-3">
+                                        <Button 
+                                            variant="outline" 
+                                            onClick={() => setIsDetailDialogOpen(false)}
+                                        >
+                                            Close
+                                        </Button>
+                                        <Button 
+                                            onClick={() => generatePDF(selectedMarks)}
+                                            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                                        >
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Download PDF Report
+                                        </Button>
+                                    </div>
                                 </div>
                             )}
-
-                            {/* Actions */}
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
-                                    Close
-                                </Button>
-                                <Button onClick={() => generatePDF(selectedMarks)}>
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Download PDF
-                                </Button>
-                            </div>
                         </div>
-                    )}
+                    </ScrollArea>
                 </DialogContent>
             </Dialog>
         </div>
