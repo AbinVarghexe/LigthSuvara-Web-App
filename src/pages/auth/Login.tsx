@@ -84,12 +84,6 @@ export function Login() {
                         />
                     </div>
                 </div>
-
-                <div className="relative z-10 max-w-md space-y-4">
-                     <h1 className="text-4xl font-bold leading-tight">
-                        Get access your personal hub for clarity and productivity
-                     </h1>
-                </div>
             </div>
 
             {/* Right Side - Form */}
