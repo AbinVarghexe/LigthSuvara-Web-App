@@ -11,8 +11,9 @@ import { getAnimatorStats } from '../../features/animators/services/animatorServ
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { useAuth } from '../../context/AuthContext';
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, Rectangle, CartesianGrid, XAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/ui/chart';
+import { motion } from 'framer-motion';
 
 export function Dashboard() {
     const { isAdminUser, currentUser } = useAuth();
@@ -26,17 +27,45 @@ export function Dashboard() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [eventsData, usersData, notificationsData, programsData, animatorStatsData] = await Promise.all([
-                    getEvents(),
-                    getUsers(),
-                    getNotifications(),
-                    getActivePrograms(),
-                    getAnimatorStats()
-                ]);
+                console.log("Starting to fetch dashboard data...");
+                
+                const eventsData = await getEvents().catch(err => {
+                    console.error("Error fetching events:", err);
+                    return [];
+                });
+                
+                const usersData = await getUsers().catch(err => {
+                    console.error("Error fetching users:", err);
+                    return [];
+                });
+                
+                const notificationsData = await getNotifications().catch(err => {
+                    console.error("Error fetching notifications:", err);
+                    return [];
+                });
+                
+                const programsData = await getActivePrograms().catch(err => {
+                    console.error("Error fetching programs:", err);
+                    return [];
+                });
+                
+                const animatorStatsData = await getAnimatorStats().catch(err => {
+                    console.error("Error fetching animator stats:", err);
+                    return { total: 0, assigned: 0, unassigned: 0 };
+                });
+
+                console.log("Fetched data:", {
+                    events: eventsData?.length || 0,
+                    users: usersData?.length || 0,
+                    notifications: notificationsData?.length || 0,
+                    programs: programsData?.length || 0,
+                    animatorStats: animatorStatsData
+                });
+
                 setEvents(eventsData as EventData[]);
                 setUsers(usersData);
                 setNotifications(notificationsData);
-                setActivePrograms(programsData.length);
+                setActivePrograms(programsData?.length || 0);
                 setAnimatorStats(animatorStatsData);
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
@@ -92,6 +121,7 @@ export function Dashboard() {
         return {
             name: month,
             events: eventsCount,
+            fill: "var(--color-events)",
         };
     });
 
@@ -102,116 +132,125 @@ export function Dashboard() {
         },
     };
 
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.1
+            }
+        }
+    };
+
+    const itemVariants = {
+        hidden: { y: 20, opacity: 0 },
+        visible: {
+            y: 0,
+            opacity: 1,
+            transition: {
+                type: "spring" as const,
+                stiffness: 100
+            }
+        }
+    };
+
     return (
-        <div className="space-y-4 sm:space-y-8">
+        <motion.div 
+            className="space-y-4 sm:space-y-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+        >
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6">
-                <StatCard
-                    title="Total Events"
-                    value={events.length}
-                    icon={Calendar}
-                    iconColor="text-blue-600"
-                    iconBg="bg-blue-100"
-                />
-                <StatCard
-                    title="Public Events"
-                    value={publicEvents}
-                    icon={CheckCircle2}
-                    iconColor="text-green-600"
-                    iconBg="bg-green-100"
-                />
-                <StatCard
-                    title="Total Users"
-                    value={users.length}
-                    icon={Users}
-                    iconColor="text-purple-600"
-                    iconBg="bg-purple-100"
-                />
-                <StatCard
-                    title="Total Schools"
-                    value={schoolCount}
-                    icon={School}
-                    iconColor="text-orange-600"
-                    iconBg="bg-orange-100"
-                />
+                {[
+                    { title: "Total Events", value: events.length, icon: Calendar, color: "text-blue-600", bg: "bg-blue-100" },
+                    { title: "Public Events", value: publicEvents, icon: CheckCircle2, color: "text-green-600", bg: "bg-green-100" },
+                    { title: "Total Users", value: users.length, icon: Users, color: "text-purple-600", bg: "bg-purple-100" },
+                    { title: "Total Schools", value: schoolCount, icon: School, color: "text-orange-600", bg: "bg-orange-100" }
+                ].map((stat, index) => (
+                    <motion.div key={index} variants={itemVariants}>
+                        <StatCard
+                            title={stat.title}
+                            value={stat.value}
+                            icon={stat.icon}
+                            iconColor={stat.color}
+                            iconBg={stat.bg}
+                        />
+                    </motion.div>
+                ))}
             </div>
 
             {isAdminUser && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6">
-                    <StatCard
-                        title="Active Programs"
-                        value={activePrograms}
-                        icon={GraduationCap}
-                        iconColor="text-indigo-600"
-                        iconBg="bg-indigo-100"
-                    />
-                    <StatCard
-                        title="Total Animators"
-                        value={animatorCount}
-                        icon={UserCheck}
-                        iconColor="text-teal-600"
-                        iconBg="bg-teal-100"
-                    />
-                    <StatCard
-                        title="Pending Approvals"
-                        value={pendingApprovals}
-                        icon={ClipboardList}
-                        iconColor="text-amber-600"
-                        iconBg="bg-amber-100"
-                    />
-                    <StatCard
-                        title="Notifications Sent"
-                        value={notifications.length}
-                        icon={Bell}
-                        iconColor="text-pink-600"
-                        iconBg="bg-pink-100"
-                    />
+                    {[
+                        { title: "Active Programs", value: activePrograms, icon: GraduationCap, color: "text-indigo-600", bg: "bg-indigo-100" },
+                        { title: "Total Animators", value: animatorCount, icon: UserCheck, color: "text-teal-600", bg: "bg-teal-100" },
+                        { title: "Pending Approvals", value: pendingApprovals, icon: ClipboardList, color: "text-amber-600", bg: "bg-amber-100" },
+                        { title: "Notifications Sent", value: notifications.length, icon: Bell, color: "text-pink-600", bg: "bg-pink-100" }
+                    ].map((stat, index) => (
+                        <motion.div key={index} variants={itemVariants}>
+                            <StatCard
+                                title={stat.title}
+                                value={stat.value}
+                                icon={stat.icon}
+                                iconColor={stat.color}
+                                iconBg={stat.bg}
+                            />
+                        </motion.div>
+                    ))}
                 </div>
             )}
 
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-blue-600" />
-                        <CardTitle>Events Trend</CardTitle>
+            <motion.div variants={itemVariants}>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Bar Chart - Active</CardTitle>
+                        <CardDescription>Event creation trend over the last 6 months</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ChartContainer config={chartConfig} className="h-[250px] sm:h-[300px] w-full aspect-auto">
+                            <BarChart accessibilityLayer data={chartData}>
+                                <CartesianGrid vertical={false} />
+                                <XAxis
+                                    dataKey="name"
+                                    tickLine={false}
+                                    tickMargin={10}
+                                    axisLine={false}
+                                    tickFormatter={(value) => value}
+                                />
+                                <ChartTooltip
+                                    cursor={false}
+                                    content={<ChartTooltipContent hideLabel />}
+                                />
+                                <Bar
+                                    dataKey="events"
+                                    strokeWidth={2}
+                                    radius={8}
+                                    activeIndex={chartData.length - 1}
+                                    activeBar={({ ...props }) => {
+                                        return (
+                                            <Rectangle
+                                                {...props}
+                                                fillOpacity={0.8}
+                                                stroke={props.payload.fill}
+                                                strokeDasharray={4}
+                                                strokeDashoffset={4}
+                                            />
+                                        )
+                                    }}
+                                />
+                            </BarChart>
+                        </ChartContainer>
+                    </CardContent>
+                    <div className="flex-col items-start gap-2 text-sm p-6 pt-0 hidden sm:flex">
+                        <div className="flex gap-2 leading-none font-medium">
+                            Showing total events for the last 6 months <TrendingUp className="h-4 w-4" />
+                        </div>
                     </div>
-                    <CardDescription>Event creation trend over the last 6 months</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ChartContainer config={chartConfig} className="h-[250px] sm:h-[300px] w-full aspect-auto">
-                        <LineChart data={chartData}>
-                            <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                            <XAxis
-                                dataKey="name"
-                                tickLine={false}
-                                axisLine={false}
-                                tickMargin={8}
-                            />
-                            <YAxis
-                                allowDecimals={false}
-                                tickLine={false}
-                                axisLine={false}
-                                tickMargin={8}
-                            />
-                            <ChartTooltip content={<ChartTooltipContent />} />
-                            <Line
-                                type="monotone"
-                                dataKey="events"
-                                stroke="var(--color-events)"
-                                strokeWidth={2}
-                                dot={{
-                                    fill: "var(--color-events)",
-                                    r: 4,
-                                }}
-                                activeDot={{
-                                    r: 6,
-                                }}
-                            />
-                        </LineChart>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
+                </Card>
+            </motion.div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
+            <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
                 <Card className="lg:col-span-2 overflow-hidden">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Recent Events</CardTitle>
@@ -289,7 +328,7 @@ export function Dashboard() {
                         </div>
                     </CardContent>
                 </Card>
-            </div>
-        </div>
+            </motion.div>
+        </motion.div>
     );
 }

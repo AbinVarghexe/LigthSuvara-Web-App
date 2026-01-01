@@ -35,31 +35,73 @@ export interface EventData {
 }
 
 export const getEvents = async (status?: EventStatus, forane?: string) => {
-    let q;
-    if (status && forane) {
-        q = query(
-            collection(db, 'events'),
-            where('status', '==', status),
-            where('creatorForane', '==', forane),
-            orderBy('timestamp', 'desc')
-        );
-    } else if (status) {
-        q = query(
-            collection(db, 'events'),
-            where('status', '==', status),
-            orderBy('timestamp', 'desc')
-        );
-    } else if (forane) {
-        q = query(
-            collection(db, 'events'),
-            where('creatorForane', '==', forane),
-            orderBy('timestamp', 'desc')
-        );
-    } else {
-        q = query(collection(db, 'events'), orderBy('timestamp', 'desc'));
+    try {
+        let q;
+        if (status && forane) {
+            q = query(
+                collection(db, 'events'),
+                where('status', '==', status),
+                where('creatorForane', '==', forane),
+                orderBy('timestamp', 'desc')
+            );
+        } else if (status) {
+            q = query(
+                collection(db, 'events'),
+                where('status', '==', status),
+                orderBy('timestamp', 'desc')
+            );
+        } else if (forane) {
+            q = query(
+                collection(db, 'events'),
+                where('creatorForane', '==', forane),
+                orderBy('timestamp', 'desc')
+            );
+        } else {
+            q = query(collection(db, 'events'), orderBy('timestamp', 'desc'));
+        }
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error: any) {
+        // If the error is due to missing index, fetch without ordering
+        if (error?.code === 'failed-precondition' || error?.message?.includes('index')) {
+            console.warn('Firestore index not found, fetching without ordering:', error);
+            
+            let q;
+            if (status && forane) {
+                q = query(
+                    collection(db, 'events'),
+                    where('status', '==', status),
+                    where('creatorForane', '==', forane)
+                );
+            } else if (status) {
+                q = query(
+                    collection(db, 'events'),
+                    where('status', '==', status)
+                );
+            } else if (forane) {
+                q = query(
+                    collection(db, 'events'),
+                    where('creatorForane', '==', forane)
+                );
+            } else {
+                // No filters, just get all events
+                q = query(collection(db, 'events'));
+            }
+            
+            const snapshot = await getDocs(q);
+            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Sort in memory if we couldn't use orderBy
+            return docs.sort((a: any, b: any) => {
+                const aTime = a.timestamp?.seconds || 0;
+                const bTime = b.timestamp?.seconds || 0;
+                return bTime - aTime;
+            });
+        }
+        
+        throw error;
     }
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const getPublicEvents = async () => {
