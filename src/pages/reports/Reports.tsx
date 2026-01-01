@@ -3,8 +3,8 @@ import { FileText, Download, Calendar, Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '../../components/ui/chart';
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, PolarGrid, RadialBar, RadialBarChart } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/ui/chart';
 import jsPDF from 'jspdf';
 import { getEvents, EventData } from '../../features/events/services/eventService';
 import { getUsers, UserData } from '../../features/users/services/userService';
@@ -19,7 +19,7 @@ export function Reports() {
     const [selectedEventId, setSelectedEventId] = useState('');
     const [generatingPdf, setGeneratingPdf] = useState(false);
 
-    const [reportType, setReportType] = useState<'all' | 'year' | 'month' | 'week'>('all');
+    const [reportType, setReportType] = useState<'all' | 'year' | 'month' | 'week'>('year');
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString());
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -212,7 +212,8 @@ export function Reports() {
     }
 
     const categoryCount = filteredEvents.reduce((acc: Record<string, number>, event: EventData) => {
-        const cat = event.category === 'cml' ? 'CML' : 'Suvara';
+        const catLower = (event.category || '').toLowerCase();
+        const cat = catLower === 'cml' ? 'CML' : 'Suvara';
         acc[cat] = (acc[cat] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
@@ -223,13 +224,32 @@ export function Reports() {
     }));
 
     const schoolEventCount = filteredEvents.reduce((acc: Record<string, number>, event: EventData) => {
-        const school = event.creatorSchoolName || 'Unknown';
+        let school = event.creatorSchoolName;
+        
+        // Fallback to user data if school name is missing in event
+        if (!school || school === 'Unknown') {
+            const creator = users.find(u => u.uid === event.creatorId || u.id === event.creatorId);
+            school = creator?.schoolName || creator?.schoolname || 'Unknown School';
+        }
+        
         acc[school] = (acc[school] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
 
+    const blueShades = [
+        "hsl(217, 91%, 60%)",
+        "hsl(217, 91%, 50%)",
+        "hsl(217, 91%, 70%)",
+        "hsl(217, 91%, 40%)",
+        "hsl(217, 91%, 80%)",
+    ];
+
     const schoolActivity = Object.entries(schoolEventCount)
-        .map(([school, events]) => ({ school, events }))
+        .map(([school, events], index) => ({ 
+            school, 
+            events, 
+            fill: blueShades[index % blueShades.length] 
+        }))
         .sort((a, b) => b.events - a.events)
         .slice(0, 5);
 
@@ -244,25 +264,25 @@ export function Reports() {
     const eventsChartConfig = {
         events: {
             label: "Events",
-            color: "hsl(var(--chart-1))",
+            color: "hsl(217, 91%, 60%)", // Blue
         },
     };
 
     const categoryChartConfig = {
         CML: {
             label: "CML",
-            color: "hsl(var(--chart-1))",
+            color: "hsl(217, 91%, 60%)", // Blue
         },
         Suvara: {
             label: "Suvara",
-            color: "hsl(var(--chart-2))",
+            color: "hsl(217, 91%, 75%)", // Light Blue
         },
     };
 
     const schoolChartConfig = {
         events: {
             label: "Events",
-            color: "hsl(var(--chart-3))",
+            color: "hsl(217, 91%, 50%)", // Darker Blue
         },
     };
 
@@ -380,24 +400,22 @@ export function Reports() {
                 <CardContent>
                     <div className="space-y-8">
                         <div>
-                            <h4 className="mb-4 font-medium text-base">Events Over Time ({reportType === 'all' ? 'All Time' : 'Filtered'})</h4>
+                            <h4 className="mb-4 font-medium text-base">Events Over Time ({reportType === 'all' ? 'Yearly' : reportType === 'year' ? 'Monthly' : reportType === 'month' ? 'Weekly' : 'Daily'})</h4>
                             <ChartContainer config={eventsChartConfig} className="h-[300px] w-full">
-                                <BarChart data={chartData}>
-                                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                                <BarChart accessibilityLayer data={chartData}>
+                                    <CartesianGrid vertical={false} />
                                     <XAxis
                                         dataKey="name"
                                         tickLine={false}
+                                        tickMargin={10}
                                         axisLine={false}
-                                        tickMargin={8}
+                                        tickFormatter={(value) => value.slice(0, 3)}
                                     />
-                                    <YAxis
-                                        allowDecimals={false}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickMargin={8}
+                                    <ChartTooltip
+                                        cursor={false}
+                                        content={<ChartTooltipContent hideLabel />}
                                     />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Bar dataKey="events" fill="var(--color-events)" radius={[8, 8, 0, 0]} />
+                                    <Bar dataKey="events" fill="var(--color-events)" radius={8} />
                                 </BarChart>
                             </ChartContainer>
                         </div>
@@ -405,13 +423,17 @@ export function Reports() {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div>
                                 <h4 className="mb-4 font-medium text-base">Category Distribution</h4>
-                                <ChartContainer config={categoryChartConfig} className="h-[300px] w-full">
+                                <ChartContainer 
+                                    config={categoryChartConfig} 
+                                    className="mx-auto aspect-square max-h-[300px] [&_.recharts-pie-label-text]:fill-foreground"
+                                >
                                     <PieChart>
                                         <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                                         <Pie
                                             data={categoryData}
                                             dataKey="value"
                                             nameKey="name"
+                                            label
                                             cx="50%"
                                             cy="50%"
                                             outerRadius={100}
@@ -419,31 +441,28 @@ export function Reports() {
                                             {categoryData.map((entry, index) => (
                                                 <Cell
                                                     key={`cell-${index}`}
-                                                    fill={index === 0 ? "hsl(var(--chart-1))" : "hsl(var(--chart-2))"}
+                                                    fill={index === 0 ? "hsl(217, 91%, 60%)" : "hsl(217, 91%, 75%)"}
                                                 />
                                             ))}
                                         </Pie>
-                                        <ChartLegend content={<ChartLegendContent />} />
                                     </PieChart>
                                 </ChartContainer>
                             </div>
 
                             <div>
                                 <h4 className="mb-4 font-medium text-base">Most Active Schools</h4>
-                                <ChartContainer config={schoolChartConfig} className="h-[300px] w-full">
-                                    <BarChart data={schoolActivity} layout="vertical">
-                                        <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-                                        <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} />
-                                        <YAxis
-                                            dataKey="school"
-                                            type="category"
-                                            width={100}
-                                            axisLine={false}
-                                            tickLine={false}
+                                <ChartContainer 
+                                    config={schoolChartConfig} 
+                                    className="mx-auto aspect-square max-h-[300px]"
+                                >
+                                    <RadialBarChart data={schoolActivity} innerRadius={30} outerRadius={100}>
+                                        <ChartTooltip
+                                            cursor={false}
+                                            content={<ChartTooltipContent hideLabel nameKey="school" />}
                                         />
-                                        <ChartTooltip content={<ChartTooltipContent />} />
-                                        <Bar dataKey="events" fill="var(--color-events)" radius={[0, 8, 8, 0]} />
-                                    </BarChart>
+                                        <PolarGrid gridType="circle" />
+                                        <RadialBar dataKey="events" />
+                                    </RadialBarChart>
                                 </ChartContainer>
                             </div>
                         </div>

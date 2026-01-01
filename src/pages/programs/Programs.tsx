@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Calendar, Users, ToggleLeft, ToggleRight, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, Loader2, Calendar, Users, Trash2, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
@@ -11,11 +11,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { 
-    getPrograms, 
+    getPrograms,
     createProgram, 
     updateProgram, 
     deleteProgram, 
-    toggleProgramStatus,
     getRegistrationStats,
     ProgramData 
 } from '../../features/programs/services/programService';
@@ -43,20 +42,26 @@ export function Programs() {
             setLoading(true);
             const programsData = await getPrograms();
             setPrograms(programsData);
-            
-            // Fetch registration counts for each program
-            const counts: Record<string, number> = {};
-            for (const program of programsData) {
-                if (program.id) {
-                    const stats = await getRegistrationStats(program.id);
-                    counts[program.id] = stats.total;
+            setLoading(false); // meaningful content loaded
+
+            // Fetch registration counts independently
+            try {
+                const counts: Record<string, number> = {};
+                for (const program of programsData) {
+                    if (program.id) {
+                        const stats = await getRegistrationStats(program.id);
+                        counts[program.id] = stats.total;
+                    }
                 }
+                setRegistrationCounts(counts);
+            } catch (statsError) {
+                console.error("Error fetching registration stats:", statsError);
+                // Don't show toast for stats failure to avoid annoying user, just log it.
+                // Or show a warning toast.
             }
-            setRegistrationCounts(counts);
         } catch (error) {
             console.error("Error fetching programs:", error);
             toast.error("Failed to load programs");
-        } finally {
             setLoading(false);
         }
     };
@@ -120,17 +125,6 @@ export function Programs() {
         } catch (error) {
             console.error("Error deleting program:", error);
             toast.error("Failed to delete program");
-        }
-    };
-
-    const handleToggleStatus = async (programId: string, currentStatus: boolean) => {
-        try {
-            await toggleProgramStatus(programId, !currentStatus);
-            toast.success(`Program ${!currentStatus ? 'activated' : 'deactivated'}`);
-            fetchPrograms();
-        } catch (error) {
-            console.error("Error toggling program status:", error);
-            toast.error("Failed to update program status");
         }
     };
 
@@ -332,18 +326,6 @@ export function Programs() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleToggleStatus(program.id!, program.isActive)}
-                                                        title={program.isActive ? 'Deactivate' : 'Activate'}
-                                                    >
-                                                        {program.isActive ? (
-                                                            <ToggleRight className="h-4 w-4 text-green-600" />
-                                                        ) : (
-                                                            <ToggleLeft className="h-4 w-4 text-gray-400" />
-                                                        )}
-                                                    </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"

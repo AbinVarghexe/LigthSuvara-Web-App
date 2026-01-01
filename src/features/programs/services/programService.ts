@@ -91,24 +91,35 @@ export const getProgramRegistrations = async (programId?: string) => {
     if (programId) {
         q = query(
             collection(db, 'program_registrations'),
-            where('programId', '==', programId),
-            orderBy('submittedAt', 'desc')
+            where('programId', '==', programId)
         );
     } else {
         q = query(collection(db, 'program_registrations'), orderBy('submittedAt', 'desc'));
     }
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ProgramRegistration[];
+    const registrations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ProgramRegistration[];
+    
+    // Sort in memory since we removed the composite index requirement
+    return registrations.sort((a, b) => {
+        const timeA = a.submittedAt?.toMillis() || 0;
+        const timeB = b.submittedAt?.toMillis() || 0;
+        return timeB - timeA;
+    });
 };
 
 export const getRegistrationsByStatus = async (status: ProgramRegistration['status']) => {
     const q = query(
         collection(db, 'program_registrations'),
-        where('status', '==', status),
-        orderBy('submittedAt', 'desc')
+        where('status', '==', status)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ProgramRegistration[];
+    const registrations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ProgramRegistration[];
+
+    return registrations.sort((a, b) => {
+        const timeA = a.submittedAt?.toMillis() || 0;
+        const timeB = b.submittedAt?.toMillis() || 0;
+        return timeB - timeA;
+    });
 };
 
 export const updateRegistrationStatus = async (

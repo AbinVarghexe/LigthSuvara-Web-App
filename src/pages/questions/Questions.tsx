@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Loader2, GripVertical, Trash2, Edit, Save, X, HelpCircle } from 'lucide-react';
+import { Plus, Loader2, GripVertical, Trash2, Edit, Save, X, HelpCircle, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Button } from '../../components/ui/button';
@@ -9,6 +9,24 @@ import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { 
     getQuestions, 
     createQuestion, 
@@ -19,6 +37,130 @@ import {
     getTotalMaxMarks,
     QuestionData 
 } from '../../features/questions/services/questionService';
+
+interface SortableRowProps {
+    question: QuestionData;
+    editingId: string | null;
+    inlineEditData: { text: string; maxMarks: number };
+    setInlineEditData: (data: { text: string; maxMarks: number }) => void;
+    handleStartEdit: (question: QuestionData) => void;
+    handleSaveEdit: (id: string) => void;
+    handleCancelEdit: () => void;
+    handleDeleteQuestion: (id: string) => void;
+}
+
+const SortableRow = ({
+    question,
+    editingId,
+    inlineEditData,
+    setInlineEditData,
+    handleStartEdit,
+    handleSaveEdit,
+    handleCancelEdit,
+    handleDeleteQuestion
+}: SortableRowProps) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: question.id! });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 2 : 1,
+        position: isDragging ? 'relative' : undefined,
+    };
+
+    return (
+        <TableRow 
+            ref={setNodeRef} 
+            style={style as React.CSSProperties} 
+            {...attributes} 
+            className={isDragging ? "bg-muted/80 shadow-lg relative z-50" : "bg-card relative"}
+        >
+            <TableCell className="font-medium">{question.order}</TableCell>
+            <TableCell>
+                <Button variant="ghost" size="icon" className="cursor-grab active:cursor-grabbing touch-none" {...listeners}>
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
+            </TableCell>
+            <TableCell>
+                {editingId === question.id ? (
+                    <Textarea
+                        value={inlineEditData.text}
+                        onChange={(e) => setInlineEditData({ ...inlineEditData, text: e.target.value })}
+                        rows={2}
+                        className="min-w-[300px]"
+                    />
+                ) : (
+                    <span className="line-clamp-2">{question.text}</span>
+                )}
+            </TableCell>
+            <TableCell>
+                {editingId === question.id ? (
+                    <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={inlineEditData.maxMarks}
+                        onChange={(e) => setInlineEditData({ ...inlineEditData, maxMarks: parseInt(e.target.value) || 10 })}
+                        className="w-20"
+                    />
+                ) : (
+                    <span className="font-semibold">{question.maxMarks}</span>
+                )}
+            </TableCell>
+            <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                    {editingId === question.id ? (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={() => handleSaveEdit(question.id!)}>
+                                <Save className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={handleCancelEdit}>
+                                <X className="h-4 w-4 text-gray-500" />
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={() => handleStartEdit(question)}>
+                                <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Question</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Are you sure you want to delete this question? This action cannot be undone.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={() => handleDeleteQuestion(question.id!)}
+                                            className="bg-red-600 hover:bg-red-700"
+                                        >
+                                            Delete
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
+                    )}
+                </div>
+            </TableCell>
+        </TableRow>
+    );
+};
 
 export function Questions() {
     const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -125,36 +267,183 @@ export function Questions() {
         }
     };
 
-    const handleMoveUp = async (index: number) => {
-        if (index === 0) return;
-        
-        const newQuestions = [...questions];
-        [newQuestions[index - 1], newQuestions[index]] = [newQuestions[index], newQuestions[index - 1]];
-        
-        try {
-            await reorderQuestions(newQuestions);
-            setQuestions(newQuestions);
-            toast.success("Question order updated");
-        } catch (error) {
-            console.error("Error reordering questions:", error);
-            toast.error("Failed to reorder questions");
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (active.id !== over?.id) {
+            setQuestions((items) => {
+                const oldIndex = items.findIndex((item) => item.id === active.id);
+                const newIndex = items.findIndex((item) => item.id === over?.id);
+                const newItems = arrayMove(items, oldIndex, newIndex);
+                
+                // Update the order property for all items to match their new index
+                const updatedItems = newItems.map((item, index) => ({
+                    ...item,
+                    order: index + 1
+                }));
+
+                // Save to backend asynchronously
+                reorderQuestions(updatedItems).catch(error => {
+                    console.error("Error reordering questions:", error);
+                    toast.error("Failed to save new order");
+                });
+
+                return updatedItems;
+            });
         }
     };
 
-    const handleMoveDown = async (index: number) => {
-        if (index === questions.length - 1) return;
-        
-        const newQuestions = [...questions];
-        [newQuestions[index], newQuestions[index + 1]] = [newQuestions[index + 1], newQuestions[index]];
-        
-        try {
-            await reorderQuestions(newQuestions);
-            setQuestions(newQuestions);
-            toast.success("Question order updated");
-        } catch (error) {
-            console.error("Error reordering questions:", error);
-            toast.error("Failed to reorder questions");
+    const generateQuestionPaper = () => {
+        if (questions.length === 0) {
+            toast.error("No questions to export");
+            return;
         }
+
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 20;
+        let yPos = 20;
+
+        // --- Header Section ---
+        // School/Org Name
+        doc.setFontSize(16);
+        doc.setFont('times', 'bold');
+        doc.text('FAITH FORMATION PROGRAM', pageWidth / 2, yPos, { align: 'center' });
+        yPos += 8;
+
+        // Exam Title
+        doc.setFontSize(14);
+        doc.setFont('times', 'bold');
+        doc.text('ANNUAL ASSESSMENT', pageWidth / 2, yPos, { align: 'center' });
+        yPos += 12;
+
+        // Meta Info (Date, Time, Marks)
+        doc.setFontSize(11);
+        doc.setFont('times', 'normal');
+        
+        // Left side meta
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
+        
+        // Right side meta
+        const totalMarksText = `Max. Marks: ${totalMaxMarks}`;
+        doc.text(totalMarksText, pageWidth - margin, yPos, { align: 'right' });
+        yPos += 6;
+        
+        doc.text('Time: 1 Hour', margin, yPos); // Placeholder time
+        yPos += 10;
+
+        // Horizontal Line
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(0);
+        doc.line(margin, yPos, pageWidth - margin, yPos);
+        yPos += 8;
+
+        // --- Instructions ---
+        doc.setFontSize(11);
+        doc.setFont('times', 'bold italics');
+        doc.text('General Instructions:', margin, yPos);
+        yPos += 6;
+        
+        doc.setFont('times', 'normal');
+        doc.setFontSize(10);
+        const instructions = [
+            '1. All questions are compulsory.',
+            '2. The marks for each question are indicated against it.',
+            '3. Write your answers clearly and legibly.',
+            '4. Read each question carefully before answering.'
+        ];
+        
+        instructions.forEach(inst => {
+            doc.text(inst, margin + 5, yPos);
+            yPos += 5;
+        });
+        
+        yPos += 5;
+        doc.line(margin, yPos, pageWidth - margin, yPos);
+        yPos += 15;
+
+        // --- Questions Section ---
+        doc.setFontSize(12);
+        doc.setFont('times', 'bold');
+        doc.text('Section A: Questions', margin, yPos);
+        yPos += 10;
+
+        questions.forEach((question, index) => {
+            const questionText = `${index + 1}. ${question.text}`;
+            const marksText = `[${question.maxMarks}]`;
+            
+            // Calculate height needed for question text
+            // Indent text slightly if it wraps? standard split
+            const availableWidth = pageWidth - (margin * 2) - 15; // Reserve space for marks
+            
+            doc.setFont('times', 'normal');
+            doc.setFontSize(11);
+            
+            const splitText = doc.splitTextToSize(questionText, availableWidth);
+            const lines = splitText.length;
+            const textHeight = lines * 6; // ~6 units per line
+            const spaceNeeded = textHeight + 25; // text + answer space + padding
+
+            // Page Break Check
+            if (yPos + spaceNeeded > pageHeight - margin) {
+                doc.addPage();
+                yPos = margin;
+            }
+
+            // Print Question Text
+            doc.text(splitText, margin, yPos);
+            
+            // Print Marks aligned to right
+            doc.setFont('times', 'bold');
+            doc.text(marksText, pageWidth - margin, yPos, { align: 'right' });
+            
+            // Answer SpaceLines
+            yPos += textHeight + 2; // move past text
+            
+            // Draw dotted lines for answer space (optional, but looks "proper")
+            const linesToDraw = Math.max(2, Math.ceil(question.maxMarks * 0.5)); // rough estimate: 0.5 lines per mark
+            
+            doc.setDrawColor(200);
+            doc.setLineWidth(0.1);
+            
+            for(let i=0; i<linesToDraw; i++) {
+                 // Check page break during lines
+                if (yPos > pageHeight - margin) {
+                    doc.addPage();
+                    yPos = margin;
+                }
+                
+                doc.line(margin, yPos, pageWidth - margin, yPos); // solid line for writing
+                yPos += 8; // spacing between lines
+            }
+            
+            yPos += 5; // Extra spacing before next question
+        });
+
+        // --- Footer with Page Numbers ---
+        const totalPages = doc.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            doc.setFontSize(9);
+            doc.setFont('times', 'normal');
+            doc.text(
+                `Page ${i} of ${totalPages}`,
+                pageWidth / 2,
+                pageHeight - 10,
+                { align: 'center' }
+            );
+        }
+
+        doc.save(`Question_Paper_${new Date().toISOString().split('T')[0]}.pdf`);
+        toast.success("Question paper downloaded successfully");
     };
 
     if (loading) {
@@ -174,13 +463,18 @@ export function Questions() {
                         Total Max Marks: <span className="font-semibold">{totalMaxMarks}</span>
                     </p>
                 </div>
-                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="bg-blue-600 hover:bg-blue-700">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Question
-                        </Button>
-                    </DialogTrigger>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={generateQuestionPaper} disabled={questions.length === 0}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Question Paper
+                    </Button>
+                    <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button className="bg-blue-600 hover:bg-blue-700">
+                                <Plus className="w-4 h-4 mr-2" />
+                                Add Question
+                            </Button>
+                        </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Add New Question</DialogTitle>
@@ -219,6 +513,7 @@ export function Questions() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             {/* Questions Table */}
@@ -226,7 +521,7 @@ export function Questions() {
                 <CardHeader>
                     <CardTitle>All Questions</CardTitle>
                     <CardDescription>
-                        Drag to reorder questions. Click edit to modify question text or marks.
+                        Drag using the handle icon to reorder questions.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -237,128 +532,43 @@ export function Questions() {
                             <p className="text-sm mt-2">Add your first question to get started</p>
                         </div>
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[50px]">#</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                    <TableHead>Question Text</TableHead>
-                                    <TableHead className="w-[120px]">Max Marks</TableHead>
-                                    <TableHead className="w-[150px] text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {questions.map((question, index) => (
-                                    <TableRow key={question.id}>
-                                        <TableCell className="font-medium">{question.order}</TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col gap-1">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6"
-                                                    onClick={() => handleMoveUp(index)}
-                                                    disabled={index === 0}
-                                                >
-                                                    <GripVertical className="h-4 w-4 rotate-90" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6"
-                                                    onClick={() => handleMoveDown(index)}
-                                                    disabled={index === questions.length - 1}
-                                                >
-                                                    <GripVertical className="h-4 w-4 -rotate-90" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {editingId === question.id ? (
-                                                <Textarea
-                                                    value={inlineEditData.text}
-                                                    onChange={(e) => setInlineEditData({ ...inlineEditData, text: e.target.value })}
-                                                    rows={2}
-                                                    className="min-w-[300px]"
-                                                />
-                                            ) : (
-                                                <span className="line-clamp-2">{question.text}</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {editingId === question.id ? (
-                                                <Input
-                                                    type="number"
-                                                    min={1}
-                                                    max={100}
-                                                    value={inlineEditData.maxMarks}
-                                                    onChange={(e) => setInlineEditData({ ...inlineEditData, maxMarks: parseInt(e.target.value) || 10 })}
-                                                    className="w-20"
-                                                />
-                                            ) : (
-                                                <span className="font-semibold">{question.maxMarks}</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {editingId === question.id ? (
-                                                    <>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleSaveEdit(question.id!)}
-                                                        >
-                                                            <Save className="h-4 w-4 text-green-600" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={handleCancelEdit}
-                                                        >
-                                                            <X className="h-4 w-4 text-gray-500" />
-                                                        </Button>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleStartEdit(question)}
-                                                        >
-                                                            <Edit className="h-4 w-4" />
-                                                        </Button>
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button variant="ghost" size="icon">
-                                                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Delete Question</AlertDialogTitle>
-                                                                    <AlertDialogDescription>
-                                                                        Are you sure you want to delete this question? This action cannot be undone.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                    <AlertDialogAction
-                                                                        onClick={() => handleDeleteQuestion(question.id!)}
-                                                                        className="bg-red-600 hover:bg-red-700"
-                                                                    >
-                                                                        Delete
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </TableCell>
+                        <DndContext 
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-[50px]">#</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
+                                        <TableHead>Question Text</TableHead>
+                                        <TableHead className="w-[120px]">Max Marks</TableHead>
+                                        <TableHead className="w-[150px] text-right">Actions</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    <SortableContext 
+                                        items={questions.map(q => q.id!)}
+                                        strategy={verticalListSortingStrategy}
+                                    >
+                                        {questions.map((question) => (
+                                            <SortableRow
+                                                key={question.id}
+                                                question={question}
+                                                editingId={editingId}
+                                                inlineEditData={inlineEditData}
+                                                setInlineEditData={setInlineEditData}
+                                                handleStartEdit={handleStartEdit}
+                                                handleSaveEdit={handleSaveEdit}
+                                                handleCancelEdit={handleCancelEdit}
+                                                handleDeleteQuestion={handleDeleteQuestion}
+                                            />
+                                        ))}
+                                    </SortableContext>
+                                </TableBody>
+                            </Table>
+                        </DndContext>
                     )}
                 </CardContent>
             </Card>

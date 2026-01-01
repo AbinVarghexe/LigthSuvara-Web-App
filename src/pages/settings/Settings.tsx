@@ -114,8 +114,8 @@ export function Settings() {
             });
 
             toast.success("Profile updated successfully");
-            // Force reload to see changes if needed, though AuthContext should handle it
-            // window.location.reload(); 
+            // Force reload to see changes
+            window.location.reload(); 
         } catch (error) {
             console.error("Error updating profile:", error);
             toast.error("Failed to update profile");

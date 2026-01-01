@@ -6,7 +6,8 @@ import {
     query,
     where,
     orderBy,
-    Timestamp
+    Timestamp,
+    updateDoc
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { getQuestions, QuestionData } from '../../questions/services/questionService';
@@ -176,4 +177,12 @@ export const getQuestionWiseStats = async (year?: string) => {
     }).filter(Boolean);
     
     return questionStats;
+};
+
+// Toggle lock status of marks (admin only)
+export const toggleMarksLock = async (marksId: string, currentLocked: boolean): Promise<void> => {
+    const docRef = doc(db, 'marks', marksId);
+    await updateDoc(docRef, {
+        locked: !currentLocked
+    });
 };

@@ -128,7 +128,7 @@ export function Dashboard() {
     const chartConfig = {
         events: {
             label: "Events",
-            color: "hsl(var(--chart-1))",
+            color: "hsl(217, 91%, 60%)", // Blue color
         },
     };
 

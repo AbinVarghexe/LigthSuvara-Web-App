@@ -10,13 +10,11 @@ import {
     TrendingUp,
     CheckCircle2,
     Clock,
-    BarChart3,
     Calendar,
     User,
     Building2,
     GraduationCap,
     ChevronRight,
-    Sparkles,
     LayoutGrid,
     LayoutList
 } from 'lucide-react';
@@ -41,6 +39,7 @@ import {
     getAvailableYears,
     searchMarks,
     getMarksStats,
+    toggleMarksLock,
     MarksData,
     MarksWithDetails
 } from '../../features/marks/services/marksService';
@@ -105,6 +104,27 @@ export function Marks() {
         } catch (error) {
             console.error("Error fetching marks details:", error);
             toast.error("Failed to load marks details");
+        }
+    };
+
+    const handleToggleLock = async (marksId: string, currentStatus: boolean) => {
+        try {
+            await toggleMarksLock(marksId, currentStatus);
+            toast.success(`Marks ${!currentStatus ? 'finalized' : 'unfinalized'} successfully`);
+            
+            // Refresh data
+            fetchData();
+            
+            // Update local state if needed (for dialog)
+            if (selectedMarks && selectedMarks.id === marksId) {
+                setSelectedMarks({
+                    ...selectedMarks,
+                    locked: !currentStatus
+                });
+            }
+        } catch (error) {
+            console.error("Error toggling marks lock:", error);
+            toast.error("Failed to update marks status");
         }
     };
 
@@ -234,93 +254,77 @@ export function Marks() {
 
     return (
         <div className="space-y-6 pb-8">
-            {/* Hero Header Section */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-6 md:p-8">
-                <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]"></div>
-                <div className="relative z-10">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
-                                <BarChart3 className="h-8 w-8" />
-                                Assessment Marks
-                            </h1>
-                            <p className="text-white/80 mt-1">View and analyze student assessment records</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-                                <Sparkles className="h-3 w-3 mr-1" />
-                                {selectedYear === 'all' ? 'All Years' : selectedYear}
-                            </Badge>
-                        </div>
-                    </div>
+            {/* Simple Header Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+                        Assessment Marks
+                    </h1>
+                    <p className="text-muted-foreground mt-1">
+                        View and analyze student assessment records
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="px-3 py-1 text-sm">
+                        <Calendar className="h-3.5 w-3.5 mr-2 text-blue-600" />
+                        {selectedYear === 'all' ? 'All Years' : selectedYear}
+                    </Badge>
                 </div>
             </div>
 
-            {/* Stats Cards */}
+            {/* Simple Stats Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-indigo-500">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <p className="text-sm font-medium text-muted-foreground">Total Submissions</p>
-                                <p className="text-3xl font-bold tracking-tight">{stats.totalSubmissions}</p>
-                            </div>
-                            <div className="p-3 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-                                <FileText className="h-6 w-6" />
-                            </div>
+                <Card>
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between space-y-0 pb-2">
+                            <p className="text-sm font-medium text-muted-foreground">Total Submissions</p>
+                            <FileText className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-bold">{stats.totalSubmissions}</span>
+                            <p className="text-xs text-muted-foreground">Recorded assessments</p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-green-500">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <p className="text-sm font-medium text-muted-foreground">Finalized</p>
-                                <p className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">{stats.lockedSubmissions}</p>
-                            </div>
-                            <div className="p-3 rounded-xl bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
-                                <CheckCircle2 className="h-6 w-6" />
-                            </div>
+                <Card>
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between space-y-0 pb-2">
+                            <p className="text-sm font-medium text-muted-foreground">Finalized</p>
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
                         </div>
-                        <div className="mt-3">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-bold">{stats.lockedSubmissions}</span>
                             <Progress 
                                 value={stats.totalSubmissions > 0 ? (stats.lockedSubmissions / stats.totalSubmissions) * 100 : 0} 
-                                className="h-1.5 bg-green-100 dark:bg-green-900/30"
+                                className="h-1 mt-1"
                             />
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-orange-500">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <p className="text-sm font-medium text-muted-foreground">In Progress</p>
-                                <p className="text-3xl font-bold tracking-tight text-orange-600 dark:text-orange-400">{stats.unlockedSubmissions}</p>
-                            </div>
-                            <div className="p-3 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
-                                <Clock className="h-6 w-6" />
-                            </div>
+                <Card>
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between space-y-0 pb-2">
+                            <p className="text-sm font-medium text-muted-foreground">In Progress</p>
+                            <Clock className="h-4 w-4 text-orange-600" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-bold">{stats.unlockedSubmissions}</span>
+                            <p className="text-xs text-muted-foreground">Pending finalization</p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-l-4 border-l-blue-500">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <p className="text-sm font-medium text-muted-foreground">Average Score</p>
-                                <p className="text-3xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
-                                    {stats.averagePercentage.toFixed(1)}%
-                                </p>
-                            </div>
-                            <div className="p-3 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
-                                <TrendingUp className="h-6 w-6" />
-                            </div>
+                <Card>
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between space-y-0 pb-2">
+                            <p className="text-sm font-medium text-muted-foreground">Average Score</p>
+                            <TrendingUp className="h-4 w-4 text-blue-600" />
                         </div>
-                        <div className="mt-3">
-                            <Progress value={stats.averagePercentage} className="h-1.5" />
+                        <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-bold">{stats.averagePercentage.toFixed(1)}%</span>
+                            <Progress value={stats.averagePercentage} className="h-1 mt-1" />
                         </div>
                     </CardContent>
                 </Card>
@@ -401,13 +405,14 @@ export function Marks() {
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                        <TableHead className="w-[80px] font-semibold text-center">#</TableHead>
                                         <TableHead className="font-semibold">Parish</TableHead>
                                         <TableHead className="font-semibold">Sunday School</TableHead>
                                         <TableHead className="font-semibold">Animator</TableHead>
-                                        <TableHead className="font-semibold">Year</TableHead>
-                                        <TableHead className="font-semibold">Status</TableHead>
-                                        <TableHead className="font-semibold">Submitted</TableHead>
-                                        <TableHead className="text-right font-semibold">Actions</TableHead>
+                                        <TableHead className="w-[100px] font-semibold">Year</TableHead>
+                                        <TableHead className="w-[140px] font-semibold">Status</TableHead>
+                                        <TableHead className="w-[140px] font-semibold">Submitted</TableHead>
+                                        <TableHead className="w-[100px] text-right font-semibold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -417,13 +422,13 @@ export function Marks() {
                                             className="group cursor-pointer hover:bg-muted/50 transition-colors"
                                             onClick={() => handleViewDetails(mark.id!)}
                                         >
-                                            <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs font-semibold">
-                                                        {index + 1}
-                                                    </div>
-                                                    <span className="font-medium">{mark.parish}</span>
+                                            <TableCell className="text-center">
+                                                <div className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-xs font-medium border border-blue-100 dark:border-blue-800">
+                                                    {index + 1}
                                                 </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">{mark.parish}</span>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
@@ -448,14 +453,14 @@ export function Marks() {
                                             </TableCell>
                                             <TableCell>
                                                 {mark.locked ? (
-                                                    <Badge className="gap-1.5 bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">
+                                                    <Badge className="gap-1.5 bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 shadow-none border-green-200">
                                                         <Lock className="h-3 w-3" />
                                                         Finalized
                                                     </Badge>
                                                 ) : (
-                                                    <Badge variant="secondary" className="gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400">
+                                                    <Badge variant="secondary" className="gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400 shadow-none border-orange-200">
                                                         <Unlock className="h-3 w-3" />
-                                                        In Progress
+                                                        Pending
                                                     </Badge>
                                                 )}
                                             </TableCell>
@@ -545,7 +550,7 @@ export function Marks() {
                             <CardContent className="pb-3">
                                 <div className="flex items-center gap-3 mb-3">
                                     <Avatar className="h-8 w-8">
-                                        <AvatarFallback className="text-xs bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                                        <AvatarFallback className="text-xs bg-muted text-muted-foreground">
                                             {getInitials(mark.animatorName)}
                                         </AvatarFallback>
                                     </Avatar>
@@ -574,108 +579,90 @@ export function Marks() {
                 <DialogContent className="max-w-3xl max-h-[90vh] p-0 overflow-hidden">
                     <ScrollArea className="max-h-[90vh]">
                         <div className="p-6">
-                            <DialogHeader className="pb-4">
+                            <DialogHeader className="pb-4 border-b mb-6">
                                 <DialogTitle className="text-xl flex items-center gap-2">
-                                    <BarChart3 className="h-5 w-5 text-primary" />
+                                    <FileText className="h-5 w-5 text-blue-600" />
                                     Assessment Details
                                 </DialogTitle>
                                 <DialogDescription>
-                                    Complete breakdown of assessment marks and questions
+                                    Breakdown of assessment marks and student performance
                                 </DialogDescription>
                             </DialogHeader>
                             
                             {selectedMarks && (
-                                <div className="space-y-6">
-                                    {/* Info Cards */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Building2 className="h-3.5 w-3.5" />
-                                                <span className="text-xs font-medium">Parish</span>
-                                            </div>
-                                            <p className="font-semibold text-sm truncate">{selectedMarks.parish}</p>
+                                <div className="space-y-8">
+                                    {/* Info Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Parish</span>
+                                            <p className="font-semibold text-sm">{selectedMarks.parish}</p>
                                         </div>
-                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <GraduationCap className="h-3.5 w-3.5" />
-                                                <span className="text-xs font-medium">School</span>
-                                            </div>
-                                            <p className="font-semibold text-sm truncate">{selectedMarks.sundaySchool}</p>
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">School</span>
+                                            <p className="font-semibold text-sm">{selectedMarks.sundaySchool}</p>
                                         </div>
-                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <User className="h-3.5 w-3.5" />
-                                                <span className="text-xs font-medium">Animator</span>
-                                            </div>
-                                            <p className="font-semibold text-sm truncate">{selectedMarks.animatorName}</p>
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Animator</span>
+                                            <p className="font-semibold text-sm">{selectedMarks.animatorName}</p>
                                         </div>
-                                        <div className="p-3 rounded-xl bg-muted/50 space-y-1">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Calendar className="h-3.5 w-3.5" />
-                                                <span className="text-xs font-medium">Year</span>
-                                            </div>
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Year</span>
                                             <p className="font-semibold text-sm">{selectedMarks.year}</p>
                                         </div>
                                     </div>
 
-                                    {/* Score Summary */}
-                                    <Card className={`border-2 ${getScoreBgColor(selectedMarks.percentage)}`}>
-                                        <CardContent className="p-5">
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                <div className="space-y-1">
-                                                    <p className="text-sm font-medium text-muted-foreground">Total Score</p>
-                                                    <div className="flex items-baseline gap-2">
-                                                        <span className={`text-4xl font-bold ${getScoreColor(selectedMarks.percentage)}`}>
-                                                            {selectedMarks.totalMarks}
-                                                        </span>
-                                                        <span className="text-lg text-muted-foreground">
-                                                            / {selectedMarks.maxTotalMarks}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col items-end gap-2">
-                                                    <div className={`text-3xl font-bold ${getScoreColor(selectedMarks.percentage)}`}>
-                                                        {selectedMarks.percentage.toFixed(1)}%
-                                                    </div>
-                                                    <Progress 
-                                                        value={selectedMarks.percentage} 
-                                                        className="h-2 w-32" 
-                                                    />
+                                    {/* Score Card */}
+                                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 border">
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-medium text-muted-foreground">Total Score</p>
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-4xl font-bold text-gray-900 dark:text-gray-50">
+                                                        {selectedMarks.totalMarks}
+                                                    </span>
+                                                    <span className="text-lg text-muted-foreground">
+                                                        / {selectedMarks.maxTotalMarks}
+                                                    </span>
                                                 </div>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                            <div className="flex flex-col items-end gap-2 min-w-[150px]">
+                                                <div className={`text-2xl font-bold ${getScoreColor(selectedMarks.percentage)}`}>
+                                                    {selectedMarks.percentage.toFixed(1)}%
+                                                </div>
+                                                <Progress 
+                                                    value={selectedMarks.percentage} 
+                                                    className="h-2 w-full" 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     {/* Questions Table */}
-                                    <div className="space-y-3">
-                                        <h4 className="font-semibold flex items-center gap-2">
-                                            <FileText className="h-4 w-4" />
-                                            Question-wise Breakdown
+                                    <div className="space-y-4">
+                                        <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                            Question Breakdown
                                         </h4>
-                                        <div className="border rounded-xl overflow-hidden">
+                                        <div className="border rounded-lg overflow-hidden">
                                             <Table>
                                                 <TableHeader>
-                                                    <TableRow className="bg-muted/50">
+                                                    <TableRow className="bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-50">
                                                         <TableHead className="w-12 font-semibold">#</TableHead>
                                                         <TableHead className="font-semibold">Question</TableHead>
-                                                        <TableHead className="w-20 text-right font-semibold">Marks</TableHead>
-                                                        <TableHead className="w-20 text-right font-semibold">Max</TableHead>
+                                                        <TableHead className="w-24 text-right font-semibold">Marks</TableHead>
+                                                        <TableHead className="w-24 text-right font-semibold">Max</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {selectedMarks.questions.map((question, index) => {
                                                         const questionMarks = question.id ? selectedMarks.marks[question.id] : 0;
-                                                        const percentage = (questionMarks / question.maxMarks) * 100;
                                                         return (
                                                             <TableRow key={question.id}>
                                                                 <TableCell className="font-medium text-muted-foreground">
                                                                     {index + 1}
                                                                 </TableCell>
                                                                 <TableCell className="text-sm">{question.text}</TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <Badge variant="outline" className={getScoreBgColor(percentage)}>
-                                                                        {questionMarks || 0}
-                                                                    </Badge>
+                                                                <TableCell className="text-right font-medium">
+                                                                    {questionMarks || 0}
                                                                 </TableCell>
                                                                 <TableCell className="text-right text-muted-foreground">
                                                                     {question.maxMarks}
@@ -683,7 +670,7 @@ export function Marks() {
                                                             </TableRow>
                                                         );
                                                     })}
-                                                    <TableRow className="bg-muted/50 font-semibold">
+                                                    <TableRow className="bg-slate-50 dark:bg-slate-900/50 font-semibold border-t-2">
                                                         <TableCell></TableCell>
                                                         <TableCell>Total</TableCell>
                                                         <TableCell className="text-right">{selectedMarks.totalMarks}</TableCell>
@@ -697,31 +684,46 @@ export function Marks() {
                                     {/* Remarks */}
                                     {selectedMarks.remarks && (
                                         <div className="space-y-2">
-                                            <h4 className="font-semibold">Remarks</h4>
-                                            <div className="p-4 rounded-xl bg-muted/50 border-l-4 border-l-primary">
-                                                <p className="text-sm text-muted-foreground italic">
+                                            <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Remarks</h4>
+                                            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border">
+                                                <p className="text-sm text-gray-700 dark:text-gray-300 italic">
                                                     "{selectedMarks.remarks}"
                                                 </p>
                                             </div>
                                         </div>
                                     )}
 
-                                    <Separator />
-
                                     {/* Actions */}
-                                    <div className="flex flex-col sm:flex-row justify-end gap-3">
+                                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
                                         <Button 
                                             variant="outline" 
                                             onClick={() => setIsDetailDialogOpen(false)}
                                         >
                                             Close
                                         </Button>
+                                        <Button
+                                            variant={selectedMarks.locked ? "outline" : "default"}
+                                            onClick={() => handleToggleLock(selectedMarks.id!, selectedMarks.locked)}
+                                            className={selectedMarks.locked ? "border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800" : "bg-blue-600 hover:bg-blue-700 text-white"}
+                                        >
+                                            {selectedMarks.locked ? (
+                                                <>
+                                                    <Unlock className="h-4 w-4 mr-2" />
+                                                    Unfinalize
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Lock className="h-4 w-4 mr-2" />
+                                                    Finalize
+                                                </>
+                                            )}
+                                        </Button>
                                         <Button 
                                             onClick={() => generatePDF(selectedMarks)}
-                                            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                                            variant="outline"
                                         >
                                             <Download className="h-4 w-4 mr-2" />
-                                            Download PDF Report
+                                            Download PDF
                                         </Button>
                                     </div>
                                 </div>

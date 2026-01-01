@@ -5,12 +5,15 @@ import { ModeToggle } from '../mode-toggle';
 import { useEffect, useState } from 'react';
 import { getNotifications } from '../../features/notifications/services/notificationService';
 
+import { useAuth } from '../../context/AuthContext';
+
 interface HeaderProps {
     title: string;
     onMenuClick: () => void;
 }
 
 export function Header({ title, onMenuClick }: HeaderProps) {
+    const { currentUser } = useAuth();
     const location = useLocation();
     const [hasUnread, setHasUnread] = useState(false);
 
@@ -72,12 +75,14 @@ export function Header({ title, onMenuClick }: HeaderProps) {
                     <ModeToggle />
 
                     <div className="text-right hidden sm:block">
-                        <p className="font-medium text-foreground">Admin User</p>
-                        <p className="text-sm text-muted-foreground">admin@lightsuvara.com</p>
+                        <p className="font-medium text-foreground">{currentUser?.displayName || 'Admin User'}</p>
+                        <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
                     </div>
                     <Avatar className="h-10 w-10">
-                        <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200" alt="Admin" loading="lazy" />
-                        <AvatarFallback>AU</AvatarFallback>
+                        <AvatarImage src={currentUser?.photoURL || undefined} alt={currentUser?.displayName || 'User'} loading="lazy" />
+                        <AvatarFallback>
+                            {currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'}
+                        </AvatarFallback>
                     </Avatar>
                 </div>
             </div>
