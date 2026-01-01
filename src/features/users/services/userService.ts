@@ -24,6 +24,7 @@ export interface UserData {
     fullName?: string;
     phoneNumber?: string;
     profileImageUrl?: string;
+    forane?: string;
 }
 
 export const getUsers = async () => {

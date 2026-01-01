@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { CheckCircle, XCircle, Loader2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { getEvents, updateEventStatus, EventData } from '../../features/events/services/eventService';
+import { getUsers, UserData } from '../../features/users/services/userService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
@@ -11,19 +12,54 @@ import { useAuth } from '../../context/AuthContext';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 
 export function EventApprovals() {
-    const { isAdminUser } = useAuth();
+    const { isAdminUser, currentUser } = useAuth();
     const [events, setEvents] = useState<EventData[]>([]);
+    const [users, setUsers] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [foraneFilter, setForaneFilter] = useState('All');
+    const [currentUserForane, setCurrentUserForane] = useState<string | null>(null);
+
+    // Hardcoded forane names
+    const foraneNames = [
+        'Mundakayam',
+        'Kumily',
+        'Kanjirappally',
+        'Anakkara',
+        'Erumely',
+        'Ponkunnam',
+        'Kattappana',
+        'Upputhara',
+        'Ranny',
+        'Pathanamthitta',
+        'Velichiyani',
+        'Mundiyeruma',
+        'Peruvanthanam'
+    ];
 
     useEffect(() => {
         fetchPendingEvents();
-    }, []);
+    }, [foraneFilter, currentUser]);
 
     const fetchPendingEvents = async () => {
         try {
-            // Fetch all events and filter for draft events (isPublic: false)
-            const allEvents = await getEvents();
+            setLoading(true);
+            const usersData = await getUsers();
+            setUsers(usersData);
+            
+            // Fetch current user's forane
+            let userForane: string | null = null;
+            if (currentUser) {
+                const currentUserData = usersData.find(u => u.uid === currentUser.uid);
+                if (currentUserData?.forane) {
+                    userForane = currentUserData.forane;
+                    setCurrentUserForane(userForane);
+                }
+            }
+            
+            // Fetch events with forane filter from backend
+            const foraneToQuery = foraneFilter !== 'All' ? foraneFilter : undefined;
+            const allEvents = await getEvents(undefined, foraneToQuery);
             // Filter for draft events
             const draftEvents = (allEvents as EventData[]).filter(event => !event.isPublic);
             setEvents(draftEvents);
@@ -34,6 +70,9 @@ export function EventApprovals() {
             setLoading(false);
         }
     };
+
+    // Events are already filtered by forane from backend
+    const filteredEvents = events;
 
     const handleAction = async (eventId: string, status: 'approved' | 'rejected') => {
         if (!eventId) return;
@@ -75,11 +114,25 @@ export function EventApprovals() {
             </div>
 
             <Card>
-                <CardHeader>
-                    <CardTitle>Pending Requests</CardTitle>
-                    <CardDescription>
-                        {events.length} event{events.length !== 1 ? 's' : ''} waiting for approval
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Pending Requests</CardTitle>
+                        <CardDescription>
+                            {events.length} event{events.length !== 1 ? 's' : ''} waiting for approval
+                        </CardDescription>
+                    </div>
+                    <div className="relative min-w-[160px]">
+                        <select
+                            className="w-full pl-3 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            value={foraneFilter}
+                            onChange={(e) => setForaneFilter(e.target.value)}
+                        >
+                            <option value="All">All Foranes</option>
+                            {foraneNames.map(forane => (
+                                <option key={forane} value={forane}>{forane}</option>
+                            ))}
+                        </select>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <Table>
@@ -93,7 +146,7 @@ export function EventApprovals() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {events.map((event) => (
+                            {filteredEvents.map((event) => (
                                 <TableRow key={event.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-4">
@@ -152,7 +205,7 @@ export function EventApprovals() {
                                     </TableCell>
                                 </TableRow>
                             ))}
-                            {events.length === 0 && (
+                            {filteredEvents.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center text-gray-500">
                                         No pending events found.

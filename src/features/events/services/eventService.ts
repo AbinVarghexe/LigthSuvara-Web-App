@@ -29,16 +29,30 @@ export interface EventData {
     status?: EventStatus; // New field
     creatorId: string;
     creatorSchoolName: string;
+    creatorForane?: string; // Forane of the event creator
     timestamp?: Timestamp;
     updatedAt?: Timestamp;
 }
 
-export const getEvents = async (status?: EventStatus) => {
+export const getEvents = async (status?: EventStatus, forane?: string) => {
     let q;
-    if (status) {
+    if (status && forane) {
         q = query(
             collection(db, 'events'),
             where('status', '==', status),
+            where('creatorForane', '==', forane),
+            orderBy('timestamp', 'desc')
+        );
+    } else if (status) {
+        q = query(
+            collection(db, 'events'),
+            where('status', '==', status),
+            orderBy('timestamp', 'desc')
+        );
+    } else if (forane) {
+        q = query(
+            collection(db, 'events'),
+            where('creatorForane', '==', forane),
             orderBy('timestamp', 'desc')
         );
     } else {

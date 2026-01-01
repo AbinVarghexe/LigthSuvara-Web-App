@@ -20,16 +20,48 @@ export function Events() {
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
+    const [foraneFilter, setForaneFilter] = useState('All');
+    const [currentUserForane, setCurrentUserForane] = useState<string | null>(null);
+
+    // Hardcoded forane names
+    const foraneNames = [
+        'Mundakayam',
+        'Kumily',
+        'Kanjirappally',
+        'Anakkara',
+        'Erumely',
+        'Ponkunnam',
+        'Kattappana',
+        'Upputhara',
+        'Ranny',
+        'Pathanamthitta',
+        'Velichiyani',
+        'Mundiyeruma',
+        'Peruvanthanam'
+    ];
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [eventsData, usersData] = await Promise.all([
-                    getEvents(),
-                    getUsers()
-                ]);
-                setEvents(eventsData as EventData[]);
+                setLoading(true);
+                const usersData = await getUsers();
                 setUsers(usersData);
+                
+                // Fetch current user's forane
+                let userForane: string | null = null;
+                if (currentUser) {
+                    const currentUserData = usersData.find(u => u.uid === currentUser.uid);
+                    if (currentUserData?.forane) {
+                        userForane = currentUserData.forane;
+                        setCurrentUserForane(userForane);
+                    }
+                }
+                
+                // Fetch events with forane filter
+                const foraneToQuery = foraneFilter !== 'All' ? foraneFilter : (isAdminUser ? undefined : userForane || undefined);
+                const eventsData = await getEvents(undefined, foraneToQuery);
+                const typedEvents = eventsData as EventData[];
+                setEvents(typedEvents);
             } catch (error) {
                 console.error("Error fetching events:", error);
             } finally {
@@ -38,7 +70,7 @@ export function Events() {
         };
 
         fetchData();
-    }, []);
+    }, [currentUser, foraneFilter, isAdminUser]);
 
     const filteredEvents = events.filter(event => {
         // Visibility Check
@@ -136,6 +168,19 @@ export function Events() {
                                 <option value="approved">Approved</option>
                                 <option value="rejected">Rejected</option>
                                 <option value="Draft">Draft</option>
+                            </select>
+                        </div>
+                        <div className="relative min-w-[140px]">
+                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <select
+                                className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                value={foraneFilter}
+                                onChange={(e) => setForaneFilter(e.target.value)}
+                            >
+                                <option value="All">All Foranes</option>
+                                {foraneNames.map(forane => (
+                                    <option key={forane} value={forane}>{forane}</option>
+                                ))}
                             </select>
                         </div>
                     </div>

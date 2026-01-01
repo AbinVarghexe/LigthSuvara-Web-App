@@ -75,9 +75,10 @@ export function EventForm() {
 
         setIsLoading(true);
         try {
-            // Fetch user details to get school name
+            // Fetch user details to get school name and forane
             const userDetails = await getUser(currentUser.uid);
             const schoolName = userDetails?.schoolName || userDetails?.schoolname || userDetails?.fullName || 'Unknown';
+            const forane = userDetails?.forane;
 
             // Prepare event data
             const eventData: EventData = {
@@ -90,6 +91,7 @@ export function EventForm() {
                 status: isAdminUser ? 'approved' : 'pending', // Set status based on role
                 creatorId: currentUser.uid,
                 creatorSchoolName: schoolName,
+                creatorForane: forane,
                 imageUrl: imagePreview || undefined
             };
 
