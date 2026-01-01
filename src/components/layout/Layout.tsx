@@ -10,6 +10,10 @@ const pageTitles: Record<string, string> = {
     '/events/new': 'Create Event',
     '/events/approvals': 'Event Approvals',
     '/users': 'Users',
+    '/programs': 'Programs',
+    '/questions': 'Question Bank',
+    '/animators': 'Animators',
+    '/marks': 'Marks',
     '/notifications': 'Notifications',
     '/reports': 'Reports',
     '/settings': 'Settings'

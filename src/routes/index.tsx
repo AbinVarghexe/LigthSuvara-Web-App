@@ -11,6 +11,10 @@ import { UserDetail } from '../pages/users/UserDetail';
 import { Notifications } from '../pages/notifications/Notifications';
 import { Reports } from '../pages/reports/Reports';
 import { Settings } from '../pages/settings/Settings';
+import { Programs } from '../pages/programs/Programs';
+import { Questions } from '../pages/questions/Questions';
+import { Animators } from '../pages/animators/Animators';
+import { Marks } from '../pages/marks/Marks';
 import { ProtectedRoute } from '../components/layout/ProtectedRoute';
 import { NotAuthorized } from '../pages/auth/NotAuthorized';
 import { PrivacyPolicy } from '../pages/legal/PrivacyPolicy';
@@ -51,6 +55,10 @@ export const router = createBrowserRouter([
                     { path: 'events/:id/edit', Component: EventForm },
                     { path: 'users', Component: Users },
                     { path: 'users/:id', Component: UserDetail },
+                    { path: 'programs', Component: Programs },
+                    { path: 'questions', Component: Questions },
+                    { path: 'animators', Component: Animators },
+                    { path: 'marks', Component: Marks },
                     { path: 'notifications', Component: Notifications },
                     { path: 'reports', Component: Reports },
                     { path: 'settings', Component: Settings },

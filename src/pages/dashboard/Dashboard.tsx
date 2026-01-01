@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Users, School, FileText, CheckCircle2, Loader2, TrendingUp } from 'lucide-react';
+import { Calendar, Users, School, FileText, CheckCircle2, Loader2, TrendingUp, GraduationCap, UserCheck, ClipboardList, Bell } from 'lucide-react';
 import { StatCard } from '../../components/common/StatCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Link } from 'react-router';
 import { getEvents, EventData } from '../../features/events/services/eventService';
 import { getUsers, UserData } from '../../features/users/services/userService';
 import { getNotifications } from '../../features/notifications/services/notificationService';
+import { getActivePrograms } from '../../features/programs/services/programService';
+import { getAnimatorStats } from '../../features/animators/services/animatorService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { useAuth } from '../../context/AuthContext';
@@ -17,19 +19,25 @@ export function Dashboard() {
     const [events, setEvents] = useState<EventData[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
+    const [activePrograms, setActivePrograms] = useState(0);
+    const [animatorStats, setAnimatorStats] = useState({ total: 0, assigned: 0, unassigned: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [eventsData, usersData, notificationsData] = await Promise.all([
+                const [eventsData, usersData, notificationsData, programsData, animatorStatsData] = await Promise.all([
                     getEvents(),
                     getUsers(),
-                    getNotifications()
+                    getNotifications(),
+                    getActivePrograms(),
+                    getAnimatorStats()
                 ]);
                 setEvents(eventsData as EventData[]);
                 setUsers(usersData);
                 setNotifications(notificationsData);
+                setActivePrograms(programsData.length);
+                setAnimatorStats(animatorStatsData);
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
             } finally {
@@ -58,6 +66,8 @@ export function Dashboard() {
     const publicEvents = events.filter(e => e.isPublic).length;
     const draftEvents = events.length - publicEvents;
     const schoolCount = users.filter(u => u.role === 'school').length;
+    const animatorCount = users.filter(u => u.role === 'animator').length;
+    const pendingApprovals = events.filter(e => e.status === 'pending').length;
 
     const getEventDate = (event: EventData) => {
         return event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date) : new Date();
@@ -94,7 +104,7 @@ export function Dashboard() {
 
     return (
         <div className="space-y-6 sm:space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 <StatCard
                     title="Total Events"
                     value={events.length}
@@ -108,13 +118,6 @@ export function Dashboard() {
                     icon={CheckCircle2}
                     iconColor="text-green-600"
                     iconBg="bg-green-100"
-                />
-                <StatCard
-                    title="Draft Events"
-                    value={draftEvents}
-                    icon={FileText}
-                    iconColor="text-gray-600"
-                    iconBg="bg-gray-100"
                 />
                 <StatCard
                     title="Total Users"
@@ -131,6 +134,39 @@ export function Dashboard() {
                     iconBg="bg-orange-100"
                 />
             </div>
+
+            {isAdminUser && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                    <StatCard
+                        title="Active Programs"
+                        value={activePrograms}
+                        icon={GraduationCap}
+                        iconColor="text-indigo-600"
+                        iconBg="bg-indigo-100"
+                    />
+                    <StatCard
+                        title="Total Animators"
+                        value={animatorCount}
+                        icon={UserCheck}
+                        iconColor="text-teal-600"
+                        iconBg="bg-teal-100"
+                    />
+                    <StatCard
+                        title="Pending Approvals"
+                        value={pendingApprovals}
+                        icon={ClipboardList}
+                        iconColor="text-amber-600"
+                        iconBg="bg-amber-100"
+                    />
+                    <StatCard
+                        title="Notifications Sent"
+                        value={notifications.length}
+                        icon={Bell}
+                        iconColor="text-pink-600"
+                        iconBg="bg-pink-100"
+                    />
+                </div>
+            )}
 
             <Card>
                 <CardHeader>
