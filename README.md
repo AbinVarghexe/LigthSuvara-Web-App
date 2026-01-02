@@ -3,8 +3,8 @@
 <br><br>
 
   <picture>
-    <source srcset="Public/assets/Readme/Header.svg">
-    <img src="Public/assets/Readme/Header.svg" alt="Admin Dashboard Logo" width="600">
+    <source srcset="public/assets/Readme/Header.svg">
+    <img src="public/assets/Readme/Header.svg" alt="Admin Dashboard Logo" width="600">
   </picture>
 
 <br>
@@ -38,7 +38,7 @@
 <br />
 
 <div align="center">
-  <img src="Public/assets/Readme/Content-Image.svg"
+  <img src="public/assets/Readme/Content-Image.svg"
        alt="Dashboard Preview"
        width="800">
   <!-- Replace above image with an actual screenshot of the dashboard if available -->
