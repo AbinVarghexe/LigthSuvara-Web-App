@@ -56,11 +56,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 {/* Logo */}
                 <div className="p-6 border-b border-border">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-primary to-blue-600 rounded-lg flex items-center justify-center">
-                            <span className="text-primary-foreground font-bold text-xl">LS</span>
-                        </div>
+                        <img 
+                            src="/assets/Logo-Bg-Dark.svg" 
+                            alt="Light Suvara" 
+                            className="w-10 h-10 rounded-lg block dark:hidden"
+                        />
+                        <img 
+                            src="/assets/Logo-Bg-Light.svg" 
+                            alt="Light Suvara" 
+                            className="w-10 h-10 rounded-lg hidden dark:block"
+                        />
                         <div>
-                            <h2 className="text-lg text-primary font-semibold">Light Suvara</h2>
+                            <h2 className="text-lg dark:text-white text-black font-semibold">Light Suvara</h2>
                             <p className="text-xs text-muted-foreground">Admin Panel</p>
                         </div>
                     </div>
