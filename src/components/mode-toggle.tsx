@@ -1,36 +1,81 @@
-import { Moon, Sun } from "lucide-react"
-import { Button } from "./ui/button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "./ui/dropdown-menu"
-import { useTheme } from "./theme-provider"
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "./theme-provider";
+import { Button } from "./ui/button";
+import { motion, AnimatePresence } from "framer-motion";
+import { useRef } from "react";
 
 export function ModeToggle() {
-    const { setTheme } = useTheme()
+  const { theme, setTheme } = useTheme();
+  const ref = useRef<HTMLButtonElement>(null);
 
-    return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                    <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">Toggle theme</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTheme("light")}>
-                    Light
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("dark")}>
-                    Dark
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("system")}>
-                    System
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
-    )
+  const toggleTheme = async () => {
+    const isDark = theme === "dark";
+    const nextTheme = isDark ? "light" : "dark";
+
+    if (
+      !ref.current ||
+      !document.startViewTransition ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setTheme(nextTheme);
+      return;
+    }
+
+    const rect = ref.current.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+
+    const transition = document.startViewTransition(() => {
+      setTheme(nextTheme);
+    });
+
+    await transition.ready;
+
+    const clipPath = [
+      `circle(0px at ${x}px ${y}px)`,
+      `circle(${endRadius}px at ${x}px ${y}px)`,
+    ];
+
+    document.documentElement.animate(
+      {
+        clipPath: clipPath,
+      },
+      {
+        duration: 500,
+        easing: "ease-in-out",
+        pseudoElement: "::view-transition-new(root)",
+      }
+    );
+  };
+
+  return (
+    <Button
+      ref={ref}
+      variant="ghost"
+      size="icon"
+      onClick={toggleTheme}
+      className="w-9 h-9 rounded-full"
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={theme === "dark" ? "dark" : "light"}
+          initial={{ y: -20, opacity: 0, rotate: -90 }}
+          animate={{ y: 0, opacity: 1, rotate: 0 }}
+          exit={{ y: 20, opacity: 0, rotate: 90 }}
+          transition={{ duration: 0.2 }}
+        >
+          {theme === "dark" ? (
+            <Moon className="h-5 w-5 text-slate-950 dark:text-slate-50" />
+          ) : (
+            <Sun className="h-5 w-5 text-slate-800" />
+          )}
+        </motion.div>
+      </AnimatePresence>
+      <span className="sr-only">Toggle theme</span>
+    </Button>
+  );
 }
