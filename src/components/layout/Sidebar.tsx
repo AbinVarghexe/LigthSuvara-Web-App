@@ -57,12 +57,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="p-6 border-b border-border">
                     <div className="flex items-center gap-3">
                         <img 
-                            src="../public/assets/Logo-Bg-Dark.svg" 
+                            src="../Public/assets/Logo-Bg-Dark.svg" 
                             alt="Light Suvara" 
                             className="w-10 h-10 rounded-lg block dark:hidden"
                         />
                         <img 
-                            src="../public/assets/Logo-Bg-Light.svg" 
+                            src="../Public/assets/Logo-Bg-Light.svg" 
                             alt="Light Suvara" 
                             className="w-10 h-10 rounded-lg hidden dark:block"
                         />
