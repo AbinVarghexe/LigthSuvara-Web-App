@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { FileText, Download, Calendar, Loader2 } from 'lucide-react';
+import { FileText, Download, Calendar, Loader2, TrendingUp } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, PolarGrid, RadialBar, RadialBarChart } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/ui/chart';
+import { Bar, BarChart, CartesianGrid, Pie, PieChart, XAxis, PolarGrid, RadialBar, RadialBarChart } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '../../components/ui/chart';
 import jsPDF from 'jspdf';
 import { getEvents, EventData } from '../../features/events/services/eventService';
 import { getUsers, UserData } from '../../features/users/services/userService';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/card';
 import { useAuth } from '../../context/AuthContext';
 
 export function Reports() {
@@ -218,10 +218,11 @@ export function Reports() {
         return acc;
     }, {} as Record<string, number>);
 
-    const categoryData = Object.entries(categoryCount).map(([name, value]) => ({
-        name,
-        value,
-    }));
+    // Updated data structure for the new chart
+    const categoryData = [
+        { category: "cml", count: categoryCount['CML'] || 0, fill: "var(--color-cml)" },
+        { category: "suvara", count: categoryCount['Suvara'] || 0, fill: "var(--color-suvara)" },
+    ];
 
     const schoolEventCount = filteredEvents.reduce((acc: Record<string, number>, event: EventData) => {
         let school = event.creatorSchoolName;
@@ -269,15 +270,18 @@ export function Reports() {
     };
 
     const categoryChartConfig = {
-        CML: {
+        count: {
+            label: "Events",
+        },
+        cml: {
             label: "CML",
             color: "hsl(217, 91%, 60%)", // Blue
         },
-        Suvara: {
+        suvara: {
             label: "Suvara",
             color: "hsl(217, 91%, 75%)", // Light Blue
         },
-    };
+    } satisfies ChartConfig;
 
     const schoolChartConfig = {
         events: {
@@ -287,7 +291,7 @@ export function Reports() {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 w-[calc(100vw-2rem)] md:w-[calc(100vw-4rem)] lg:w-[calc(100vw-20rem)]">
             <Card>
                 <CardHeader>
                     <div className="flex items-center gap-2">
@@ -296,7 +300,7 @@ export function Reports() {
                     </div>
                     <CardDescription>Generate detailed PDF reports for individual events</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 sm:p-6">
                     <div className="flex flex-col sm:flex-row gap-4">
                         <div className="flex-1">
                             <Select value={selectedEventId} onValueChange={setSelectedEventId}>
@@ -314,7 +318,7 @@ export function Reports() {
                         </div>
                         <Button
                             onClick={handleGeneratePDF}
-                            className="bg-blue-600 hover:bg-blue-700 px-6"
+                            className="bg-blue-600 hover:bg-blue-700 px-6 w-full sm:w-auto"
                             disabled={!selectedEventId || generatingPdf}
                         >
                             {generatingPdf ? (
@@ -335,14 +339,14 @@ export function Reports() {
 
             <Card>
                 <CardHeader>
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                         <div className="flex items-center gap-2">
                             <Calendar className="w-5 h-5 text-blue-600" />
                             <CardTitle>Analytics Dashboard</CardTitle>
                         </div>
-                        <div className="flex flex-wrap gap-2 items-center">
+                        <div className="grid grid-cols-2 sm:flex flex-wrap gap-2 items-center w-full xl:w-auto">
                             <Select value={reportType} onValueChange={(v: string) => setReportType(v as 'all' | 'year' | 'month' | 'week')}>
-                                <SelectTrigger className="w-[120px] h-9">
+                                <SelectTrigger className="w-full md:w-[120px] h-9">
                                     <SelectValue placeholder="Type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -355,7 +359,7 @@ export function Reports() {
 
                             {reportType !== 'all' && (
                                 <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                    <SelectTrigger className="w-[100px] h-9">
+                                    <SelectTrigger className="w-full md:w-[100px] h-9">
                                         <SelectValue placeholder="Year" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -366,7 +370,7 @@ export function Reports() {
 
                             {reportType === 'month' && (
                                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                    <SelectTrigger className="w-[120px] h-9">
+                                    <SelectTrigger className="w-full md:w-[120px] h-9">
                                         <SelectValue placeholder="Month" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -378,7 +382,7 @@ export function Reports() {
                             {reportType === 'week' && (
                                 <input
                                     type="date"
-                                    className="h-9 px-3 py-1 rounded-md border border-input bg-background text-sm"
+                                    className="h-9 px-3 py-1 rounded-md border border-input bg-background text-sm w-full md:w-auto"
                                     value={selectedDate}
                                     onChange={(e) => setSelectedDate(e.target.value)}
                                 />
@@ -386,22 +390,22 @@ export function Reports() {
 
                             <div className="h-6 w-px bg-gray-200 mx-2 hidden md:block"></div>
 
-                            <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>
+                            <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} className="w-full md:w-auto">
                                 <Download className="w-4 h-4 mr-2" />
                                 Export PDF
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
+                            <Button variant="outline" size="sm" onClick={() => handleExport('csv')} className="w-full md:w-auto">
                                 <Download className="w-4 h-4 mr-2" />
                                 Export CSV
                             </Button>
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <div className="space-y-8">
+                <CardContent className="p-4 sm:p-6">
+                    <div className="space-y-6 sm:space-y-8">
                         <div>
-                            <h4 className="mb-4 font-medium text-base">Events Over Time ({reportType === 'all' ? 'Yearly' : reportType === 'year' ? 'Monthly' : reportType === 'month' ? 'Weekly' : 'Daily'})</h4>
-                            <ChartContainer config={eventsChartConfig} className="h-[300px] w-full">
+                            <h4 className="mb-4 font-medium text-sm sm:text-base">Events Over Time ({reportType === 'all' ? 'Yearly' : reportType === 'year' ? 'Monthly' : reportType === 'month' ? 'Weekly' : 'Daily'})</h4>
+                            <ChartContainer config={eventsChartConfig} className="h-[250px] sm:h-[300px] w-full">
                                 <BarChart accessibilityLayer data={chartData}>
                                     <CartesianGrid vertical={false} />
                                     <XAxis
@@ -421,54 +425,73 @@ export function Reports() {
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <div>
-                                <h4 className="mb-4 font-medium text-base">Category Distribution</h4>
-                                <ChartContainer 
-                                    config={categoryChartConfig} 
-                                    className="mx-auto aspect-square max-h-[300px] [&_.recharts-pie-label-text]:fill-foreground"
-                                >
-                                    <PieChart>
-                                        <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                                        <Pie
-                                            data={categoryData}
-                                            dataKey="value"
-                                            nameKey="name"
-                                            label
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={100}
-                                        >
-                                            {categoryData.map((entry, index) => (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={index === 0 ? "hsl(217, 91%, 60%)" : "hsl(217, 91%, 75%)"}
-                                                />
-                                            ))}
-                                        </Pie>
-                                    </PieChart>
-                                </ChartContainer>
-                            </div>
+                            <Card className="flex flex-col shadow-none border-0 sm:border sm:shadow-sm">
+                                <CardHeader className="items-center pb-0 p-4 sm:p-6">
+                                    <CardTitle className="text-base font-medium">Category Distribution</CardTitle>
+                                    <CardDescription>Distribution of events by category</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex-1 pb-0">
+                                    <ChartContainer
+                                        config={categoryChartConfig}
+                                        className="mx-auto aspect-square max-h-[250px]"
+                                    >
+                                        <PieChart>
+                                            <ChartTooltip
+                                                cursor={false}
+                                                content={<ChartTooltipContent hideLabel />}
+                                            />
+                                            <Pie
+                                                data={categoryData}
+                                                dataKey="count"
+                                                nameKey="category"
+                                                stroke="0"
+                                            />
+                                        </PieChart>
+                                    </ChartContainer>
+                                </CardContent>
+                                <CardFooter className="flex-col gap-2 text-sm">
+                                    <div className="flex items-center gap-2 leading-none font-medium">
+                                        Total {filteredEvents.length} events processed <TrendingUp className="h-4 w-4" />
+                                    </div>
+                                    <div className="text-muted-foreground leading-none">
+                                        Showing distribution for selected period
+                                    </div>
+                                </CardFooter>
+                            </Card>
 
-                            <div>
-                                <h4 className="mb-4 font-medium text-base">Most Active Schools</h4>
-                                <ChartContainer 
-                                    config={schoolChartConfig} 
-                                    className="mx-auto aspect-square max-h-[300px]"
-                                >
-                                    <RadialBarChart data={schoolActivity} innerRadius={30} outerRadius={100}>
-                                        <ChartTooltip
-                                            cursor={false}
-                                            content={<ChartTooltipContent hideLabel nameKey="school" />}
-                                        />
-                                        <PolarGrid gridType="circle" />
-                                        <RadialBar dataKey="events" />
-                                    </RadialBarChart>
-                                </ChartContainer>
-                            </div>
+                            <Card className="flex flex-col shadow-none border-0 sm:border sm:shadow-sm">
+                                <CardHeader className="items-center pb-0 p-4 sm:p-6">
+                                    <CardTitle className="text-base font-medium">Most Active Schools</CardTitle>
+                                    <CardDescription>Top schools by event creation</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex-1 pb-0">
+                                     <ChartContainer 
+                                        config={schoolChartConfig} 
+                                        className="mx-auto aspect-square max-h-[250px]"
+                                    >
+                                        <RadialBarChart data={schoolActivity} innerRadius={30} outerRadius={100}>
+                                            <ChartTooltip
+                                                cursor={false}
+                                                content={<ChartTooltipContent hideLabel nameKey="school" />}
+                                            />
+                                            <PolarGrid gridType="circle" />
+                                            <RadialBar dataKey="events" />
+                                        </RadialBarChart>
+                                    </ChartContainer>
+                                </CardContent>
+                                <CardFooter className="flex-col gap-2 text-sm">
+                                    <div className="flex items-center gap-2 leading-none font-medium">
+                                        Top {schoolActivity.length} Active Schools <TrendingUp className="h-4 w-4" />
+                                    </div>
+                                    <div className="text-muted-foreground leading-none">
+                                        Based on current filters
+                                    </div>
+                                </CardFooter>
+                            </Card>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-8 pt-8 border-t border-gray-200">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-gray-200">
                         <div className="text-center">
                             <p className="text-gray-600 text-sm mb-1">Total Events</p>
                             <p className="text-3xl font-semibold text-blue-600">{filteredEvents.length}</p>

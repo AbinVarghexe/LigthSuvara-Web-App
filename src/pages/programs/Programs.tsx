@@ -20,6 +20,84 @@ import {
 } from '../../features/programs/services/programService';
 import { Timestamp } from 'firebase/firestore';
 
+// Mobile Card Component
+interface ProgramCardProps {
+    program: ProgramData;
+    status: { label: string; variant: "secondary" | "outline" | "destructive" | "default" };
+    registrationCount: number;
+    formatDate: (date: Date | Timestamp | undefined) => string;
+    openEditDialog: (program: ProgramData) => void;
+    handleDeleteProgram: (id: string) => void;
+}
+
+const ProgramCard = ({
+    program,
+    status,
+    registrationCount,
+    formatDate,
+    openEditDialog,
+    handleDeleteProgram
+}: ProgramCardProps) => {
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <CardTitle className="text-lg">{program.name}</CardTitle>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                            <Badge variant="secondary" className="bg-gray-100 text-gray-800 flex items-center gap-1">
+                                <Users className="h-3 w-3" />
+                                {registrationCount}
+                            </Badge>
+                        </div>
+                    </div>
+                    <div className="flex gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEditDialog(program)}
+                        >
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500">
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Program</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Are you sure you want to delete "{program.name}"? This action cannot be undone.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        onClick={() => handleDeleteProgram(program.id!)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                    >
+                                        Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+                <div className="flex items-center gap-2 text-gray-500">
+                    <Calendar className="h-4 w-4" />
+                    <span>{formatDate(program.startDate)} - {formatDate(program.endDate)}</span>
+                </div>
+            </CardContent>
+        </Card>
+    );
+};
+
 export function Programs() {
     const [programs, setPrograms] = useState<ProgramData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -206,7 +284,7 @@ export function Programs() {
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Programs</h1>
                 <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button className="bg-blue-600 hover:bg-blue-700">
+                        <Button className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
                             <Plus className="w-4 h-4 mr-2" />
                             Create Program
                         </Button>
@@ -283,90 +361,115 @@ export function Programs() {
                 </CardContent>
             </Card>
 
-            {/* Programs Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>All Programs</CardTitle>
-                    <CardDescription>Manage educational programs and view registrations</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {filteredPrograms.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
+            {/* Programs List */}
+            <div className="space-y-4">
+                {filteredPrograms.length === 0 ? (
+                    <Card>
+                        <CardContent className="py-12 text-center text-gray-500">
                             <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
                             <p>No programs found</p>
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Program Name</TableHead>
-                                    <TableHead>Start Date</TableHead>
-                                    <TableHead>End Date</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Registrations</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredPrograms.map((program) => {
-                                    const status = getProgramStatus(program);
-                                    return (
-                                        <TableRow key={program.id}>
-                                            <TableCell className="font-medium">{program.name}</TableCell>
-                                            <TableCell>{formatDate(program.startDate)}</TableCell>
-                                            <TableCell>{formatDate(program.endDate)}</TableCell>
-                                            <TableCell>
-                                                <Badge variant={status.variant}>{status.label}</Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-1">
-                                                    <Users className="h-4 w-4 text-gray-400" />
-                                                    {registrationCounts[program.id!] || 0}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => openEditDialog(program)}
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon">
-                                                                <Trash2 className="h-4 w-4 text-red-500" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Program</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Are you sure you want to delete "{program.name}"? This action cannot be undone.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    onClick={() => handleDeleteProgram(program.id!)}
-                                                                    className="bg-red-600 hover:bg-red-700"
-                                                                >
-                                                                    Delete
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            </TableCell>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <>
+                        {/* Desktop Table */}
+                        <Card className="hidden md:block">
+                            <CardHeader>
+                                <CardTitle>All Programs</CardTitle>
+                                <CardDescription>Manage educational programs and view registrations</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Program Name</TableHead>
+                                            <TableHead>Start Date</TableHead>
+                                            <TableHead>End Date</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Registrations</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredPrograms.map((program) => {
+                                            const status = getProgramStatus(program);
+                                            return (
+                                                <TableRow key={program.id}>
+                                                    <TableCell className="font-medium">{program.name}</TableCell>
+                                                    <TableCell>{formatDate(program.startDate)}</TableCell>
+                                                    <TableCell>{formatDate(program.endDate)}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={status.variant}>{status.label}</Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-1">
+                                                            <Users className="h-4 w-4 text-gray-400" />
+                                                            {registrationCounts[program.id!] || 0}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => openEditDialog(program)}
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button variant="ghost" size="icon">
+                                                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Delete Program</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            Are you sure you want to delete "{program.name}"? This action cannot be undone.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            onClick={() => handleDeleteProgram(program.id!)}
+                                                                            className="bg-red-600 hover:bg-red-700"
+                                                                        >
+                                                                            Delete
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+
+                        {/* Mobile Cards */}
+                        <div className="md:hidden space-y-4">
+                            {filteredPrograms.map((program) => {
+                                const status = getProgramStatus(program);
+                                return (
+                                    <ProgramCard
+                                        key={program.id}
+                                        program={program}
+                                        status={status}
+                                        registrationCount={registrationCounts[program.id!] || 0}
+                                        formatDate={formatDate}
+                                        openEditDialog={openEditDialog}
+                                        handleDeleteProgram={handleDeleteProgram}
+                                    />
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+            </div>
 
             {/* Edit Dialog */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

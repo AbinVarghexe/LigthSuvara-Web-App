@@ -333,9 +333,9 @@ export function Animators() {
                                                 >
                                                     <div className="flex items-center gap-2">
                                                         <School className="h-4 w-4 text-gray-400" />
-                                                        <div>
-                                                            <p className="text-sm font-medium">{assignment.schoolname}</p>
-                                                            <p className="text-xs text-gray-500">{assignment.parish}</p>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-sm font-medium truncate">{assignment.schoolname}</p>
+                                                            <p className="text-xs text-gray-500 truncate">{assignment.parish}</p>
                                                         </div>
                                                     </div>
                                                     <Button

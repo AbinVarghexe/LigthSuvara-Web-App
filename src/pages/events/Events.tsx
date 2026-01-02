@@ -124,15 +124,14 @@ export function Events() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-                <Link to="/events/new">
-                    <Button className="bg-blue-600 hover:bg-blue-700">
+                <Link to="/events/new" className="w-full sm:w-auto">
+                    <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
                         <Plus className="w-4 h-4 mr-2" />
                         Create Event
                     </Button>
                 </Link>
             </div>
 
-            {/* Filters and Search */}
             <Card>
                 <CardContent className="p-4 flex flex-col md:flex-row gap-4">
                     <div className="relative flex-1">
@@ -145,8 +144,8 @@ export function Events() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <div className="flex gap-4">
-                        <div className="relative min-w-[140px]">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="relative">
                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <select
                                 className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -158,7 +157,7 @@ export function Events() {
                                 <option value="suvara">Suvara</option>
                             </select>
                         </div>
-                        <div className="relative min-w-[140px]">
+                        <div className="relative">
                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <select
                                 className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -169,10 +168,9 @@ export function Events() {
                                 <option value="pending">Pending</option>
                                 <option value="approved">Approved</option>
                                 <option value="rejected">Rejected</option>
-                                <option value="Draft">Draft</option>
                             </select>
                         </div>
-                        <div className="relative min-w-[140px]">
+                        <div className="relative">
                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <select
                                 className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -192,82 +190,115 @@ export function Events() {
             {/* Events List */}
             <Card>
                 <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[300px]">Event Details</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Created By</TableHead>
-                                <TableHead>Created</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredEvents.map((event) => {
-                                const creator = users.find(u => u.id === event.creatorId);
-                                const schoolName = event.creatorSchoolName && event.creatorSchoolName !== 'Admin'
-                                    ? event.creatorSchoolName
-                                    : (creator?.schoolName || creator?.schoolname || creator?.fullName || 'Unknown');
-
-                                return (
-                                    <TableRow key={event.id}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
-                                                    {event.imageUrl ? (
-                                                        <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-medium text-gray-900">{event.title}</h3>
-                                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">{event.place}</p>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className="uppercase">
+                    {/* Mobile View */}
+                    <div className="md:hidden">
+                        {filteredEvents.map((event) => (
+                            <div key={event.id} className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors">
+                                <Link to={`/events/${event.id}`} className="flex gap-4">
+                                    <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                                        {event.imageUrl ? (
+                                            <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0 space-y-1">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <h3 className="font-medium text-gray-900 truncate pr-2">{event.title}</h3>
+                                            <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
+                                        </div>
+                                        <p className="text-sm text-gray-500 truncate">{event.place}</p>
+                                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 uppercase">
                                                 {event.category}
                                             </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-gray-600">
-                                            {schoolName}
-                                        </TableCell>
-                                        <TableCell className="text-gray-600">
-                                            <div className="flex flex-col">
-                                                <span>{formatDate(event.timestamp)}</span>
-                                                {event.updatedAt && (
-                                                    <span className="text-xs text-gray-400">
-                                                        Updated: {formatDate(event.updatedAt)}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Link
-                                                to={`/events/${event.id}`}
-                                                className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                                            >
-                                                View
-                                            </Link>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                            {filteredEvents.length === 0 && (
+                                            <span>•</span>
+                                            <span>{formatDate(event.timestamp)}</span>
+                                        </div>
+                                    </div>
+                                </Link>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Desktop View */}
+                    <div className="hidden md:block overflow-x-auto">
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center text-gray-500">
-                                        No events found matching your filters.
-                                    </TableCell>
+                                    <TableHead className="w-[300px]">Event Details</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Created By</TableHead>
+                                    <TableHead>Created</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredEvents.map((event) => {
+                                    const creator = users.find(u => u.id === event.creatorId);
+                                    const schoolName = event.creatorSchoolName && event.creatorSchoolName !== 'Admin'
+                                        ? event.creatorSchoolName
+                                        : (creator?.schoolName || creator?.schoolname || creator?.fullName || 'Unknown');
+
+                                    return (
+                                        <TableRow key={event.id}>
+                                            <TableCell>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                                                        {event.imageUrl ? (
+                                                            <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-medium text-gray-900">{event.title}</h3>
+                                                        <p className="text-sm text-gray-500 truncate max-w-[200px]">{event.place}</p>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="secondary" className="uppercase">
+                                                    {event.category}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-gray-600">
+                                                {schoolName}
+                                            </TableCell>
+                                            <TableCell className="text-gray-600">
+                                                <div className="flex flex-col">
+                                                    <span>{formatDate(event.timestamp)}</span>
+                                                    {event.updatedAt && (
+                                                        <span className="text-xs text-gray-400">
+                                                            Updated: {formatDate(event.updatedAt)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <StatusBadge status={event.status || (event.isPublic ? 'approved' : 'pending')} />
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Link
+                                                    to={`/events/${event.id}`}
+                                                    className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                                                >
+                                                    View
+                                                </Link>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    {filteredEvents.length === 0 && (
+                        <div className="p-8 text-center text-gray-500">
+                            No events found matching your filters.
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

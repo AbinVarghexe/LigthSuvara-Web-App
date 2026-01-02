@@ -162,6 +162,96 @@ const SortableRow = ({
     );
 };
 
+// Mobile Card Component
+interface QuestionCardProps extends Omit<SortableRowProps, 'handleDeleteQuestion'> {
+    handleDeleteQuestion: (id: string) => void;
+}
+
+const QuestionCard = ({
+    question,
+    editingId,
+    inlineEditData,
+    setInlineEditData,
+    handleStartEdit,
+    handleSaveEdit,
+    handleCancelEdit,
+    handleDeleteQuestion
+}: QuestionCardProps) => {
+    return (
+        <Card className="mb-4">
+            <CardContent className="pt-6">
+                <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-500">#{question.order}</span>
+                        <div className="text-sm font-semibold bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                            {editingId === question.id ? (
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={inlineEditData.maxMarks}
+                                    onChange={(e) => setInlineEditData({ ...inlineEditData, maxMarks: parseInt(e.target.value) || 10 })}
+                                    className="w-16 h-7 text-xs"
+                                />
+                            ) : (
+                                <span>{question.maxMarks} Marks</span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex gap-1">
+                        {editingId === question.id ? (
+                            <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleSaveEdit(question.id!)}>
+                                    <Save className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500" onClick={handleCancelEdit}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(question)}>
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete Question</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Are you sure you want to delete this question?
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDeleteQuestion(question.id!)} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </>
+                        )}
+                    </div>
+                </div>
+                
+                {editingId === question.id ? (
+                    <Textarea
+                        value={inlineEditData.text}
+                        onChange={(e) => setInlineEditData({ ...inlineEditData, text: e.target.value })}
+                        rows={3}
+                        className="w-full"
+                    />
+                ) : (
+                    <p className="text-gray-900 dark:text-gray-100">{question.text}</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
 export function Questions() {
     const [questions, setQuestions] = useState<QuestionData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -463,14 +553,14 @@ export function Questions() {
                         Total Max Marks: <span className="font-semibold">{totalMaxMarks}</span>
                     </p>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={generateQuestionPaper} disabled={questions.length === 0}>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <Button variant="outline" onClick={generateQuestionPaper} disabled={questions.length === 0} className="flex-1 sm:flex-none">
                         <Download className="w-4 h-4 mr-2" />
-                        Export Question Paper
+                        Export
                     </Button>
                     <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button className="bg-blue-600 hover:bg-blue-700">
+                            <Button className="bg-blue-600 hover:bg-blue-700 flex-1 sm:flex-none">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Add Question
                             </Button>
@@ -516,62 +606,86 @@ export function Questions() {
                 </div>
             </div>
 
-            {/* Questions Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>All Questions</CardTitle>
-                    <CardDescription>
-                        Drag using the handle icon to reorder questions.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {questions.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
+            {/* Questions List */}
+            <div className="space-y-4">
+                {questions.length === 0 ? (
+                    <Card>
+                        <CardContent className="py-12 text-center text-gray-500">
                             <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                             <p>No questions found</p>
                             <p className="text-sm mt-2">Add your first question to get started</p>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <>
+                        {/* Desktop Table */}
+                        <Card className="hidden md:block">
+                            <CardHeader>
+                                <CardTitle>All Questions</CardTitle>
+                                <CardDescription>
+                                    Drag using the handle icon to reorder questions.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <DndContext 
+                                    sensors={sensors}
+                                    collisionDetection={closestCenter}
+                                    onDragEnd={handleDragEnd}
+                                >
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-[50px]">#</TableHead>
+                                                <TableHead className="w-[50px]"></TableHead>
+                                                <TableHead>Question Text</TableHead>
+                                                <TableHead className="w-[120px]">Max Marks</TableHead>
+                                                <TableHead className="w-[150px] text-right">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            <SortableContext 
+                                                items={questions.map(q => q.id!)}
+                                                strategy={verticalListSortingStrategy}
+                                            >
+                                                {questions.map((question) => (
+                                                    <SortableRow
+                                                        key={question.id}
+                                                        question={question}
+                                                        editingId={editingId}
+                                                        inlineEditData={inlineEditData}
+                                                        setInlineEditData={setInlineEditData}
+                                                        handleStartEdit={handleStartEdit}
+                                                        handleSaveEdit={handleSaveEdit}
+                                                        handleCancelEdit={handleCancelEdit}
+                                                        handleDeleteQuestion={handleDeleteQuestion}
+                                                    />
+                                                ))}
+                                            </SortableContext>
+                                        </TableBody>
+                                    </Table>
+                                </DndContext>
+                            </CardContent>
+                        </Card>
+
+                        {/* Mobile Cards */}
+                        <div className="md:hidden space-y-4">
+                            {questions.map((question) => (
+                                <QuestionCard
+                                    key={question.id}
+                                    question={question}
+                                    editingId={editingId}
+                                    inlineEditData={inlineEditData}
+                                    setInlineEditData={setInlineEditData}
+                                    handleStartEdit={handleStartEdit}
+                                    handleSaveEdit={handleSaveEdit}
+                                    handleCancelEdit={handleCancelEdit}
+                                    handleDeleteQuestion={handleDeleteQuestion}
+                                />
+                            ))}
                         </div>
-                    ) : (
-                        <DndContext 
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={handleDragEnd}
-                        >
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-[50px]">#</TableHead>
-                                        <TableHead className="w-[50px]"></TableHead>
-                                        <TableHead>Question Text</TableHead>
-                                        <TableHead className="w-[120px]">Max Marks</TableHead>
-                                        <TableHead className="w-[150px] text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    <SortableContext 
-                                        items={questions.map(q => q.id!)}
-                                        strategy={verticalListSortingStrategy}
-                                    >
-                                        {questions.map((question) => (
-                                            <SortableRow
-                                                key={question.id}
-                                                question={question}
-                                                editingId={editingId}
-                                                inlineEditData={inlineEditData}
-                                                setInlineEditData={setInlineEditData}
-                                                handleStartEdit={handleStartEdit}
-                                                handleSaveEdit={handleSaveEdit}
-                                                handleCancelEdit={handleCancelEdit}
-                                                handleDeleteQuestion={handleDeleteQuestion}
-                                            />
-                                        ))}
-                                    </SortableContext>
-                                </TableBody>
-                            </Table>
-                        </DndContext>
-                    )}
-                </CardContent>
-            </Card>
+                    </>
+                )}
+            </div>
         </div>
     );
 }

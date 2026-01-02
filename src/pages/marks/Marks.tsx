@@ -11,8 +11,6 @@ import {
     CheckCircle2,
     Clock,
     Calendar,
-    User,
-    Building2,
     GraduationCap,
     ChevronRight,
     LayoutGrid,
@@ -26,7 +24,6 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { Progress } from '../../components/ui/progress';
-import { Separator } from '../../components/ui/separator';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
@@ -62,6 +59,20 @@ export function Marks() {
         averagePercentage: 0,
         maxPossibleMarks: 0
     });
+
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 768) {
+                setViewMode('cards');
+            }
+        };
+
+        // Initial check
+        handleResize();
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const fetchData = async () => {
         try {
@@ -229,12 +240,7 @@ export function Marks() {
         return 'text-red-600 dark:text-red-400';
     };
 
-    const getScoreBgColor = (percentage: number) => {
-        if (percentage >= 80) return 'bg-green-100 dark:bg-green-900/30';
-        if (percentage >= 60) return 'bg-blue-100 dark:bg-blue-900/30';
-        if (percentage >= 40) return 'bg-yellow-100 dark:bg-yellow-900/30';
-        return 'bg-red-100 dark:bg-red-900/30';
-    };
+
 
     const getInitials = (name: string) => {
         return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -253,7 +259,7 @@ export function Marks() {
     }
 
     return (
-        <div className="space-y-6 pb-8">
+        <div className="space-y-6 pb-8 px-4 md:px-0">
             {/* Simple Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
                 <div>
@@ -344,8 +350,8 @@ export function Marks() {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <div className="flex gap-3 flex-wrap">
-                            <div className="relative min-w-[160px]">
+                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                            <div className="relative min-w-[200px] w-full sm:w-auto">
                                 <Select value={selectedYear} onValueChange={setSelectedYear}>
                                     <SelectTrigger className="bg-muted/50 border-0">
                                         <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -576,10 +582,10 @@ export function Marks() {
 
             {/* Detail Dialog */}
             <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-                <DialogContent className="max-w-3xl max-h-[90vh] p-0 overflow-hidden">
-                    <ScrollArea className="max-h-[90vh]">
-                        <div className="p-6">
-                            <DialogHeader className="pb-4 border-b mb-6">
+                <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] p-0 overflow-hidden rounded-lg">
+                    <ScrollArea className="max-h-[85vh] sm:max-h-[90vh]">
+                        <div className="p-4 sm:p-6">
+                            <DialogHeader className="pb-4 border-b mb-4 sm:mb-6">
                                 <DialogTitle className="text-xl flex items-center gap-2">
                                     <FileText className="h-5 w-5 text-blue-600" />
                                     Assessment Details
@@ -612,7 +618,7 @@ export function Marks() {
                                     </div>
 
                                     {/* Score Card */}
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 border">
+                                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 sm:p-6 border">
                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                                             <div className="space-y-1">
                                                 <p className="text-sm font-medium text-muted-foreground">Total Score</p>
@@ -642,7 +648,7 @@ export function Marks() {
                                         <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                                             Question Breakdown
                                         </h4>
-                                        <div className="border rounded-lg overflow-hidden">
+                                        <div className="border rounded-lg overflow-hidden overflow-x-auto">
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow className="bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-50">
