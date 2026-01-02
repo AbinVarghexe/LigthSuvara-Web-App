@@ -58,4 +58,5 @@
       port: 3000,
       open: true,
     },
+    publicDir: 'Public',
   });
