@@ -9,6 +9,7 @@ import { getNotifications } from '../../features/notifications/services/notifica
 import { getActivePrograms } from '../../features/programs/services/programService';
 import { getAnimatorStats } from '../../features/animators/services/animatorService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { useAuth } from '../../context/AuthContext';
 import { Bar, BarChart, Rectangle, CartesianGrid, XAxis } from 'recharts';
@@ -254,12 +255,36 @@ export function Dashboard() {
                 <Card className="lg:col-span-2 overflow-hidden">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Recent Events</CardTitle>
-                        <Link to="/events" className="text-sm text-blue-600 hover:underline">
-                            View All
+                        <Link to="/events" className="flex items-center">
+                            <Button variant="default" size="sm">
+                                View Details
+                            </Button>
                         </Link>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile View: Simple List */}
+                        <div className="md:hidden">
+                            {filteredEvents.slice(0, 5).map((event) => (
+                                <div key={event.id} className="flex items-center justify-between px-6 py-4 border-b last:border-0">
+                                    <div className="font-medium truncate mr-4">
+                                        {event.title}
+                                    </div>
+                                    <Link to={`/events/${event.id}`}>
+                                        <Button variant="outline" size="sm" className="h-8">
+                                            View
+                                        </Button>
+                                    </Link>
+                                </div>
+                            ))}
+                            {events.length === 0 && (
+                                <div className="p-4 text-center text-muted-foreground">
+                                    No events found
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Desktop View: Full Table */}
+                        <div className="hidden md:block overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
