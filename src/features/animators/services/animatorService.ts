@@ -38,6 +38,8 @@ export interface AnimatorWithUser {
     fullName: string;
     phoneNumber?: string;
     profileImageUrl?: string;
+    parish?: string;
+    address?: string;
     assignments: AnimatorAssignment[];
 }
 
@@ -67,6 +69,8 @@ export const getAnimators = async (): Promise<AnimatorWithUser[]> => {
             email: userData.email || '',
             fullName: userData.fullName || userData.name || '',
             phoneNumber: userData.phoneNumber,
+            parish: userData.parish,
+            address: userData.address,
             profileImageUrl: userData.profileImageUrl,
             assignments
         });
@@ -94,6 +98,8 @@ export const getAnimator = async (animatorId: string): Promise<AnimatorWithUser 
         email: userData.email || '',
         fullName: userData.fullName || userData.name || '',
         phoneNumber: userData.phoneNumber,
+        parish: userData.parish,
+        address: userData.address,
         profileImageUrl: userData.profileImageUrl,
         assignments
     };
@@ -104,7 +110,9 @@ export const createAnimator = async (
     email: string,
     password: string,
     fullName: string,
-    phoneNumber?: string
+    phoneNumber?: string,
+    parish?: string,
+    address?: string
 ): Promise<string> => {
     // Create Firebase Auth account
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -117,6 +125,8 @@ export const createAnimator = async (
         fullName,
         role: 'animator',
         phoneNumber: phoneNumber || '',
+        parish: parish || '',
+        address: address || '',
         createdAt: Timestamp.now()
     });
     
