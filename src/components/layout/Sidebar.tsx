@@ -13,6 +13,7 @@ import {
   UserCheck,
   ClipboardList,
   MessageSquare,
+  BookUser,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -26,6 +27,7 @@ const navigation = [
     adminOnly: true,
   },
   { name: "Users", href: "/users", icon: Users },
+  { name: "Teachers", href: "/teachers", icon: BookUser, adminOnly: true },
   { name: "Programs", href: "/programs", icon: GraduationCap, adminOnly: true },
   { name: "Questions", href: "/questions", icon: HelpCircle, adminOnly: true },
   { name: "Animators", href: "/animators", icon: UserCheck, adminOnly: true },
