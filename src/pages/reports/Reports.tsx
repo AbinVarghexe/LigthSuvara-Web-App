@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
-import { FileText, Download, Calendar, Loader2, TrendingUp } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { FileText, Download, Calendar, Loader2, TrendingUp, Filter } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { Bar, BarChart, CartesianGrid, Pie, PieChart, XAxis, PolarGrid, RadialBar, RadialBarChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '../../components/ui/chart';
 import jsPDF from 'jspdf';
+import { createMalayalamPDF } from '../../lib/pdfFonts';
 import { getEvents, EventData } from '../../features/events/services/eventService';
 import { getUsers, UserData } from '../../features/users/services/userService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 import { useAuth } from '../../context/AuthContext';
 
 export function Reports() {
@@ -23,6 +25,27 @@ export function Reports() {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString());
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+    // Entity filters
+    const [foraneFilter, setForaneFilter] = useState('All');
+    const [schoolFilter, setSchoolFilter] = useState('All');
+    const [roleFilter, setRoleFilter] = useState('All');
+
+    const foraneNames = [
+        'Mundakayam', 'Kumily', 'Kanjirappally', 'Anakkara', 'Erumely',
+        'Ponkunnam', 'Kattappana', 'Upputhara', 'Ranny', 'Pathanamthitta',
+        'Velichiyani', 'Mundiyeruma', 'Peruvanthanam',
+    ];
+
+    // Derive unique school names from users
+    const schoolNames = useMemo(() => {
+        const names = new Set<string>();
+        users.forEach(u => {
+            const name = u.schoolName || u.schoolname;
+            if (name) names.add(name);
+        });
+        return Array.from(names).sort();
+    }, [users]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -48,6 +71,25 @@ export function Reports() {
     };
 
     const filteredEvents = events.filter(event => {
+        // Forane filter
+        if (foraneFilter !== 'All') {
+            if (event.creatorForane !== foraneFilter) return false;
+        }
+
+        // School / Parish name filter
+        if (schoolFilter !== 'All') {
+            const creator = users.find(u => u.uid === event.creatorId || u.id === event.creatorId);
+            const eventSchool = event.creatorSchoolName || creator?.schoolName || creator?.schoolname || '';
+            if (eventSchool !== schoolFilter) return false;
+        }
+
+        // Role filter
+        if (roleFilter !== 'All') {
+            const creator = users.find(u => u.uid === event.creatorId || u.id === event.creatorId);
+            if (!creator || creator.role !== roleFilter) return false;
+        }
+
+        // Date / time range filter
         if (reportType === 'all') return true;
 
         const eventDate = getEventDate(event);
@@ -83,12 +125,14 @@ export function Reports() {
 
         setGeneratingPdf(true);
         try {
-            const doc = new jsPDF();
+            const doc = await createMalayalamPDF();
 
             doc.setFontSize(20);
+            doc.setFont('NotoSansMalayalam', 'bold');
             doc.text('Light Suvara Event Report', 20, 20);
 
             doc.setFontSize(16);
+            doc.setFont('NotoSansMalayalam', 'normal');
             doc.text(event.title, 20, 40);
 
             doc.setFontSize(12);
@@ -112,18 +156,23 @@ export function Reports() {
         }
     };
 
-    const handleExport = (format: string) => {
+    const handleExport = async (format: string) => {
         if (format === 'csv') {
-            const headers = ['Title', 'Date', 'Category', 'School', 'Status'];
+            const headers = ['Title', 'Date', 'Category', 'School', 'Forane', 'Creator Role', 'Status'];
             const csvContent = [
                 headers.join(','),
-                ...filteredEvents.map(e => [
-                    `"${e.title}"`,
-                    getEventDate(e).toLocaleDateString(),
-                    e.category,
-                    `"${e.creatorSchoolName}"`,
-                    e.isPublic ? 'Published' : 'Draft'
-                ].join(','))
+                ...filteredEvents.map(e => {
+                    const creator = users.find(u => u.uid === e.creatorId || u.id === e.creatorId);
+                    return [
+                        `"${e.title}"`,
+                        getEventDate(e).toLocaleDateString(),
+                        e.category,
+                        `"${e.creatorSchoolName || ''}"`,
+                        `"${e.creatorForane || creator?.forane || ''}"`,
+                        creator?.role || 'unknown',
+                        e.isPublic ? 'Published' : 'Draft'
+                    ].join(',');
+                })
             ].join('\n');
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -133,12 +182,26 @@ export function Reports() {
             link.click();
             toast.success('CSV Exported successfully');
         } else if (format === 'pdf') {
-            const doc = new jsPDF();
+            const doc = await createMalayalamPDF();
             doc.setFontSize(18);
+            doc.setFont('NotoSansMalayalam', 'bold');
             doc.text(`Events Report - ${reportType.toUpperCase()}`, 14, 20);
 
-            let y = 40;
+            // Print active filters
+            let filterY = 30;
+            doc.setFontSize(10);
+            const activeFilters: string[] = [];
+            if (foraneFilter !== 'All') activeFilters.push(`Forane: ${foraneFilter}`);
+            if (schoolFilter !== 'All') activeFilters.push(`School: ${schoolFilter}`);
+            if (roleFilter !== 'All') activeFilters.push(`Role: ${roleFilter}`);
+            if (activeFilters.length > 0) {
+                doc.text(`Filters: ${activeFilters.join(' | ')}`, 14, filterY);
+                filterY += 10;
+            }
+
+            let y = filterY + 5;
             doc.setFontSize(12);
+            doc.setFont('NotoSansMalayalam', 'normal');
             filteredEvents.forEach((e, i) => {
                 if (y > 270) {
                     doc.addPage();
@@ -401,6 +464,82 @@ export function Reports() {
                         </div>
                     </div>
                 </CardHeader>
+
+                {/* Entity Filters */}
+                <div className="px-4 sm:px-6 pb-2">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Filter className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Filter by</span>
+                        {(foraneFilter !== 'All' || schoolFilter !== 'All' || roleFilter !== 'All') && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-muted-foreground"
+                                onClick={() => { setForaneFilter('All'); setSchoolFilter('All'); setRoleFilter('All'); }}
+                            >
+                                Clear all
+                            </Button>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Select value={foraneFilter} onValueChange={setForaneFilter}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="All Foranes" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="All">All Foranes</SelectItem>
+                                {foraneNames.map(f => (
+                                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={schoolFilter} onValueChange={setSchoolFilter}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="All Schools / Parishes" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="All">All Schools / Parishes</SelectItem>
+                                {schoolNames.map(s => (
+                                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={roleFilter} onValueChange={setRoleFilter}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="All Roles" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="All">All Roles</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="school">Sunday School</SelectItem>
+                                <SelectItem value="animator">Animator</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Active filter badges */}
+                    {(foraneFilter !== 'All' || schoolFilter !== 'All' || roleFilter !== 'All') && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            {foraneFilter !== 'All' && (
+                                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setForaneFilter('All')}>
+                                    Forane: {foraneFilter} ✕
+                                </Badge>
+                            )}
+                            {schoolFilter !== 'All' && (
+                                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSchoolFilter('All')}>
+                                    School: {schoolFilter} ✕
+                                </Badge>
+                            )}
+                            {roleFilter !== 'All' && (
+                                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setRoleFilter('All')}>
+                                    Role: {roleFilter} ✕
+                                </Badge>
+                            )}
+                        </div>
+                    )}
+                </div>
                 <CardContent className="p-4 sm:p-6">
                     <div className="space-y-6 sm:space-y-8">
                         <div>
@@ -491,17 +630,15 @@ export function Reports() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-gray-200">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6 mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-gray-200">
                         <div className="text-center">
                             <p className="text-gray-600 text-sm mb-1">Total Events</p>
                             <p className="text-3xl font-semibold text-blue-600">{filteredEvents.length}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-gray-600 text-sm mb-1">Avg Events/Period</p>
-                            <p className="text-3xl font-semibold text-blue-600">
-                                {chartData.length > 0
-                                    ? (filteredEvents.length / chartData.length).toFixed(1)
-                                    : '0.0'}
+                            <p className="text-gray-600 text-sm mb-1">Published</p>
+                            <p className="text-3xl font-semibold text-green-600">
+                                {filteredEvents.filter(e => e.isPublic).length}
                             </p>
                         </div>
                         <div className="text-center">
@@ -511,9 +648,30 @@ export function Reports() {
                             </p>
                         </div>
                         <div className="text-center">
-                            <p className="text-gray-600 text-sm mb-1">Published Events</p>
-                            <p className="text-3xl font-semibold text-green-600">
-                                {filteredEvents.filter(e => e.isPublic).length}
+                            <p className="text-gray-600 text-sm mb-1">By Sunday School</p>
+                            <p className="text-3xl font-semibold text-indigo-600">
+                                {filteredEvents.filter(e => {
+                                    const creator = users.find(u => u.uid === e.creatorId || u.id === e.creatorId);
+                                    return creator?.role === 'school';
+                                }).length}
+                            </p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-gray-600 text-sm mb-1">By Animators</p>
+                            <p className="text-3xl font-semibold text-orange-600">
+                                {filteredEvents.filter(e => {
+                                    const creator = users.find(u => u.uid === e.creatorId || u.id === e.creatorId);
+                                    return creator?.role === 'animator';
+                                }).length}
+                            </p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-gray-600 text-sm mb-1">By Admin</p>
+                            <p className="text-3xl font-semibold text-purple-600">
+                                {filteredEvents.filter(e => {
+                                    const creator = users.find(u => u.uid === e.creatorId || u.id === e.creatorId);
+                                    return creator?.role === 'admin';
+                                }).length}
                             </p>
                         </div>
                     </div>

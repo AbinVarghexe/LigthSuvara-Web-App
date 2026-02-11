@@ -175,9 +175,9 @@ export function TeacherAssignment({ refreshTrigger }: TeacherAssignmentProps) {
 
       const targetParish = parishes.find((p) => p.id === targetParishId);
       if (targetParish) {
-        setTimeout(() => {
-          PdfService.generateFatherReport(teacher, targetParish, "General");
-          PdfService.generateTeacherDutyReport(
+        setTimeout(async () => {
+          await PdfService.generateFatherReport(teacher, targetParish, "General");
+          await PdfService.generateTeacherDutyReport(
             teacher,
             targetParish,
             "General",

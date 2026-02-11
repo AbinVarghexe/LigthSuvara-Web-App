@@ -1,22 +1,27 @@
 import jsPDF from "jspdf";
+import { createMalayalamPDF } from "../../../lib/pdfFonts";
 import { Teacher, Parish } from "../types";
 
 export const PdfService = {
-  generateFatherReport: (teacher: Teacher, parish: Parish, className: string) => {
-    const doc = new jsPDF();
+  generateFatherReport: async (teacher: Teacher, parish: Parish, className: string) => {
+    const doc = await createMalayalamPDF();
     
     // Header
     doc.setFontSize(22);
+    doc.setFont("NotoSansMalayalam", "bold");
     doc.text("Parish Inspection - Father's Report", 20, 20);
     
     doc.setFontSize(12);
+    doc.setFont("NotoSansMalayalam", "normal");
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 30);
     
     // Content
     doc.setFontSize(14);
+    doc.setFont("NotoSansMalayalam", "bold");
     doc.text("Inspection Details:", 20, 45);
     
     doc.setFontSize(12);
+    doc.setFont("NotoSansMalayalam", "normal");
     doc.text(`Parish Name: ${parish.name}`, 20, 55);
     doc.text(`Assigned Class: ${className}`, 20, 65);
     doc.text(`Academic Year: ${teacher.academicYear}`, 20, 75);
@@ -35,19 +40,22 @@ export const PdfService = {
     doc.save(`Father_Report_${parish.name.replace(/\s+/g, '_')}.pdf`);
   },
 
-  generateTeacherDutyReport: (teacher: Teacher, parish: Parish, className: string) => {
-    const doc = new jsPDF();
+  generateTeacherDutyReport: async (teacher: Teacher, parish: Parish, className: string) => {
+    const doc = await createMalayalamPDF();
     
     // Header
     doc.setFontSize(22);
+    doc.setFont("NotoSansMalayalam", "bold");
     doc.text("Inspection Duty Order", 20, 20);
     
     doc.setFontSize(12);
+    doc.setFont("NotoSansMalayalam", "normal");
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 30);
     doc.text(`Order ID: IMP-${Math.floor(Math.random() * 10000)}`, 140, 30);
     
     // Content
     doc.setFontSize(14);
+    doc.setFont("NotoSansMalayalam", "normal");
     doc.text(`Dear ${teacher.name},`, 20, 45);
     
     doc.setFontSize(12);
@@ -57,9 +65,9 @@ export const PdfService = {
     doc.setFillColor(240, 240, 240);
     doc.rect(20, 60, 170, 40, "F");
     
-    doc.setFont("helvetica", "bold");
+    doc.setFont("NotoSansMalayalam", "bold");
     doc.text(`${parish.name}`, 25, 70);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("NotoSansMalayalam", "normal");
     doc.text(`Class to Inspect: ${className}`, 25, 80);
     doc.text(`Location Coordinates: ${parish.location.lat}, ${parish.location.long}`, 25, 90);
     

@@ -3,7 +3,6 @@ import { Layout } from "../components/layout/Layout";
 import { Login } from "../pages/auth/Login";
 import { Dashboard } from "../pages/dashboard/Dashboard";
 import { Events } from "../pages/events/Events";
-import { EventApprovals } from "../pages/events/EventApprovals";
 import { EventDetail } from "../pages/events/EventDetail";
 import { EventForm } from "../pages/events/EventForm";
 import { Users } from "../pages/users/Users";
@@ -51,7 +50,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, Component: Dashboard },
           { path: "events", Component: Events },
-          { path: "events/approvals", Component: EventApprovals },
+          { path: "events/approvals", Component: Events },
           { path: "events/new", Component: EventForm },
           { path: "events/:id", Component: EventDetail },
           { path: "events/:id/edit", Component: EventForm },

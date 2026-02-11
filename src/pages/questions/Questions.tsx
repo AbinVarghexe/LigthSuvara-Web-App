@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
+import { createMalayalamPDF } from '../../lib/pdfFonts';
 import {
     DndContext,
     closestCenter,
@@ -390,13 +391,13 @@ export function Questions() {
         }
     };
 
-    const generateQuestionPaper = () => {
+    const generateQuestionPaper = async () => {
         if (questions.length === 0) {
             toast.error("No questions to export");
             return;
         }
 
-        const doc = new jsPDF();
+        const doc = await createMalayalamPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 20;
@@ -405,19 +406,19 @@ export function Questions() {
         // --- Header Section ---
         // School/Org Name
         doc.setFontSize(16);
-        doc.setFont('times', 'bold');
+        doc.setFont('NotoSansMalayalam', 'bold');
         doc.text('FAITH FORMATION PROGRAM', pageWidth / 2, yPos, { align: 'center' });
         yPos += 8;
 
         // Exam Title
         doc.setFontSize(14);
-        doc.setFont('times', 'bold');
+        doc.setFont('NotoSansMalayalam', 'bold');
         doc.text('ANNUAL ASSESSMENT', pageWidth / 2, yPos, { align: 'center' });
         yPos += 12;
 
         // Meta Info (Date, Time, Marks)
         doc.setFontSize(11);
-        doc.setFont('times', 'normal');
+        doc.setFont('NotoSansMalayalam', 'normal');
         
         // Left side meta
         doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
@@ -438,11 +439,11 @@ export function Questions() {
 
         // --- Instructions ---
         doc.setFontSize(11);
-        doc.setFont('times', 'bold italics');
+        doc.setFont('NotoSansMalayalam', 'bold');
         doc.text('General Instructions:', margin, yPos);
         yPos += 6;
         
-        doc.setFont('times', 'normal');
+        doc.setFont('NotoSansMalayalam', 'normal');
         doc.setFontSize(10);
         const instructions = [
             '1. All questions are compulsory.',
@@ -462,7 +463,7 @@ export function Questions() {
 
         // --- Questions Section ---
         doc.setFontSize(12);
-        doc.setFont('times', 'bold');
+        doc.setFont('NotoSansMalayalam', 'bold');
         doc.text('Section A: Questions', margin, yPos);
         yPos += 10;
 
@@ -474,7 +475,7 @@ export function Questions() {
             // Indent text slightly if it wraps? standard split
             const availableWidth = pageWidth - (margin * 2) - 15; // Reserve space for marks
             
-            doc.setFont('times', 'normal');
+            doc.setFont('NotoSansMalayalam', 'normal');
             doc.setFontSize(11);
             
             const splitText = doc.splitTextToSize(questionText, availableWidth);
@@ -492,7 +493,7 @@ export function Questions() {
             doc.text(splitText, margin, yPos);
             
             // Print Marks aligned to right
-            doc.setFont('times', 'bold');
+            doc.setFont('NotoSansMalayalam', 'bold');
             doc.text(marksText, pageWidth - margin, yPos, { align: 'right' });
             
             // Answer SpaceLines
@@ -523,7 +524,7 @@ export function Questions() {
         for (let i = 1; i <= totalPages; i++) {
             doc.setPage(i);
             doc.setFontSize(9);
-            doc.setFont('times', 'normal');
+            doc.setFont('NotoSansMalayalam', 'normal');
             doc.text(
                 `Page ${i} of ${totalPages}`,
                 pageWidth / 2,

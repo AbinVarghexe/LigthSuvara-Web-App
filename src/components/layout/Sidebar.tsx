@@ -6,7 +6,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  CheckCircle,
   X,
   GraduationCap,
   HelpCircle,
@@ -14,19 +13,14 @@ import {
   ClipboardList,
   MessageSquare,
   BookUser,
+  Church,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Events", href: "/events", icon: Calendar },
-  {
-    name: "Approvals",
-    href: "/events/approvals",
-    icon: CheckCircle,
-    adminOnly: true,
-  },
-  { name: "Users", href: "/users", icon: Users },
+  { name: "Sunday School", href: "/users", icon: Church },
   { name: "Teachers", href: "/teachers", icon: BookUser, adminOnly: true },
   { name: "Programs", href: "/programs", icon: GraduationCap, adminOnly: true },
   { name: "Questions", href: "/questions", icon: HelpCircle, adminOnly: true },
@@ -107,7 +101,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <ul className="space-y-1">
             {navigation.map((item) => {
               if (item.adminOnly && !isAdminUser) return null;
-              const isActive = location.pathname === item.href;
+              const isActive =
+                location.pathname === item.href ||
+                (item.href !== "/" && location.pathname.startsWith(item.href));
               return (
                 <li key={item.name}>
                   <Link

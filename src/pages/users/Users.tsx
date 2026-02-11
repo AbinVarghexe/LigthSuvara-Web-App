@@ -10,10 +10,12 @@ import {
   Download,
   FileSpreadsheet,
   Sparkles,
+  UserPlus,
 } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,6 +33,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -56,7 +59,67 @@ export function Users() {
   const [roleFilter, setRoleFilter] = useState("All");
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newUser, setNewUser] = useState({
+    email: "",
+    fullName: "",
+    role: "school" as "admin" | "school" | "animator",
+    schoolName: "",
+    phoneNumber: "",
+    password: "",
+    forane: "",
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const foraneNames = [
+    "Mundakayam",
+    "Kumily",
+    "Kanjirappally",
+    "Anakkara",
+    "Erumely",
+    "Ponkunnam",
+    "Kattappana",
+    "Upputhara",
+    "Ranny",
+    "Pathanamthitta",
+    "Velichiyani",
+    "Mundiyeruma",
+    "Peruvanthanam",
+  ];
+
+  const handleCreateUser = async () => {
+    if (!newUser.email || !newUser.role || !newUser.password) {
+      toast.error("Email, role, and password are required");
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const result = await bulkCreateUsers([newUser]);
+      if (result.success && result.created > 0) {
+        toast.success("User created successfully");
+        setIsCreateDialogOpen(false);
+        setNewUser({
+          email: "",
+          fullName: "",
+          role: "school",
+          schoolName: "",
+          phoneNumber: "",
+          password: "",
+          forane: "",
+        });
+        fetchUsers();
+      } else {
+        const errMsg = result.errors?.[0]?.error || "Failed to create user";
+        toast.error(errMsg);
+      }
+    } catch (error: any) {
+      console.error("Error creating user:", error);
+      toast.error(error.message || "Failed to create user");
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -184,12 +247,129 @@ export function Users() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-        <div className="flex items-center gap-4">
+        <h1 className="text-2xl font-bold text-foreground">Sunday School / Parish Management</h1>
+        <div className="flex flex-wrap items-center gap-3">
           <div className="text-sm text-muted-foreground">
             Total Users:{" "}
             <span className="font-medium text-foreground">{users.length}</span>
           </div>
+
+          {/* Create Individual User */}
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create New User</DialogTitle>
+                <DialogDescription>
+                  Add a new Sunday school or parish user account.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="user@example.com"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    placeholder="John Doe"
+                    value={newUser.fullName}
+                    onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="schoolName">School / Parish Name</Label>
+                  <Input
+                    id="schoolName"
+                    placeholder="St. Mary's School"
+                    value={newUser.schoolName}
+                    onChange={(e) => setNewUser({ ...newUser, schoolName: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="role">Role *</Label>
+                    <Select
+                      value={newUser.role}
+                      onValueChange={(val) => setNewUser({ ...newUser, role: val as any })}
+                    >
+                      <SelectTrigger id="role">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="school">School</SelectItem>
+                        <SelectItem value="animator">Animator</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="forane">Forane</Label>
+                    <Select
+                      value={newUser.forane}
+                      onValueChange={(val) => setNewUser({ ...newUser, forane: val })}
+                    >
+                      <SelectTrigger id="forane">
+                        <SelectValue placeholder="Select forane" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {foraneNames.map((f) => (
+                          <SelectItem key={f} value={f}>{f}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    placeholder="1234567890"
+                    value={newUser.phoneNumber}
+                    onChange={(e) => setNewUser({ ...newUser, phoneNumber: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Min 6 characters"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateUser}
+                  disabled={isCreating}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isCreating ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
+                  ) : (
+                    "Create User"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>

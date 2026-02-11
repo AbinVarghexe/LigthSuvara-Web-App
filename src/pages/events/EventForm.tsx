@@ -91,8 +91,8 @@ export function EventForm() {
                 status: isAdminUser ? 'approved' : 'pending', // Set status based on role
                 creatorId: currentUser.uid,
                 creatorSchoolName: schoolName,
-                creatorForane: forane,
-                imageUrl: imagePreview || undefined
+                ...(forane ? { creatorForane: forane } : {}),
+                ...(imagePreview ? { imageUrl: imagePreview } : {})
             };
 
             if (id) {
