@@ -59,9 +59,19 @@ export function Messages() {
     const [notifications, setNotifications] = useState<NotificationData[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'public' | 'allUsers' | 'specific'>('all');
 
     // Detail dialog
     const [selectedNotification, setSelectedNotification] = useState<NotificationData | null>(null);
+
+    // Filtered notifications
+    const filteredNotifications = notifications.filter(n => {
+        if (historyFilter === 'all') return true;
+        if (historyFilter === 'public') return n.audience === 'public' || n.recipientId === 'public';
+        if (historyFilter === 'allUsers') return n.audience === 'all' || n.recipientId === 'all';
+        if (historyFilter === 'specific') return n.audience === 'specific' || (n.recipientId !== 'public' && n.recipientId !== 'all' && n.audience !== 'public' && n.audience !== 'all');
+        return true;
+    });
 
     useEffect(() => {
         const fetchSchools = async () => {
@@ -412,29 +422,65 @@ export function Messages() {
                 {/* History Tab */}
                 <TabsContent value="history" className="mt-4 space-y-4">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between pb-4">
-                            <div>
-                                <CardTitle className="text-lg">Message History</CardTitle>
-                                <CardDescription>{notifications.length} messages sent</CardDescription>
+                        <CardHeader className="pb-4 space-y-3">
+                            <div className="flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-lg">Message History</CardTitle>
+                                    <CardDescription>{filteredNotifications.length} of {notifications.length} messages</CardDescription>
+                                </div>
+                                <Button variant="outline" size="sm" onClick={fetchHistory} disabled={historyLoading}>
+                                    {historyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Refresh'}
+                                </Button>
                             </div>
-                            <Button variant="outline" size="sm" onClick={fetchHistory} disabled={historyLoading}>
-                                {historyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Refresh'}
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    variant={historyFilter === 'all' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setHistoryFilter('all')}
+                                    className="h-7 text-xs"
+                                >
+                                    All
+                                </Button>
+                                <Button
+                                    variant={historyFilter === 'public' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setHistoryFilter('public')}
+                                    className="h-7 text-xs gap-1"
+                                >
+                                    <Globe className="w-3 h-3" /> Public Broadcast
+                                </Button>
+                                <Button
+                                    variant={historyFilter === 'allUsers' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setHistoryFilter('allUsers')}
+                                    className="h-7 text-xs gap-1"
+                                >
+                                    <Users className="w-3 h-3" /> All Users
+                                </Button>
+                                <Button
+                                    variant={historyFilter === 'specific' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setHistoryFilter('specific')}
+                                    className="h-7 text-xs gap-1"
+                                >
+                                    <School className="w-3 h-3" /> Specific Schools
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent className="p-0">
                             {historyLoading ? (
                                 <div className="flex items-center justify-center py-16">
                                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
                                 </div>
-                            ) : notifications.length === 0 ? (
+                            ) : filteredNotifications.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                                     <MessageSquare className="w-12 h-12 mb-3 opacity-30" />
-                                    <p className="font-medium">No messages yet</p>
-                                    <p className="text-sm">Messages you send will appear here.</p>
+                                    <p className="font-medium">{notifications.length === 0 ? 'No messages yet' : 'No messages match this filter'}</p>
+                                    <p className="text-sm">{notifications.length === 0 ? 'Messages you send will appear here.' : 'Try selecting a different filter.'}</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-border">
-                                    {notifications.map((n) => (
+                                    {filteredNotifications.map((n) => (
                                         <div
                                             key={n.id}
                                             className="p-4 sm:p-5 hover:bg-accent/50 transition-colors"
