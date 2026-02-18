@@ -20,6 +20,7 @@ import { NotAuthorized } from "../pages/auth/NotAuthorized";
 import { PrivacyPolicy } from "../pages/legal/PrivacyPolicy";
 import { LegalLayout } from "../components/layout/LegalLayout";
 import TeacherManagementPage from "../pages/teachers/TeacherManagementPage";
+import { Observers } from "../pages/observers/Observers";
 
 export const router = createBrowserRouter([
   {
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
           { path: "reports", Component: Reports },
           { path: "settings", Component: Settings },
           { path: "teachers", Component: TeacherManagementPage },
+          { path: "observers", Component: Observers },
         ],
       },
     ],

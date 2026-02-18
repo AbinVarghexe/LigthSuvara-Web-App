@@ -2,30 +2,54 @@ import { Link, useLocation } from "react-router";
 import {
   Home,
   Calendar,
-  Users,
   BarChart3,
   Settings,
   LogOut,
   X,
   GraduationCap,
-  HelpCircle,
   UserCheck,
-  ClipboardList,
   MessageSquare,
   BookUser,
   Church,
+  ChevronDown,
+  ChevronRight,
+  Eye,
 } from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 
-const navigation = [
+// Define navigation item type
+interface NavItem {
+  name: string;
+  href: string;
+  icon: any;
+  adminOnly?: boolean;
+  children?: NavItem[];
+}
+
+const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Events", href: "/events", icon: Calendar },
   { name: "Sunday School", href: "/users", icon: Church },
-  { name: "Teachers", href: "/teachers", icon: BookUser, adminOnly: true },
+  {
+    name: "Teacher Management",
+    href: "/teachers",
+    icon: BookUser,
+    adminOnly: true,
+  },
   { name: "Programs", href: "/programs", icon: GraduationCap, adminOnly: true },
-  { name: "Questions", href: "/questions", icon: HelpCircle, adminOnly: true },
-  { name: "Animators", href: "/animators", icon: UserCheck, adminOnly: true },
-  { name: "Marks", href: "/marks", icon: ClipboardList, adminOnly: true },
+  {
+    name: "Animator Management",
+    href: "/animators",
+    icon: UserCheck,
+    adminOnly: true,
+  },
+  {
+    name: "Observers",
+    href: "/observers",
+    icon: Eye,
+    adminOnly: true,
+  },
   { name: "Messages", href: "/messages", icon: MessageSquare },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
@@ -39,6 +63,17 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { isAdminUser } = useAuth();
+  const [expandedItems, setExpandedItems] = useState<string[]>([
+    "Animator Management",
+  ]);
+
+  const toggleExpand = (name: string) => {
+    setExpandedItems((prev) =>
+      prev.includes(name)
+        ? prev.filter((item) => item !== name)
+        : [...prev, name],
+    );
+  };
 
   const handleLogout = () => {
     window.location.href = "/login";
@@ -101,23 +136,87 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <ul className="space-y-1">
             {navigation.map((item) => {
               if (item.adminOnly && !isAdminUser) return null;
+
+              const hasChildren = item.children && item.children.length > 0;
+              const isExpanded = expandedItems.includes(item.name);
+
               const isActive =
-                location.pathname === item.href ||
-                (item.href !== "/" && location.pathname.startsWith(item.href));
+                !hasChildren &&
+                (location.pathname === item.href ||
+                  (item.href !== "/" &&
+                    location.pathname.startsWith(item.href)));
+
+              // Check if any child is active to highlight parent if needed (optional)
+              const isChildActive = item.children?.some(
+                (child) => location.pathname === child.href,
+              );
+
               return (
                 <li key={item.name}>
-                  <Link
-                    to={item.href}
-                    onClick={() => onClose()}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </Link>
+                  {hasChildren ? (
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => toggleExpand(item.name)}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                          isChildActive
+                            ? "text-primary bg-primary/10"
+                            : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className="w-5 h-5" />
+                          <span className="font-medium">{item.name}</span>
+                        </div>
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 ml-auto" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 ml-auto" />
+                        )}
+                      </button>
+
+                      {isExpanded && (
+                        <ul className="pl-6 space-y-1">
+                          {item.children!.map((child) => {
+                            if (child.adminOnly && !isAdminUser) return null;
+                            const isChildActive =
+                              location.pathname === child.href;
+
+                            return (
+                              <li key={child.name}>
+                                <Link
+                                  to={child.href}
+                                  onClick={() => onClose()}
+                                  className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${
+                                    isChildActive
+                                      ? "bg-primary text-primary-foreground"
+                                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                  }`}
+                                >
+                                  <child.icon className="w-4 h-4" />
+                                  <span className="font-medium">
+                                    {child.name}
+                                  </span>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  ) : (
+                    <Link
+                      to={item.href}
+                      onClick={() => onClose()}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span className="font-medium">{item.name}</span>
+                    </Link>
+                  )}
                 </li>
               );
             })}

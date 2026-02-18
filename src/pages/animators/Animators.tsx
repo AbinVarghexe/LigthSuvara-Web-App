@@ -8,6 +8,9 @@ import {
   Trash2,
   UserPlus,
   X,
+  Users,
+  HelpCircle,
+  BarChart2,
 } from "lucide-react";
 import {
   Card,
@@ -63,6 +66,14 @@ import {
   AnimatorWithUser,
   AnimatorAssignment,
 } from "../../features/animators/services/animatorService";
+import { Questions } from "../questions/Questions";
+import { Marks } from "../marks/Marks";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
 
 interface SchoolData {
   id: string;
@@ -72,7 +83,7 @@ interface SchoolData {
   forane?: string;
 }
 
-export function Animators() {
+export function AnimatorsList() {
   const [animators, setAnimators] = useState<AnimatorWithUser[]>([]);
   const [unassignedSchools, setUnassignedSchools] = useState<SchoolData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +153,7 @@ export function Animators() {
         formData.fullName,
         formData.phoneNumber,
         formData.parish,
-        formData.address
+        formData.address,
       );
       toast.success("Animator created successfully");
       setIsCreateDialogOpen(false);
@@ -197,7 +208,7 @@ export function Animators() {
 
   const handleRemoveAssignment = async (
     animatorId: string,
-    assignment: AnimatorAssignment
+    assignment: AnimatorAssignment,
   ) => {
     try {
       await removeAssignment(animatorId, assignment);
@@ -228,7 +239,7 @@ export function Animators() {
   const filteredAnimators = animators.filter(
     (animator) =>
       animator.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animator.email.toLowerCase().includes(searchTerm.toLowerCase())
+      animator.email.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   if (loading) {
@@ -425,8 +436,8 @@ export function Animators() {
                       animator.assignments.length === 2
                         ? "default"
                         : animator.assignments.length === 0
-                        ? "secondary"
-                        : "outline"
+                          ? "secondary"
+                          : "outline"
                     }
                   >
                     {animator.assignments.length}/2
@@ -572,6 +583,38 @@ export function Animators() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+export function Animators() {
+  return (
+    <div className="container mx-auto py-6">
+      <Tabs defaultValue="animators" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="animators" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Animators
+          </TabsTrigger>
+          <TabsTrigger value="questions" className="flex items-center gap-2">
+            <HelpCircle className="h-4 w-4" />
+            Questions
+          </TabsTrigger>
+          <TabsTrigger value="marks" className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4" />
+            Marks
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="animators" className="space-y-4">
+          <AnimatorsList />
+        </TabsContent>
+        <TabsContent value="questions" className="space-y-4">
+          <Questions />
+        </TabsContent>
+        <TabsContent value="marks" className="space-y-4">
+          <Marks />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

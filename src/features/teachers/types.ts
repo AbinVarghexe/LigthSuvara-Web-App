@@ -15,12 +15,16 @@ export interface Teacher {
     lat: number;
     long: number;
   };
-  createdAt: string; 
+  createdAt: string;
+  dob: string; // ISO date string
+  profilePicture?: string;
+  qualification: string;
 }
 
 export interface Parish {
   id: string;
   name: string;
+  forane: string;
   location: {
     lat: number;
     long: number;
@@ -43,6 +47,9 @@ export const createTeacherSchema = z.object({
   parishId: z.string().min(1, "Parish is required"),
   classes: z.array(z.string()).min(1, "At least one class is required"),
   academicYear: z.string().min(1, "Academic Year is required"),
+  dob: z.string().min(1, "Date of Birth is required"),
+  qualification: z.string().min(1, "Qualification is required"),
+  profilePicture: z.string().optional(),
 });
 
 export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;

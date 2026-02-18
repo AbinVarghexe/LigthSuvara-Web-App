@@ -44,6 +44,16 @@ export const TeacherService = {
   },
 
   /**
+   * Update an existing teacher
+   */
+  updateTeacher: async (teacherId: string, data: Partial<CreateTeacherInput>): Promise<void> => {
+      const teacherRef = doc(db, TEACHERS_COLLECTION, teacherId);
+      await updateDoc(teacherRef, {
+        ...data,
+      });
+  },
+
+  /**
    * Get all teachers, optionally filtered
    */
   getTeachers: async (filters?: { parishId?: string; classId?: string }): Promise<Teacher[]> => {

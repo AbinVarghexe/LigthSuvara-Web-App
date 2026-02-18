@@ -9,10 +9,12 @@ import {
   User,
   Loader2,
   Trash2,
+  Pencil,
+  GraduationCap,
 } from "lucide-react";
 import { Teacher } from "../types";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface TeacherListProps {
   teachers: Teacher[];
@@ -20,6 +22,7 @@ interface TeacherListProps {
   showAssignAction?: boolean;
   assigningId?: string | null;
   onDeleteClick?: (teacher: Teacher) => void;
+  onEditClick?: (teacher: Teacher) => void;
 }
 
 export function TeacherList({
@@ -28,6 +31,7 @@ export function TeacherList({
   showAssignAction = false,
   assigningId = null,
   onDeleteClick,
+  onEditClick,
 }: TeacherListProps) {
   if (teachers.length === 0) {
     return (
@@ -52,6 +56,10 @@ export function TeacherList({
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12 border">
+                  <AvatarImage
+                    src={teacher.profilePicture}
+                    alt={teacher.name}
+                  />
                   <AvatarFallback className="bg-primary/10 text-primary font-medium">
                     {teacher.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
@@ -78,17 +86,30 @@ export function TeacherList({
                     Available
                   </Badge>
                 )}
-                {onDeleteClick && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
-                    onClick={() => onDeleteClick(teacher)}
-                    title="Delete Teacher"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex gap-1">
+                  {onEditClick && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                      onClick={() => onEditClick(teacher)}
+                      title="Edit Teacher"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {onDeleteClick && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => onDeleteClick(teacher)}
+                      title="Delete Teacher"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -101,6 +122,12 @@ export function TeacherList({
                 <Phone className="w-4 h-4 text-muted-foreground" />
                 <span>{teacher.phone}</span>
               </div>
+              {teacher.qualification && (
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-muted-foreground" />
+                  <span>{teacher.qualification}</span>
+                </div>
+              )}
               <div className="flex items-start gap-2">
                 <BookOpen className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <div className="flex flex-wrap gap-1">

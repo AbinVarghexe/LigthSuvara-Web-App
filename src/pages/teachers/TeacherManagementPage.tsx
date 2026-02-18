@@ -6,6 +6,7 @@ import { CreateTeacherForm } from "@/features/teachers/components/CreateTeacherF
 import { TeacherAssignment } from "@/features/teachers/components/TeacherAssignment";
 import { SeedService } from "@/features/teachers/services/seedService";
 import { seedParishes } from "@/features/parishes/services/parishSeeder";
+import { Teacher } from "@/features/teachers/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,10 +21,24 @@ export default function TeacherManagementPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState<Teacher | undefined>(
+    undefined,
+  );
 
   const handleTeacherAdded = () => {
     setRefreshKey((prev) => prev + 1);
     setIsDialogOpen(false);
+    setEditingTeacher(undefined);
+  };
+
+  const handleEditTeacher = (teacher: Teacher) => {
+    setEditingTeacher(teacher);
+    setIsDialogOpen(true);
+  };
+
+  const handleDialogChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) setEditingTeacher(undefined);
   };
 
   const handleSeedData = async () => {
@@ -90,23 +105,29 @@ export default function TeacherManagementPage() {
             Seed Parishes
           </Button>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={() => setEditingTeacher(undefined)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Teacher
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Teacher</DialogTitle>
+                <DialogTitle>
+                  {editingTeacher ? "Edit Teacher" : "Add New Teacher"}
+                </DialogTitle>
                 <DialogDescription>
-                  Fill in the details to register a new teacher.
+                  {editingTeacher
+                    ? "Update teacher details."
+                    : "Fill in the details to register a new teacher."}
                 </DialogDescription>
               </DialogHeader>
               <CreateTeacherForm
                 onTeacherAdded={handleTeacherAdded}
-                onCancel={() => setIsDialogOpen(false)}
+                onCancel={() => handleDialogChange(false)}
+                initialData={editingTeacher}
+                isEditing={!!editingTeacher}
               />
             </DialogContent>
           </Dialog>
@@ -114,7 +135,10 @@ export default function TeacherManagementPage() {
       </div>
 
       <section>
-        <TeacherAssignment refreshTrigger={refreshKey} />
+        <TeacherAssignment
+          refreshTrigger={refreshKey}
+          onEditTeacher={handleEditTeacher}
+        />
       </section>
     </div>
   );

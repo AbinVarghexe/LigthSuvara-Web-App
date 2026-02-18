@@ -141,6 +141,51 @@ export const AssignmentService = {
     }
 
     return { assignments, errors };
+  },
+
+  /**
+   * Get all assignments
+   */
+  getAssignments: async () => {
+    const q = query(collection(db, ASSIGNMENTS_COLLECTION));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  },
+
+  /**
+   * Delete an assignment
+   */
+  deleteAssignment: async (assignmentId: string, teacherId: string) => {
+    // 1. Delete assignment doc
+    const { deleteDoc, doc } = await import("firebase/firestore");
+    await deleteDoc(doc(db, ASSIGNMENTS_COLLECTION, assignmentId));
+
+    // 2. Update Teacher Status (Unassign)
+    // @ts-ignore - allowing null for unassignment
+    await TeacherService.setAssigned(teacherId, null);
+  },
+
+  /**
+   * Update an assignment
+   */
+  updateAssignment: async (assignmentId: string, oldTeacherId: string, newTeacherId: string, newParishId: string) => {
+     // 1. Unassign old teacher
+     if (oldTeacherId && oldTeacherId !== newTeacherId) {
+         // @ts-ignore - allowing null for unassignment
+         await TeacherService.setAssigned(oldTeacherId, null);
+     }
+     
+     // 2. Assign new teacher (if changed)
+     if (newTeacherId) {
+         await TeacherService.setAssigned(newTeacherId, newParishId);
+     }
+
+     // 3. Update Assignment Doc
+     const { updateDoc, doc } = await import("firebase/firestore");
+     await updateDoc(doc(db, ASSIGNMENTS_COLLECTION, assignmentId), {
+         teacherId: newTeacherId,
+         parishId: newParishId
+     });
   }
 };
 

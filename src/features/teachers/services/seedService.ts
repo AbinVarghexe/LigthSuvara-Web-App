@@ -8,6 +8,7 @@ export const SeedService = {
     const parishRef = doc(db, "parishes", "demo-parish-01");
     await setDoc(parishRef, {
       name: "St. Thomas Church, Demo Town",
+      forane: "Edappally",
       location: {
         lat: 9.9312, 
         long: 76.2673 // Kochi coordinates approx
@@ -18,6 +19,7 @@ export const SeedService = {
     const parishRef2 = doc(db, "parishes", "demo-parish-02");
     await setDoc(parishRef2, {
         name: "St. Mary's Basilica, Nearby City",
+        forane: "Ernakulam",
         location: {
             lat: 9.9658,
             long: 76.2421 // Slightly northwest
@@ -39,7 +41,10 @@ export const SeedService = {
         lat: 9.9658,
         long: 76.2421
       },
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      dob: "1990-01-01",
+      qualification: "B.Ed, MA English",
+      profilePicture: "https://api.dicebear.com/9.x/avataaars/svg?seed=Felix"
     };
 
     // Check if demo teacher exists to avoid duplicates on multiple clicks
