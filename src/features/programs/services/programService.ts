@@ -10,13 +10,15 @@ import {
     where,
     orderBy,
     serverTimestamp,
-    Timestamp
+    Timestamp,
+    onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 
 export interface ProgramData {
     id?: string;
     name: string;
+    description?: string;
     startDate: Date | Timestamp;
     endDate: Date | Timestamp;
     isActive: boolean;
@@ -144,4 +146,17 @@ export const getRegistrationStats = async (programId?: string) => {
         rejected: registrations.filter(r => r.status === 'rejected').length
     };
     return stats;
+};
+
+/** Real-time listener for programs. Returns an unsubscribe function. */
+export const subscribeToPrograms = (
+    callback: (programs: ProgramData[]) => void
+) => {
+    const q = query(collection(db, 'programs'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+        const programs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ProgramData));
+        callback(programs);
+    }, (error) => {
+        console.error('Error subscribing to programs:', error);
+    });
 };

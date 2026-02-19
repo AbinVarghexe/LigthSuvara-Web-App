@@ -19,6 +19,7 @@ export interface QuestionData {
     text: string;
     maxMarks: number;
     order: number;
+    mandatory?: boolean;
     createdAt?: Timestamp;
 }
 
@@ -76,4 +77,9 @@ export const reorderQuestions = async (questions: QuestionData[]) => {
 export const getTotalMaxMarks = async (): Promise<number> => {
     const questions = await getQuestions();
     return questions.reduce((total, q) => total + q.maxMarks, 0);
+};
+
+export const toggleMandatory = async (questionId: string, currentValue: boolean) => {
+    const docRef = doc(db, 'questions', questionId);
+    return await updateDoc(docRef, { mandatory: !currentValue });
 };

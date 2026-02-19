@@ -17,6 +17,9 @@ import {
   LayoutList,
   ChevronDown,
   ChevronUp,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -37,6 +40,7 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -70,6 +74,9 @@ import {
   searchMarks,
   getMarksStats,
   toggleMarksLock,
+  updateMarksRemark,
+  updateQuestionRemark,
+  updateQuestionMark,
   MarksData,
   MarksWithDetails,
 } from "../../features/marks/services/marksService";
@@ -82,7 +89,7 @@ export function Marks() {
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [selectedMarks, setSelectedMarks] = useState<MarksWithDetails | null>(
-    null
+    null,
   );
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
@@ -95,6 +102,20 @@ export function Marks() {
     averagePercentage: 0,
     maxPossibleMarks: 0,
   });
+  const [isEditingRemark, setIsEditingRemark] = useState(false);
+  const [editRemarkText, setEditRemarkText] = useState("");
+  const [savingRemark, setSavingRemark] = useState(false);
+
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
+    null,
+  );
+  const [editingQuestionRemark, setEditingQuestionRemark] = useState("");
+  const [savingQuestionRemark, setSavingQuestionRemark] = useState(false);
+
+  // States for marks editing
+  const [editingMarkId, setEditingMarkId] = useState<string | null>(null);
+  const [editingMarkValue, setEditingMarkValue] = useState("");
+  const [savingMark, setSavingMark] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -147,6 +168,10 @@ export function Marks() {
       if (details) {
         setSelectedMarks(details);
         setShowAllQuestions(false);
+        setIsEditingRemark(false);
+        setEditRemarkText(details.remarks || "");
+        setEditingQuestionId(null);
+        setEditingMarkId(null);
         setIsDetailDialogOpen(true);
       }
     } catch (error) {
@@ -155,11 +180,137 @@ export function Marks() {
     }
   };
 
+  const handleSaveRemark = async () => {
+    if (!selectedMarks) return;
+    try {
+      setSavingRemark(true);
+      await updateMarksRemark(selectedMarks.id!, editRemarkText);
+      toast.success("Remark updated successfully");
+
+      const updatedMarks = { ...selectedMarks, remarks: editRemarkText };
+      setSelectedMarks(updatedMarks);
+      setMarks(
+        marks.map((m) =>
+          m.id === selectedMarks.id ? { ...m, remarks: editRemarkText } : m,
+        ),
+      );
+
+      setIsEditingRemark(false);
+    } catch (error) {
+      console.error("Error saving remark:", error);
+      toast.error("Failed to save remark");
+    } finally {
+      setSavingRemark(false);
+    }
+  };
+
+  const handleSaveQuestionRemark = async (questionId: string) => {
+    if (!selectedMarks) return;
+    try {
+      setSavingQuestionRemark(true);
+      await updateQuestionRemark(
+        selectedMarks.id!,
+        questionId,
+        editingQuestionRemark,
+      );
+      toast.success("Question remark updated successfully");
+
+      const currentQuestionRemarks = selectedMarks.questionRemarks || {};
+      const updatedQuestionRemarks = {
+        ...currentQuestionRemarks,
+        [questionId]: editingQuestionRemark,
+      };
+
+      const updatedMarks = {
+        ...selectedMarks,
+        questionRemarks: updatedQuestionRemarks,
+      };
+      setSelectedMarks(updatedMarks);
+      setMarks(
+        marks.map((m) =>
+          m.id === selectedMarks.id
+            ? { ...m, questionRemarks: updatedQuestionRemarks }
+            : m,
+        ),
+      );
+
+      setEditingQuestionId(null);
+    } catch (error) {
+      console.error("Error saving question remark:", error);
+      toast.error("Failed to save question remark");
+    } finally {
+      setSavingQuestionRemark(false);
+    }
+  };
+
+  const handleSaveQuestionMark = async (
+    questionId: string,
+    maxMarks: number,
+  ) => {
+    if (!selectedMarks) return;
+
+    const newMarkValue = parseInt(editingMarkValue);
+    if (isNaN(newMarkValue) || newMarkValue < 0 || newMarkValue > maxMarks) {
+      toast.error(`Mark must be between 0 and ${maxMarks}`);
+      return;
+    }
+
+    try {
+      setSavingMark(true);
+      await updateQuestionMark(selectedMarks.id!, questionId, newMarkValue);
+
+      // Update local state and totals
+      const updatedMarksMap = {
+        ...selectedMarks.marks,
+        [questionId]: newMarkValue,
+      };
+
+      // Recalculate totals
+      let newTotal = 0;
+      selectedMarks.questions.forEach((q) => {
+        if (q.id) {
+          if (q.id === questionId) {
+            newTotal += newMarkValue;
+          } else if (updatedMarksMap[q.id] !== undefined) {
+            newTotal += updatedMarksMap[q.id];
+          }
+        }
+      });
+
+      const newPercentage =
+        selectedMarks.maxTotalMarks > 0
+          ? (newTotal / selectedMarks.maxTotalMarks) * 100
+          : 0;
+
+      const updatedMarksData = {
+        ...selectedMarks,
+        marks: updatedMarksMap,
+        totalMarks: newTotal,
+        percentage: newPercentage,
+      };
+
+      setSelectedMarks(updatedMarksData);
+      setMarks(
+        marks.map((m) =>
+          m.id === selectedMarks.id ? { ...m, ...updatedMarksData } : m,
+        ),
+      );
+
+      setEditingMarkId(null);
+      toast.success("Mark updated successfully");
+    } catch (error) {
+      console.error("Error saving mark:", error);
+      toast.error("Failed to save mark");
+    } finally {
+      setSavingMark(false);
+    }
+  };
+
   const handleToggleLock = async (marksId: string, currentStatus: boolean) => {
     try {
       await toggleMarksLock(marksId, currentStatus);
       toast.success(
-        `Marks ${!currentStatus ? "finalized" : "unfinalized"} successfully`
+        `Marks ${!currentStatus ? "finalized" : "unfinalized"} successfully`,
       );
 
       // Refresh data
@@ -729,9 +880,9 @@ export function Marks() {
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        School
+                        Assigned Sunday School
                       </span>
-                      <p className="font-semibold text-sm">
+                      <p className="font-semibold text-sm text-blue-700 dark:text-blue-400">
                         {selectedMarks.sundaySchool}
                       </p>
                     </div>
@@ -772,7 +923,7 @@ export function Marks() {
                       <div className="flex flex-col items-end gap-2 min-w-[150px]">
                         <div
                           className={`text-2xl font-bold ${getScoreColor(
-                            selectedMarks.percentage
+                            selectedMarks.percentage,
                           )}`}
                         >
                           {selectedMarks.percentage.toFixed(1)}%
@@ -817,21 +968,179 @@ export function Marks() {
                                 : 0;
                               return (
                                 <TableRow key={question.id}>
-                                  <TableCell className="font-medium text-muted-foreground">
+                                  <TableCell className="font-medium text-muted-foreground align-top pt-4">
                                     {index + 1}
                                   </TableCell>
-                                  <TableCell className="text-sm">
-                                    <div
-                                      className="max-w-[140px] truncate md:max-w-none md:whitespace-normal md:overflow-visible"
-                                      title={question.text}
-                                    >
-                                      {question.text}
+                                  <TableCell className="text-sm py-3">
+                                    <div className="flex flex-col gap-2">
+                                      <div className="max-w-[140px] md:max-w-none md:whitespace-normal">
+                                        {question.text}
+                                      </div>
+
+                                      {/* Question Remark Section */}
+                                      <div className="mt-2 text-xs">
+                                        {editingQuestionId === question.id ? (
+                                          <div className="space-y-2 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-md border">
+                                            <Textarea
+                                              value={editingQuestionRemark}
+                                              onChange={(e) =>
+                                                setEditingQuestionRemark(
+                                                  e.target.value,
+                                                )
+                                              }
+                                              placeholder="Enter remark for this question..."
+                                              className="min-h-[60px] text-xs"
+                                            />
+                                            <div className="flex items-center gap-2 justify-end">
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 text-xs px-2"
+                                                onClick={() =>
+                                                  setEditingQuestionId(null)
+                                                }
+                                                disabled={savingQuestionRemark}
+                                              >
+                                                Cancel
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                className="h-7 text-xs px-2"
+                                                onClick={() =>
+                                                  handleSaveQuestionRemark(
+                                                    question.id!,
+                                                  )
+                                                }
+                                                disabled={savingQuestionRemark}
+                                              >
+                                                {savingQuestionRemark && (
+                                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                                )}
+                                                Save
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-start gap-2 group/remark">
+                                            {selectedMarks.questionRemarks &&
+                                            selectedMarks.questionRemarks[
+                                              question.id!
+                                            ] ? (
+                                              <div className="flex-1 bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-dashed text-muted-foreground italic break-words">
+                                                <span className="font-semibold not-italic mr-1">
+                                                  Remark:
+                                                </span>
+                                                {
+                                                  selectedMarks.questionRemarks[
+                                                    question.id!
+                                                  ]
+                                                }
+                                              </div>
+                                            ) : (
+                                              <div className="flex-1 text-muted-foreground/50 italic py-1">
+                                                No specific remark
+                                              </div>
+                                            )}
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-6 px-2 text-[10px] shrink-0"
+                                              onClick={() => {
+                                                const currentRemark =
+                                                  selectedMarks
+                                                    .questionRemarks?.[
+                                                    question.id!
+                                                  ] || "";
+                                                setEditingQuestionRemark(
+                                                  currentRemark,
+                                                );
+                                                setEditingQuestionId(
+                                                  question.id!,
+                                                );
+                                              }}
+                                            >
+                                              <Pencil className="h-3 w-3 mr-1" />
+                                              Edit
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="text-right font-medium">
-                                    {questionMarks || 0}
+                                  <TableCell className="text-right font-medium align-top pt-4">
+                                    {editingMarkId === question.id ? (
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          max={question.maxMarks}
+                                          value={editingMarkValue}
+                                          onChange={(e) =>
+                                            setEditingMarkValue(e.target.value)
+                                          }
+                                          className="h-7 w-16 text-right px-1 text-sm font-medium"
+                                          autoFocus
+                                          disabled={savingMark}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter")
+                                              handleSaveQuestionMark(
+                                                question.id!,
+                                                question.maxMarks,
+                                              );
+                                            if (e.key === "Escape")
+                                              setEditingMarkId(null);
+                                          }}
+                                        />
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                          onClick={() =>
+                                            handleSaveQuestionMark(
+                                              question.id!,
+                                              question.maxMarks,
+                                            )
+                                          }
+                                          disabled={savingMark}
+                                        >
+                                          {savingMark ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Check className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => setEditingMarkId(null)}
+                                          disabled={savingMark}
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-end gap-1 group/mark">
+                                        <span>{questionMarks || 0}</span>
+                                        {!selectedMarks.locked && (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 opacity-0 group-hover/mark:opacity-100 transition-opacity"
+                                            onClick={() => {
+                                              setEditingMarkId(question.id!);
+                                              setEditingMarkValue(
+                                                (questionMarks || 0).toString(),
+                                              );
+                                            }}
+                                          >
+                                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    )}
                                   </TableCell>
-                                  <TableCell className="text-right text-muted-foreground">
+                                  <TableCell className="text-right text-muted-foreground align-top pt-4">
                                     {question.maxMarks}
                                   </TableCell>
                                 </TableRow>
@@ -856,7 +1165,6 @@ export function Marks() {
                           variant="default"
                           size="sm"
                           onClick={() => setShowAllQuestions(!showAllQuestions)}
-                         
                         >
                           {showAllQuestions ? (
                             <>
@@ -874,18 +1182,66 @@ export function Marks() {
                   </div>
 
                   {/* Remarks */}
-                  {selectedMarks.remarks && (
-                    <div className="space-y-2">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
                         Remarks
                       </h4>
+                      {!isEditingRemark && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditRemarkText(selectedMarks.remarks || "");
+                            setIsEditingRemark(true);
+                          }}
+                        >
+                          {selectedMarks.remarks ? "Edit Remark" : "Add Remark"}
+                        </Button>
+                      )}
+                    </div>
+
+                    {isEditingRemark ? (
+                      <div className="space-y-3">
+                        <Textarea
+                          value={editRemarkText}
+                          onChange={(e) => setEditRemarkText(e.target.value)}
+                          placeholder="Enter your remarks here..."
+                          className="min-h-[100px]"
+                        />
+                        <div className="flex items-center gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsEditingRemark(false)}
+                            disabled={savingRemark}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSaveRemark}
+                            disabled={savingRemark}
+                          >
+                            {savingRemark && (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            )}
+                            Save Remark
+                          </Button>
+                        </div>
+                      </div>
+                    ) : selectedMarks.remarks ? (
                       <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border">
-                        <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+                        <p className="text-sm text-gray-700 dark:text-gray-300 italic whitespace-pre-wrap">
                           "{selectedMarks.remarks}"
                         </p>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-dashed flex items-center justify-center text-muted-foreground text-sm">
+                        No remarks added yet. Click "Add Remark" to enter one.
+                      </div>
+                    )}
+                  </div>
 
                   {/* Actions */}
                   <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
@@ -900,7 +1256,7 @@ export function Marks() {
                       onClick={() =>
                         handleToggleLock(
                           selectedMarks.id!,
-                          selectedMarks.locked
+                          selectedMarks.locked,
                         )
                       }
                       className={

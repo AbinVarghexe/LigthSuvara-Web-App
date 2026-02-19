@@ -11,6 +11,7 @@ import {
   Users,
   HelpCircle,
   BarChart2,
+  Edit2,
 } from "lucide-react";
 import {
   Card,
@@ -65,6 +66,7 @@ import {
   getAnimatorStats,
   AnimatorWithUser,
   AnimatorAssignment,
+  updateAnimator,
 } from "../../features/animators/services/animatorService";
 import { Questions } from "../questions/Questions";
 import { Marks } from "../marks/Marks";
@@ -90,6 +92,7 @@ export function AnimatorsList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedAnimator, setSelectedAnimator] =
     useState<AnimatorWithUser | null>(null);
   const [stats, setStats] = useState({
@@ -103,6 +106,14 @@ export function AnimatorsList() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
+    fullName: "",
+    phoneNumber: "",
+    address: "",
+    parish: "",
+  });
+
+  // Form state for editing animator
+  const [editFormData, setEditFormData] = useState<Partial<AnimatorWithUser>>({
     fullName: "",
     phoneNumber: "",
     address: "",
@@ -169,6 +180,36 @@ export function AnimatorsList() {
     } catch (error: any) {
       console.error("Error creating animator:", error);
       toast.error(error.message || "Failed to create animator");
+    }
+  };
+
+  const openEditDialog = (animator: AnimatorWithUser) => {
+    setSelectedAnimator(animator);
+    setEditFormData({
+      fullName: animator.fullName,
+      phoneNumber: animator.phoneNumber || "",
+      address: animator.address || "",
+      parish: animator.parish || "",
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateAnimator = async () => {
+    if (!selectedAnimator) return;
+    if (!editFormData.fullName) {
+      toast.error("Full Name cannot be empty");
+      return;
+    }
+
+    try {
+      await updateAnimator(selectedAnimator.id, editFormData);
+      toast.success("Animator updated successfully");
+      setIsEditDialogOpen(false);
+      setSelectedAnimator(null);
+      fetchData();
+    } catch (error: any) {
+      console.error("Error updating animator:", error);
+      toast.error(error.message || "Failed to update animator");
     }
   };
 
@@ -429,6 +470,11 @@ export function AnimatorsList() {
                         {animator.fullName}
                       </CardTitle>
                       <p className="text-sm text-gray-500">{animator.email}</p>
+                      {animator.parish && (
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-0.5">
+                          {animator.parish}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <Badge
@@ -496,6 +542,14 @@ export function AnimatorsList() {
                       Assign School
                     </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 border-gray-200"
+                    onClick={() => openEditDialog(animator)}
+                  >
+                    <Edit2 className="h-4 w-4 text-blue-500" />
+                  </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-9 w-9">
@@ -580,6 +634,76 @@ export function AnimatorsList() {
             >
               Assign School
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Animator</DialogTitle>
+            <DialogDescription>
+              Update animator profile details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-fullName">Full Name *</Label>
+              <Input
+                id="edit-fullName"
+                value={editFormData.fullName || ""}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, fullName: e.target.value })
+                }
+                placeholder="Enter full name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phoneNumber">Phone Number</Label>
+              <Input
+                id="edit-phoneNumber"
+                value={editFormData.phoneNumber || ""}
+                onChange={(e) =>
+                  setEditFormData({
+                    ...editFormData,
+                    phoneNumber: e.target.value,
+                  })
+                }
+                placeholder="Enter phone number"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-address">Address</Label>
+              <Input
+                id="edit-address"
+                value={editFormData.address || ""}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, address: e.target.value })
+                }
+                placeholder="Enter address"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-parish">Parish</Label>
+              <Input
+                id="edit-parish"
+                value={editFormData.parish || ""}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, parish: e.target.value })
+                }
+                placeholder="Enter parish"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateAnimator}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

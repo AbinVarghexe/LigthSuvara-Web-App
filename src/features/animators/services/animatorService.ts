@@ -12,7 +12,8 @@ import {
     arrayUnion,
     arrayRemove
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { auth, db } from '../../../config/firebase';
 
 export interface AnimatorAssignment {
@@ -105,7 +106,6 @@ export const getAnimator = async (animatorId: string): Promise<AnimatorWithUser 
     };
 };
 
-// Create animator account
 export const createAnimator = async (
     email: string,
     password: string,
@@ -114,30 +114,62 @@ export const createAnimator = async (
     parish?: string,
     address?: string
 ): Promise<string> => {
-    // Create Firebase Auth account
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const uid = userCredential.user.uid;
-    
-    // Create user document with animator role
-    await setDoc(doc(db, 'users', uid), {
-        uid,
-        email,
-        fullName,
-        role: 'animator',
-        phoneNumber: phoneNumber || '',
-        parish: parish || '',
-        address: address || '',
-        createdAt: Timestamp.now()
-    });
-    
-    // Create empty animator_assignments document
-    await setDoc(doc(db, 'animator_assignments', uid), {
-        animatorName: fullName,
-        animatorEmail: email,
-        assignments: []
-    });
-    
-    return uid;
+    // Use a secondary Firebase app to create the user without
+    // affecting the admin's auth session on the primary app.
+    const secondaryApp = initializeApp(auth.app.options, 'secondaryApp');
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+        const uid = userCredential.user.uid;
+
+        // Create user document with animator role
+        await setDoc(doc(db, 'users', uid), {
+            uid,
+            email,
+            fullName,
+            role: 'animator',
+            phoneNumber: phoneNumber || '',
+            parish: parish || '',
+            address: address || '',
+            createdAt: Timestamp.now()
+        });
+
+        // Create empty animator_assignments document
+        await setDoc(doc(db, 'animator_assignments', uid), {
+            animatorName: fullName,
+            animatorEmail: email,
+            assignments: []
+        });
+
+        return uid;
+    } finally {
+        // Always clean up the secondary app
+        await deleteApp(secondaryApp);
+    }
+};
+
+export const updateAnimator = async (
+    animatorId: string,
+    updates: Partial<AnimatorWithUser>
+): Promise<void> => {
+    // 1. Update user document
+    const userUpdateDoc: any = {};
+    if (updates.fullName !== undefined) userUpdateDoc.fullName = updates.fullName;
+    if (updates.phoneNumber !== undefined) userUpdateDoc.phoneNumber = updates.phoneNumber;
+    if (updates.parish !== undefined) userUpdateDoc.parish = updates.parish;
+    if (updates.address !== undefined) userUpdateDoc.address = updates.address;
+
+    if (Object.keys(userUpdateDoc).length > 0) {
+        await updateDoc(doc(db, 'users', animatorId), userUpdateDoc);
+    }
+
+    // 2. Sync animatorName if it changed
+    if (updates.fullName !== undefined) {
+        await updateDoc(doc(db, 'animator_assignments', animatorId), {
+            animatorName: updates.fullName
+        });
+    }
 };
 
 // Add assignment to animator (max 2)

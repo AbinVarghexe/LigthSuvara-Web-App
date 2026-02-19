@@ -30,7 +30,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Events", href: "/events", icon: Calendar },
-  { name: "Sunday School", href: "/users", icon: Church },
+  { name: "Technical Users", href: "/users", icon: Church },
   {
     name: "Teacher Management",
     href: "/teachers",

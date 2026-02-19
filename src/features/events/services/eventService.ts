@@ -11,7 +11,8 @@ import {
     orderBy,
     serverTimestamp,
     Timestamp,
-    writeBatch
+    writeBatch,
+    onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 
@@ -176,3 +177,76 @@ export const deleteEventsByUserId = async (userId: string) => {
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
 };
+
+/** Real-time listener for events. Returns an unsubscribe function. */
+export const subscribeToEvents = (
+    callback: (events: EventData[]) => void,
+    status?: EventStatus,
+    forane?: string
+) => {
+    let q;
+    if (status && forane) {
+        q = query(
+            collection(db, 'events'),
+            where('status', '==', status),
+            where('creatorForane', '==', forane),
+            orderBy('timestamp', 'desc')
+        );
+    } else if (status) {
+        q = query(
+            collection(db, 'events'),
+            where('status', '==', status),
+            orderBy('timestamp', 'desc')
+        );
+    } else if (forane) {
+        q = query(
+            collection(db, 'events'),
+            where('creatorForane', '==', forane),
+            orderBy('timestamp', 'desc')
+        );
+    } else {
+        q = query(collection(db, 'events'), orderBy('timestamp', 'desc'));
+    }
+
+    return onSnapshot(q, (snapshot) => {
+        const events = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as EventData));
+        callback(events);
+    }, (error: any) => {
+        // Fallback: if index error, try without ordering
+        if (error?.code === 'failed-precondition' || error?.message?.includes('index')) {
+            console.warn('Firestore index not found, subscribing without ordering:', error);
+            let fallbackQ;
+            if (status && forane) {
+                fallbackQ = query(
+                    collection(db, 'events'),
+                    where('status', '==', status),
+                    where('creatorForane', '==', forane)
+                );
+            } else if (status) {
+                fallbackQ = query(
+                    collection(db, 'events'),
+                    where('status', '==', status)
+                );
+            } else if (forane) {
+                fallbackQ = query(
+                    collection(db, 'events'),
+                    where('creatorForane', '==', forane)
+                );
+            } else {
+                fallbackQ = query(collection(db, 'events'));
+            }
+            onSnapshot(fallbackQ, (snap) => {
+                const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as EventData));
+                docs.sort((a: any, b: any) => {
+                    const aTime = a.timestamp?.seconds || 0;
+                    const bTime = b.timestamp?.seconds || 0;
+                    return bTime - aTime;
+                });
+                callback(docs);
+            });
+        } else {
+            console.error('Error subscribing to events:', error);
+        }
+    });
+};
+

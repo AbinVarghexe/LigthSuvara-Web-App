@@ -1,15 +1,29 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Loader2, CheckCircle, XCircle, Eye } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Filter,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Eye,
+} from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { StatusBadge } from "../../components/common/StatusBadge";
 import {
-  getEvents,
+  subscribeToEvents,
   updateEventStatus,
   EventData,
 } from "../../features/events/services/eventService";
 import { getUsers, UserData } from "../../features/users/services/userService";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "../../components/ui/card";
 import {
   Table,
   TableBody,
@@ -21,7 +35,12 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
 import { useAuth } from "../../context/AuthContext";
 import { ImageWithFallback } from "../../components/figma/ImageWithFallback";
 
@@ -43,8 +62,19 @@ export function Events() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [approvalForaneFilter, setApprovalForaneFilter] = useState("All");
 
+  // Approved events state
+  const [approvedEvents, setApprovedEvents] = useState<EventData[]>([]);
+  const [approvedLoading, setApprovedLoading] = useState(true);
+  const [approvedForaneFilter, setApprovedForaneFilter] = useState("All");
+  const [approvedSearchTerm, setApprovedSearchTerm] = useState("");
+
   // Determine active tab from URL
-  const activeTab = location.pathname === "/events/approvals" ? "approvals" : "events";
+  const activeTab =
+    location.pathname === "/events/approvals"
+      ? "approvals"
+      : location.pathname === "/events/approved"
+        ? "approved"
+        : "events";
 
   // Hardcoded forane names
   const foraneNames = [
@@ -64,7 +94,7 @@ export function Events() {
   ];
 
   useEffect(() => {
-    const fetchData = async () => {
+    const init = async () => {
       try {
         setLoading(true);
         const usersData = await getUsers();
@@ -74,54 +104,84 @@ export function Events() {
         let userForane: string | null = null;
         if (currentUser) {
           const currentUserData = usersData.find(
-            (u) => u.uid === currentUser.uid
+            (u) => u.uid === currentUser.uid,
           );
           if (currentUserData?.forane) {
             userForane = currentUserData.forane;
           }
         }
 
-        // Fetch events based on user role
-        // If admin, fetch all (undefined). If user, fetch only their forane.
+        // Subscribe to events based on user role
         const foraneScope = isAdminUser ? undefined : userForane || undefined;
-        const eventsData = await getEvents(undefined, foraneScope);
-        const typedEvents = eventsData as EventData[];
-        setEvents(typedEvents);
+        const unsubscribe = subscribeToEvents(
+          (eventsData) => {
+            setEvents(eventsData);
+            setLoading(false);
+          },
+          undefined,
+          foraneScope,
+        );
+
+        return unsubscribe;
       } catch (error) {
         console.error("Error fetching events:", error);
-      } finally {
         setLoading(false);
+        return undefined;
       }
     };
 
-    fetchData();
+    let unsubscribe: (() => void) | undefined;
+    init().then((unsub) => {
+      unsubscribe = unsub;
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [currentUser, isAdminUser]);
 
-  // Fetch approval events
+  // Subscribe to approval events (real-time)
   useEffect(() => {
     if (!isAdminUser) return;
-    const fetchApprovalEvents = async () => {
-      try {
-        setApprovalLoading(true);
-        const foraneToQuery = approvalForaneFilter !== "All" ? approvalForaneFilter : undefined;
-        const allEvents = await getEvents(undefined, foraneToQuery);
-        const draftEvents = (allEvents as EventData[]).filter(
-          (event) => !event.isPublic
-        );
+    setApprovalLoading(true);
+    const foraneToQuery =
+      approvalForaneFilter !== "All" ? approvalForaneFilter : undefined;
+    const unsubscribe = subscribeToEvents(
+      (allEvents) => {
+        const draftEvents = allEvents.filter((event) => !event.isPublic);
         setApprovalEvents(draftEvents);
-      } catch (error) {
-        console.error("Error fetching draft events:", error);
-        toast.error("Failed to load draft events");
-      } finally {
         setApprovalLoading(false);
-      }
-    };
-    fetchApprovalEvents();
+      },
+      undefined,
+      foraneToQuery,
+    );
+
+    return () => unsubscribe();
   }, [approvalForaneFilter, currentUser, isAdminUser]);
+
+  // Subscribe to approved events (real-time)
+  useEffect(() => {
+    setApprovedLoading(true);
+    const foraneToQuery =
+      approvedForaneFilter !== "All" ? approvedForaneFilter : undefined;
+    const unsubscribe = subscribeToEvents(
+      (allEvents) => {
+        const approved = allEvents.filter(
+          (event) => event.status === "approved",
+        );
+        setApprovedEvents(approved);
+        setApprovedLoading(false);
+      },
+      "approved",
+      foraneToQuery,
+    );
+
+    return () => unsubscribe();
+  }, [approvedForaneFilter]);
 
   const handleApprovalAction = async (
     eventId: string,
-    status: "approved" | "rejected"
+    status: "approved" | "rejected",
   ) => {
     if (!eventId) return;
     setActionLoading(eventId);
@@ -170,6 +230,13 @@ export function Events() {
     return matchesSearch && matchesCategory && matchesStatus && matchesForane;
   });
 
+  const filteredApprovedEvents = approvedEvents.filter((event) => {
+    const matchesSearch = event.title
+      .toLowerCase()
+      .includes(approvedSearchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
   const formatDate = (date: any) => {
     if (!date) return "N/A";
     try {
@@ -209,16 +276,34 @@ export function Events() {
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
-          navigate(value === "approvals" ? "/events/approvals" : "/events", { replace: true });
+          if (value === "approvals")
+            navigate("/events/approvals", { replace: true });
+          else if (value === "approved")
+            navigate("/events/approved", { replace: true });
+          else navigate("/events", { replace: true });
         }}
       >
         <TabsList>
           <TabsTrigger value="events">All Events</TabsTrigger>
+          <TabsTrigger value="approved">
+            Approved
+            {approvedEvents.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-2 h-5 px-1.5 text-[10px] bg-green-100 text-green-700"
+              >
+                {approvedEvents.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           {isAdminUser && (
             <TabsTrigger value="approvals">
               Approvals
               {approvalEvents.length > 0 && (
-                <Badge variant="destructive" className="ml-2 h-5 px-1.5 text-[10px]">
+                <Badge
+                  variant="destructive"
+                  className="ml-2 h-5 px-1.5 text-[10px]"
+                >
                   {approvalEvents.length}
                 </Badge>
               )}
@@ -228,150 +313,280 @@ export function Events() {
 
         {/* Events Tab */}
         <TabsContent value="events" className="space-y-6 mt-4">
-      <Card>
-        <CardContent className="p-4 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search events..."
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <select
-                className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-              >
-                <option value="All">All Categories</option>
-                <option value="cml">CML</option>
-                <option value="suvara">Suvara</option>
-              </select>
-            </div>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <select
-                className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="All">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </div>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <select
-                className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={foraneFilter}
-                onChange={(e) => setForaneFilter(e.target.value)}
-              >
-                <option value="All">All Foranes</option>
-                {foraneNames.map((forane) => (
-                  <option key={forane} value={forane}>
-                    {forane}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Events List */}
-      <Card>
-        <CardContent className="p-0">
-          {/* Mobile View */}
-          <div className="md:hidden">
-            {filteredEvents.map((event) => (
-              <div
-                key={event.id}
-                className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
-              >
-                <Link to={`/events/${event.id}`} className="flex gap-4">
-                  <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
-                    {event.imageUrl ? (
-                      <ImageWithFallback
-                        src={event.imageUrl}
-                        alt={event.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <img
-                        src="/assets/Logo-Bg-Light.svg"
-                        alt="Placeholder"
-                        className="w-full h-full object-cover opacity-80"
-                      />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-medium text-gray-900 truncate pr-2">
-                        {event.title}
-                      </h3>
-                      <StatusBadge
-                        status={
-                          event.status ||
-                          (event.isPublic ? "approved" : "pending")
-                        }
-                      />
-                    </div>
-                    <p className="text-sm text-gray-500 truncate">
-                      {event.place}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] h-5 px-1.5 uppercase"
-                      >
-                        {event.category}
-                      </Badge>
-                      <span>•</span>
-                      <span>{formatDate(event.timestamp)}</span>
-                    </div>
-                  </div>
-                </Link>
+          <Card>
+            <CardContent className="p-4 flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search events..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            ))}
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                  >
+                    <option value="All">All Categories</option>
+                    <option value="cml">CML</option>
+                    <option value="suvara">Suvara</option>
+                  </select>
+                </div>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="All">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={foraneFilter}
+                    onChange={(e) => setForaneFilter(e.target.value)}
+                  >
+                    <option value="All">All Foranes</option>
+                    {foraneNames.map((forane) => (
+                      <option key={forane} value={forane}>
+                        {forane}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Desktop View */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[300px]">Event Details</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Created By</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredEvents.map((event) => {
-                  const creator = users.find((u) => u.id === event.creatorId);
-                  const schoolName =
-                    event.creatorSchoolName &&
-                    event.creatorSchoolName !== "Admin"
-                      ? event.creatorSchoolName
-                      : creator?.schoolName ||
-                        creator?.schoolname ||
-                        creator?.fullName ||
-                        "Unknown";
+          {/* Events List */}
+          <Card>
+            <CardContent className="p-0">
+              {/* Mobile View */}
+              <div className="md:hidden">
+                {filteredEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
+                  >
+                    <Link to={`/events/${event.id}`} className="flex gap-4">
+                      <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                        {event.imageUrl ? (
+                          <ImageWithFallback
+                            src={event.imageUrl}
+                            alt={event.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            src="/assets/Logo-Bg-Light.svg"
+                            alt="Placeholder"
+                            className="w-full h-full object-cover opacity-80"
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-medium text-gray-900 truncate pr-2">
+                            {event.title}
+                          </h3>
+                          <StatusBadge
+                            status={
+                              event.status ||
+                              (event.isPublic ? "approved" : "pending")
+                            }
+                          />
+                        </div>
+                        <p className="text-sm text-gray-500 truncate">
+                          {event.place}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] h-5 px-1.5 uppercase"
+                          >
+                            {event.category}
+                          </Badge>
+                          <span>•</span>
+                          <span>{formatDate(event.timestamp)}</span>
+                        </div>
+                      </div>
+                    </Link>
+                  </div>
+                ))}
+              </div>
 
-                  return (
-                    <TableRow key={event.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+              {/* Desktop View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[300px]">Event Details</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Created By</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEvents.map((event) => {
+                      const creator = users.find(
+                        (u) => u.id === event.creatorId,
+                      );
+                      const schoolName =
+                        event.creatorSchoolName &&
+                        event.creatorSchoolName !== "Admin"
+                          ? event.creatorSchoolName
+                          : creator?.schoolName ||
+                            creator?.schoolname ||
+                            creator?.fullName ||
+                            "Unknown";
+
+                      return (
+                        <TableRow key={event.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                                {event.imageUrl ? (
+                                  <ImageWithFallback
+                                    src={event.imageUrl}
+                                    alt={event.title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <img
+                                    src="/assets/Logo-Bg-Light.svg"
+                                    alt="Placeholder"
+                                    className="w-full h-full object-cover opacity-80"
+                                  />
+                                )}
+                              </div>
+                              <div>
+                                <h3 className="font-medium text-gray-900">
+                                  {event.title}
+                                </h3>
+                                <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                                  {event.place}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="uppercase">
+                              {event.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-gray-600">
+                            {schoolName}
+                          </TableCell>
+                          <TableCell className="text-gray-600">
+                            <div className="flex flex-col">
+                              <span>{formatDate(event.timestamp)}</span>
+                              {event.updatedAt && (
+                                <span className="text-xs text-gray-400">
+                                  Updated: {formatDate(event.updatedAt)}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge
+                              status={
+                                event.status ||
+                                (event.isPublic ? "approved" : "pending")
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link
+                              to={`/events/${event.id}`}
+                              className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                            >
+                              View
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {filteredEvents.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  No events found matching your filters.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Approved Events Tab */}
+        <TabsContent value="approved" className="space-y-6 mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Approved Events</CardTitle>
+                <CardDescription>
+                  {filteredApprovedEvents.length} of {approvedEvents.length}{" "}
+                  approved event{approvedEvents.length !== 1 ? "s" : ""}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="relative min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search approved..."
+                    className="pl-9"
+                    value={approvedSearchTerm}
+                    onChange={(e) => setApprovedSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="relative min-w-[160px]">
+                  <select
+                    className="w-full pl-3 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={approvedForaneFilter}
+                    onChange={(e) => setApprovedForaneFilter(e.target.value)}
+                  >
+                    <option value="All">All Foranes</option>
+                    {foraneNames.map((forane) => (
+                      <option key={forane} value={forane}>
+                        {forane}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {approvedLoading ? (
+                <div className="h-40 flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                </div>
+              ) : (
+                <>
+                  {/* Mobile View */}
+                  <div className="md:hidden">
+                    {filteredApprovedEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
+                      >
+                        <Link to={`/events/${event.id}`} className="flex gap-4">
+                          <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
                             {event.imageUrl ? (
                               <ImageWithFallback
                                 src={event.imageUrl}
@@ -386,64 +601,150 @@ export function Events() {
                               />
                             )}
                           </div>
-                          <div>
-                            <h3 className="font-medium text-gray-900">
-                              {event.title}
-                            </h3>
-                            <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="font-medium text-gray-900 truncate pr-2">
+                                {event.title}
+                              </h3>
+                              <Badge className="bg-green-100 text-green-700 shrink-0">
+                                Approved
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-gray-500 truncate">
                               {event.place}
                             </p>
+                            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] h-5 px-1.5 uppercase"
+                              >
+                                {event.category}
+                              </Badge>
+                              <span>•</span>
+                              <span>{formatDate(event.timestamp)}</span>
+                              {event.creatorForane && (
+                                <>
+                                  <span>•</span>
+                                  <span>{event.creatorForane}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="uppercase">
-                          {event.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-gray-600">
-                        {schoolName}
-                      </TableCell>
-                      <TableCell className="text-gray-600">
-                        <div className="flex flex-col">
-                          <span>{formatDate(event.timestamp)}</span>
-                          {event.updatedAt && (
-                            <span className="text-xs text-gray-400">
-                              Updated: {formatDate(event.updatedAt)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          status={
-                            event.status ||
-                            (event.isPublic ? "approved" : "pending")
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link
-                          to={`/events/${event.id}`}
-                          className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                        >
-                          View
                         </Link>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                      </div>
+                    ))}
+                  </div>
 
-          {filteredEvents.length === 0 && (
-            <div className="p-8 text-center text-gray-500">
-              No events found matching your filters.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  {/* Desktop View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[300px]">
+                            Event Details
+                          </TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Created By</TableHead>
+                          <TableHead>Forane</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredApprovedEvents.map((event) => {
+                          const creator = users.find(
+                            (u) => u.id === event.creatorId,
+                          );
+                          const schoolName =
+                            event.creatorSchoolName &&
+                            event.creatorSchoolName !== "Admin"
+                              ? event.creatorSchoolName
+                              : creator?.schoolName ||
+                                creator?.schoolname ||
+                                creator?.fullName ||
+                                "Unknown";
+
+                          return (
+                            <TableRow key={event.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                                    {event.imageUrl ? (
+                                      <ImageWithFallback
+                                        src={event.imageUrl}
+                                        alt={event.title}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <img
+                                        src="/assets/Logo-Bg-Light.svg"
+                                        alt="Placeholder"
+                                        className="w-full h-full object-cover opacity-80"
+                                      />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <h3 className="font-medium text-gray-900">
+                                      {event.title}
+                                    </h3>
+                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                                      {event.place}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="secondary"
+                                  className="uppercase"
+                                >
+                                  {event.category}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-gray-600">
+                                {schoolName}
+                              </TableCell>
+                              <TableCell className="text-gray-600">
+                                {event.creatorForane || "—"}
+                              </TableCell>
+                              <TableCell className="text-gray-600">
+                                <div className="flex flex-col">
+                                  <span>{formatDate(event.timestamp)}</span>
+                                  {event.updatedAt && (
+                                    <span className="text-xs text-gray-400">
+                                      Updated: {formatDate(event.updatedAt)}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Link
+                                  to={`/events/${event.id}`}
+                                  className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                                >
+                                  View
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        {filteredApprovedEvents.length === 0 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={6}
+                              className="h-24 text-center text-gray-500"
+                            >
+                              No approved events found.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Approvals Tab */}
@@ -455,7 +756,8 @@ export function Events() {
                   <CardTitle>Pending Requests</CardTitle>
                   <CardDescription>
                     {approvalEvents.length} event
-                    {approvalEvents.length !== 1 ? "s" : ""} waiting for approval
+                    {approvalEvents.length !== 1 ? "s" : ""} waiting for
+                    approval
                   </CardDescription>
                 </div>
                 <div className="relative min-w-[160px]">
@@ -564,7 +866,9 @@ export function Events() {
                             <TableHead>Category</TableHead>
                             <TableHead>Created By</TableHead>
                             <TableHead>Date</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
+                            <TableHead className="text-right">
+                              Actions
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -596,7 +900,10 @@ export function Events() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge variant="secondary" className="uppercase">
+                                <Badge
+                                  variant="secondary"
+                                  className="uppercase"
+                                >
                                   {event.category}
                                 </Badge>
                               </TableCell>
@@ -608,7 +915,7 @@ export function Events() {
                                   ? new Date(
                                       (event.date as any).seconds
                                         ? (event.date as any).seconds * 1000
-                                        : event.date
+                                        : event.date,
                                     ).toLocaleDateString()
                                   : "N/A"}
                               </TableCell>
@@ -628,7 +935,10 @@ export function Events() {
                                     size="icon"
                                     className="text-green-600 hover:text-green-700 hover:bg-green-50"
                                     onClick={() =>
-                                      handleApprovalAction(event.id!, "approved")
+                                      handleApprovalAction(
+                                        event.id!,
+                                        "approved",
+                                      )
                                     }
                                     disabled={actionLoading === event.id}
                                     title="Approve"
@@ -644,7 +954,10 @@ export function Events() {
                                     size="icon"
                                     className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                     onClick={() =>
-                                      handleApprovalAction(event.id!, "rejected")
+                                      handleApprovalAction(
+                                        event.id!,
+                                        "rejected",
+                                      )
                                     }
                                     disabled={actionLoading === event.id}
                                     title="Reject"
