@@ -39,7 +39,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "../../components/ui/chart";
-import jsPDF from "jspdf";
+
 import { createMalayalamPDF } from "../../lib/pdfFonts";
 import {
   getEvents,
@@ -67,6 +67,7 @@ import { useAuth } from "../../context/AuthContext";
 import { TeacherService } from "../../features/teachers/services/teacherService";
 import { AssignmentService } from "../../features/teachers/services/assignmentService";
 import { ParishService } from "../../features/parishes/services/parishService";
+import { PdfService } from "../../features/teachers/services/pdfService";
 import { Teacher, Parish } from "../../features/teachers/types";
 
 // ─── Shared Filter Bar ────────────────────────────────────────────────────────
@@ -259,11 +260,12 @@ export function Reports() {
   const [ssYear, setSsYear] = useState("All");
   const [generatingSs, setGeneratingSs] = useState(false);
 
-  // ── Teacher Management Report state ──
-  const [tmForane, setTmForane] = useState("All");
-  const [tmParish, setTmParish] = useState("All");
-  const [tmYear, setTmYear] = useState("All");
-  const [generatingTm, setGeneratingTm] = useState(false);
+  // ── Class-wise Teacher Report state ──
+  const [tmClassForane, setTmClassForane] = useState("All");
+  const [tmClassParish, setTmClassParish] = useState("All");
+  const [tmClassYear, setTmClassYear] = useState("All");
+  const [tmClassFilter, setTmClassFilter] = useState("All");
+  const [generatingTmClass, setGeneratingTmClass] = useState(false);
 
   // ── Programs Report state ──
   const [pgForane, setPgForane] = useState("All");
@@ -637,20 +639,6 @@ export function Reports() {
     }
   };
 
-  // Generic stub generator
-  const makeStubGenerator =
-    (label: string, setGenerating: (v: boolean) => void, count: number) =>
-    async () => {
-      if (count === 0) {
-        toast.warning("No records match the selected filters.");
-        return;
-      }
-      setGenerating(true);
-      await new Promise((r) => setTimeout(r, 700));
-      toast.success(`${label} generated for ${count} record(s).`);
-      setGenerating(false);
-    };
-
   // Derived counts for observer reports
   const obsAssignCount = assignments.filter((a) => {
     const ap = parishes.find((p) => p.id === a.parishId);
@@ -681,16 +669,198 @@ export function Reports() {
     return matchForane && matchParish;
   }).length;
 
-  // Teacher count
-  const tmCount = teachers.filter((t) => {
+  // Unique classes across all teachers
+  const uniqueClasses = Array.from(
+    new Set(teachers.flatMap((t) => t.classes || [])),
+  ).sort();
+
+  // Class-wise teacher count & breakdown
+  const tmClassFiltered = teachers.filter((t) => {
     const hp = parishes.find((p) => p.id === t.parishId);
     return (
-      (tmForane === "All" || hp?.forane === tmForane) &&
-      (tmParish === "All" || t.parishId === tmParish) &&
-      (tmYear === "All" || t.academicYear === tmYear)
+      (tmClassForane === "All" || hp?.forane === tmClassForane) &&
+      (tmClassParish === "All" || t.parishId === tmClassParish) &&
+      (tmClassYear === "All" || t.academicYear === tmClassYear) &&
+      (tmClassFilter === "All" ||
+        (t.classes && t.classes.includes(tmClassFilter)))
     );
-  }).length;
+  });
+  const tmClassCount = tmClassFiltered.length;
 
+  // Breakdown: how many teachers per class (respecting forane/parish/year filters, ignoring class filter)
+  const tmClassBreakdown: { cls: string; count: number }[] = uniqueClasses
+    .map((cls) => ({
+      cls,
+      count: teachers.filter((t) => {
+        const hp = parishes.find((p) => p.id === t.parishId);
+        return (
+          (tmClassForane === "All" || hp?.forane === tmClassForane) &&
+          (tmClassParish === "All" || t.parishId === tmClassParish) &&
+          (tmClassYear === "All" || t.academicYear === tmClassYear) &&
+          t.classes?.includes(cls)
+        );
+      }).length,
+    }))
+    .filter((row) => row.count > 0);
+
+  // ─── Real PDF Handlers (using derived data) ───
+
+  const handleGenerateSundaySchoolReport = async () => {
+    const filteredUsers = users.filter((u) => {
+      const matchForane = ssForane === "All" || u.forane === ssForane;
+      const matchParish =
+        ssParish === "All" ||
+        u.schoolName === ssParish ||
+        u.schoolname === ssParish;
+      return matchForane && matchParish;
+    });
+
+    if (filteredUsers.length === 0) {
+      toast.warning("No records found.");
+      return;
+    }
+    setGeneratingSs(true);
+    try {
+      await PdfService.generateSundaySchoolReport(
+        filteredUsers,
+        ssForane,
+        ssParish,
+      );
+      toast.success("Report generated");
+    } catch {
+      toast.error("Failed to generate report");
+    } finally {
+      setGeneratingSs(false);
+    }
+  };
+
+  const handleGenerateTeacherClassReport = async () => {
+    if (tmClassFiltered.length === 0) {
+      toast.warning("No teachers found.");
+      return;
+    }
+    setGeneratingTmClass(true);
+    try {
+      await PdfService.generateTeacherClassReport(
+        tmClassFiltered,
+        tmClassForane,
+        tmClassParish,
+        tmClassYear,
+        tmClassFilter,
+      );
+      toast.success("Report generated");
+    } catch {
+      toast.error("Failed to generate report");
+    } finally {
+      setGeneratingTmClass(false);
+    }
+  };
+
+  const handleGenerateAnimatorReport = async () => {
+    // Filter animators
+    const animators = users.filter((u) => {
+      const isAnimator = u.role === "animator";
+      const matchForane = amForane === "All" || u.forane === amForane;
+      const matchParish =
+        amParish === "All" ||
+        u.schoolName === amParish ||
+        u.schoolname === amParish;
+      // Note: Assuming parish filter applies to schoolName for animators too
+      return isAnimator && matchForane && matchParish;
+    });
+
+    if (animators.length === 0) {
+      toast.warning("No animators found.");
+      return;
+    }
+    setGeneratingAm(true);
+    try {
+      await PdfService.generateAnimatorReport(animators, amForane, amParish);
+      toast.success("Report generated");
+    } catch {
+      toast.error("Failed to generate report");
+    } finally {
+      setGeneratingAm(false);
+    }
+  };
+
+  const handleGenerateObsAssignReport = async () => {
+    const filtered = assignments.filter((a) => {
+      const ap = parishes.find((p) => p.id === a.parishId);
+      const t = teachers.find((t) => t.id === a.teacherId);
+      return (
+        (obsAssignForane === "All" || ap?.forane === obsAssignForane) &&
+        (obsAssignParish === "All" || a.parishId === obsAssignParish) &&
+        (obsAssignYear === "All" || t?.academicYear === obsAssignYear)
+      );
+    });
+
+    if (filtered.length === 0) {
+      toast.warning("No assignments found.");
+      return;
+    }
+    setGeneratingObsAssign(true);
+    try {
+      await PdfService.generateObserverAssignmentReport(
+        filtered,
+        teachers,
+        parishes,
+        obsAssignForane,
+        obsAssignParish,
+        obsAssignYear,
+      );
+      toast.success("Report generated");
+    } catch {
+      toast.error("Failed to generate report");
+    } finally {
+      setGeneratingObsAssign(false);
+    }
+  };
+
+  const handleGenerateObsDirReport = async () => {
+    const filtered = teachers.filter((t) => {
+      const hp = parishes.find((p) => p.id === t.parishId);
+      return (
+        (obsDirForane === "All" || hp?.forane === obsDirForane) &&
+        (obsDirParish === "All" || t.parishId === obsDirParish) &&
+        (obsDirYear === "All" || t.academicYear === obsDirYear)
+      );
+    });
+
+    if (filtered.length === 0) {
+      toast.warning("No observers found.");
+      return;
+    }
+
+    setGeneratingObsDir(true);
+    try {
+      await PdfService.generateObserverDirectoryReport(
+        filtered,
+        obsDirForane,
+        obsDirParish,
+        obsDirYear,
+      );
+      toast.success("Report generated");
+    } catch {
+      toast.error("Failed to generate report");
+    } finally {
+      setGeneratingObsDir(false);
+    }
+  };
+
+  // Generic stub generator (kept for Programs)
+  const makeStubGenerator =
+    (label: string, setGenerating: (v: boolean) => void, count: number) =>
+    async () => {
+      if (count === 0) {
+        toast.warning("No records match the selected filters.");
+        return;
+      }
+      setGenerating(true);
+      await new Promise((r) => setTimeout(r, 700));
+      toast.success(`${label} generated for ${count} record(s).`);
+      setGenerating(false);
+    };
   if (loading) {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -1191,14 +1361,11 @@ export function Reports() {
                 parishId={ssParish}
                 onForaneChange={setSsForane}
                 onParishChange={setSsParish}
-                onGenerate={makeStubGenerator(
-                  "Sunday School report",
-                  setGeneratingSs,
-                  ssCount,
-                )}
+                onGenerate={handleGenerateSundaySchoolReport}
                 generating={generatingSs}
                 extraLabel="Export Report"
               />
+
               <p className="text-xs text-muted-foreground pl-1">
                 {ssCount} member(s) will be included in this report.
               </p>
@@ -1208,38 +1375,162 @@ export function Reports() {
 
         {/* ─── TEACHERS ─── */}
         <TabsContent value="teachers" className="space-y-4">
+          {/* Class-wise Report */}
           <Card>
             <CardHeader>
               <SectionHeader
                 icon={BookUser}
-                title="Teacher Directory Report"
-                description="Export teacher records filtered by forane, parish, and academic year"
-                count={tmCount}
+                title="Class-wise Teacher Report"
+                description="Export teachers grouped by class, filtered by forane, parish, and academic year"
+                count={tmClassCount}
                 countLabel="teachers"
               />
             </CardHeader>
-            <CardContent className="space-y-3">
-              <FilterBar
-                foranes={uniqueForanes.length ? uniqueForanes : foraneNames}
-                parishes={parishes}
-                academicYears={uniqueAcademicYears}
-                forane={tmForane}
-                parishId={tmParish}
-                academicYear={tmYear}
-                onForaneChange={setTmForane}
-                onParishChange={setTmParish}
-                onYearChange={setTmYear}
-                onGenerate={makeStubGenerator(
-                  "Teacher directory report",
-                  setGeneratingTm,
-                  tmCount,
-                )}
-                generating={generatingTm}
-                extraLabel="Export Report"
-              />
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-3 items-end p-4 bg-muted/40 rounded-lg border">
+                <div className="space-y-1 min-w-[150px]">
+                  <Label className="text-xs text-muted-foreground">
+                    Forane
+                  </Label>
+                  <Select
+                    value={tmClassForane}
+                    onValueChange={(v) => {
+                      setTmClassForane(v);
+                      setTmClassParish("All");
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="All Foranes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Foranes</SelectItem>
+                      {(uniqueForanes.length ? uniqueForanes : foraneNames).map(
+                        (f) => (
+                          <SelectItem key={f} value={f}>
+                            {f}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 min-w-[160px]">
+                  <Label className="text-xs text-muted-foreground">
+                    Parish
+                  </Label>
+                  <Select
+                    value={tmClassParish}
+                    onValueChange={setTmClassParish}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="All Parishes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Parishes</SelectItem>
+                      {(tmClassForane === "All"
+                        ? parishes
+                        : parishes.filter((p) => p.forane === tmClassForane)
+                      ).map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 min-w-[140px]">
+                  <Label className="text-xs text-muted-foreground">
+                    Academic Year
+                  </Label>
+                  <Select value={tmClassYear} onValueChange={setTmClassYear}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="All Years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Years</SelectItem>
+                      {uniqueAcademicYears.map((yr) => (
+                        <SelectItem key={yr} value={yr}>
+                          {yr}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 min-w-[140px]">
+                  <Label className="text-xs text-muted-foreground">Class</Label>
+                  <Select
+                    value={tmClassFilter}
+                    onValueChange={setTmClassFilter}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="All Classes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Classes</SelectItem>
+                      {uniqueClasses.map((cls) => (
+                        <SelectItem key={cls} value={cls}>
+                          {cls}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8"
+                  disabled={generatingTmClass}
+                  onClick={handleGenerateTeacherClassReport}
+                >
+                  {generatingTmClass ? (
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="mr-2 h-3 w-3" />
+                      Export Report
+                    </>
+                  )}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground pl-1">
-                {tmCount} teacher(s) will be included in this report.
+                {tmClassCount} teacher(s) will be included in this report
+                {tmClassFilter !== "All"
+                  ? ` (Class: ${tmClassFilter})`
+                  : " across all classes"}
+                .
               </p>
+              {/* Class breakdown preview */}
+              {tmClassBreakdown.length > 0 && (
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium">
+                          Class
+                        </th>
+                        <th className="text-right px-4 py-2 font-medium">
+                          Teachers
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tmClassBreakdown.map(({ cls, count }) => (
+                        <tr
+                          key={cls}
+                          className="border-t hover:bg-muted/30 transition-colors"
+                        >
+                          <td className="px-4 py-2">{cls}</td>
+                          <td className="px-4 py-2 text-right">
+                            <Badge variant="secondary">{count}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1301,11 +1592,7 @@ export function Reports() {
                 onForaneChange={setAmForane}
                 onParishChange={setAmParish}
                 onYearChange={setAmYear}
-                onGenerate={makeStubGenerator(
-                  "Animator report",
-                  setGeneratingAm,
-                  0,
-                )}
+                onGenerate={handleGenerateAnimatorReport}
                 generating={generatingAm}
                 extraLabel="Export Report"
               />
@@ -1340,11 +1627,7 @@ export function Reports() {
                 onForaneChange={setObsAssignForane}
                 onParishChange={setObsAssignParish}
                 onYearChange={setObsAssignYear}
-                onGenerate={makeStubGenerator(
-                  "Observer assignment report",
-                  setGeneratingObsAssign,
-                  obsAssignCount,
-                )}
+                onGenerate={handleGenerateObsAssignReport}
                 generating={generatingObsAssign}
                 extraLabel="Export Report"
               />
@@ -1378,11 +1661,7 @@ export function Reports() {
                 onForaneChange={setObsDirForane}
                 onParishChange={setObsDirParish}
                 onYearChange={setObsDirYear}
-                onGenerate={makeStubGenerator(
-                  "Observer directory report",
-                  setGeneratingObsDir,
-                  obsDirCount,
-                )}
+                onGenerate={handleGenerateObsDirReport}
                 generating={generatingObsDir}
                 extraLabel="Export Report"
               />
