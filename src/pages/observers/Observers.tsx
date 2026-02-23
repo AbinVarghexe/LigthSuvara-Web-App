@@ -398,18 +398,20 @@ export function Observers() {
         editNewTeacherId,
         editNewParishId,
       );
-      // Regenerate PDF on reassignment
-      const newTeacher = allTeachers.find((t) => t.id === editNewTeacherId);
-      const newParish = parishes.find((p) => p.id === editNewParishId);
-      if (newTeacher && newParish) {
-        setTimeout(async () => {
-          await PdfService.generateTeacherDutyReport(newTeacher, newParish, "General");
-          toast.info("PDF Order regenerated for updated assignment");
-        }, 500);
-      }
       toast.success("Assignment updated successfully");
       setEditingAssignment(null);
       setRefreshTrigger((n) => n + 1);
+      // Regenerate PDF after assignment is confirmed updated
+      const newTeacher = allTeachers.find((t) => t.id === editNewTeacherId);
+      const newParish = parishes.find((p) => p.id === editNewParishId);
+      if (newTeacher && newParish) {
+        try {
+          await PdfService.generateTeacherDutyReport(newTeacher, newParish, "General");
+          toast.info("PDF Order regenerated for updated assignment");
+        } catch {
+          // PDF regeneration failure should not block the user
+        }
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to update assignment");
     } finally {

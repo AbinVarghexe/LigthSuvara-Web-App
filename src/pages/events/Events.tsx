@@ -204,6 +204,14 @@ export function Events() {
     }
   };
 
+  // Helper: normalize event date to a JS Date object
+  const toDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (date instanceof Date) return date;
+    if (date?.seconds) return new Date(date.seconds * 1000);
+    return null;
+  };
+
   // Helper: derive academic year from event date (June-May cycle)
   const getAcademicYear = (date: Date): string => {
     const month = date.getMonth() + 1; // 1-12
@@ -250,9 +258,7 @@ export function Events() {
 
       filteredEvents.forEach((event, i) => {
         if (y > 270) { doc.addPage(); y = 20; }
-        const evDate = event.date instanceof Date
-          ? event.date
-          : event.date ? new Date((event.date as any).seconds * 1000) : null;
+        const evDate = toDate(event.date);
         doc.text(`${i + 1}.`, 14, y);
         doc.text(doc.splitTextToSize(event.title, 85), 22, y);
         doc.text(evDate ? evDate.toLocaleDateString() : "N/A", 110, y);
@@ -273,7 +279,7 @@ export function Events() {
   const availableAcademicYears = Array.from(
     new Set(
       events.map((e) => {
-        const d = e.date instanceof Date ? e.date : e.date ? new Date((e.date as any).seconds * 1000) : null;
+        const d = toDate(e.date);
         return d ? getAcademicYear(d) : null;
       }).filter(Boolean),
     ),
@@ -312,14 +318,14 @@ export function Events() {
     // Academic year filter
     let matchesAcademicYear = true;
     if (academicYearFilter !== "All") {
-      const d = event.date instanceof Date ? event.date : event.date ? new Date((event.date as any).seconds * 1000) : null;
+      const d = toDate(event.date);
       matchesAcademicYear = d ? getAcademicYear(d) === academicYearFilter : false;
     }
 
     // Date from filter
     let matchesDateFrom = true;
     if (dateFromFilter) {
-      const d = event.date instanceof Date ? event.date : event.date ? new Date((event.date as any).seconds * 1000) : null;
+      const d = toDate(event.date);
       matchesDateFrom = d ? d >= new Date(dateFromFilter) : false;
     }
 
