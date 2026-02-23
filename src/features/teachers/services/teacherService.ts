@@ -80,12 +80,13 @@ export const TeacherService = {
   },
   
   /**
-   * Update teacher status to assigned
+   * Update teacher assigned status.
+   * Pass a parish ID to mark as assigned, or null to unassign.
    */
-  setAssigned: async (teacherId: string, assignedParishId: string) => {
+  setAssigned: async (teacherId: string, assignedParishId: string | null) => {
      const teacherRef = doc(db, TEACHERS_COLLECTION, teacherId);
      await updateDoc(teacherRef, {
-       assigned: true,
+       assigned: assignedParishId !== null,
        assignedParishId: assignedParishId
      });
   },
