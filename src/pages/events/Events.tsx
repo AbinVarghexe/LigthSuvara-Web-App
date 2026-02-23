@@ -7,6 +7,7 @@ import {
   CheckCircle,
   XCircle,
   Eye,
+  Download,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -41,8 +42,11 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Label } from "../../components/ui/label";
 import { useAuth } from "../../context/AuthContext";
 import { ImageWithFallback } from "../../components/figma/ImageWithFallback";
+import { createMalayalamPDF } from "../../lib/pdfFonts";
 
 export function Events() {
   const { isAdminUser, currentUser } = useAuth();
@@ -55,6 +59,9 @@ export function Events() {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [foraneFilter, setForaneFilter] = useState("All");
+  const [academicYearFilter, setAcademicYearFilter] = useState("All");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [forHonorFilter, setForHonorFilter] = useState(false);
 
   // Approvals state
   const [approvalEvents, setApprovalEvents] = useState<EventData[]>([]);
@@ -197,6 +204,81 @@ export function Events() {
     }
   };
 
+  // Helper: derive academic year from event date (June-May cycle)
+  const getAcademicYear = (date: Date): string => {
+    const month = date.getMonth() + 1; // 1-12
+    const year = date.getFullYear();
+    if (month >= 6) return `${year}-${year + 1}`;
+    return `${year - 1}-${year}`;
+  };
+
+  // Generate PDF report for filtered events
+  const handleGenerateEventReport = async () => {
+    if (filteredEvents.length === 0) {
+      toast.warning("No events match the selected filters. Please adjust filters before generating a report.");
+      return;
+    }
+    try {
+      const doc = await createMalayalamPDF();
+      doc.setFontSize(18);
+      doc.setFont("NotoSansMalayalam", "bold");
+      doc.text("Events Report", 14, 20);
+      doc.setFontSize(11);
+      doc.setFont("NotoSansMalayalam", "normal");
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+      const filterDesc = [
+        academicYearFilter !== "All" ? `Year: ${academicYearFilter}` : "",
+        categoryFilter !== "All" ? `Category: ${categoryFilter.toUpperCase()}` : "",
+        statusFilter !== "All" ? `Status: ${statusFilter}` : "",
+        forHonorFilter ? "For Honor: Yes" : "",
+        dateFromFilter ? `From: ${dateFromFilter}` : "",
+      ].filter(Boolean).join(" | ");
+      if (filterDesc) doc.text(`Filters: ${filterDesc}`, 14, 38);
+
+      let y = 50;
+      const lineHeight = 10;
+      doc.setFont("NotoSansMalayalam", "bold");
+      doc.text("#", 14, y);
+      doc.text("Title", 22, y);
+      doc.text("Date", 110, y);
+      doc.text("Category", 145, y);
+      doc.text("Status", 175, y);
+      y += lineHeight;
+      doc.line(14, y - 5, 200, y - 5);
+      doc.setFont("NotoSansMalayalam", "normal");
+      doc.setFontSize(9);
+
+      filteredEvents.forEach((event, i) => {
+        if (y > 270) { doc.addPage(); y = 20; }
+        const evDate = event.date instanceof Date
+          ? event.date
+          : event.date ? new Date((event.date as any).seconds * 1000) : null;
+        doc.text(`${i + 1}.`, 14, y);
+        doc.text(doc.splitTextToSize(event.title, 85), 22, y);
+        doc.text(evDate ? evDate.toLocaleDateString() : "N/A", 110, y);
+        doc.text((event.category || "").toUpperCase(), 145, y);
+        doc.text(event.status || (event.isPublic ? "approved" : "pending"), 175, y);
+        y += lineHeight;
+      });
+
+      doc.save(`events_report_${new Date().toISOString().split("T")[0]}.pdf`);
+      toast.success(`Report generated for ${filteredEvents.length} event(s).`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF report");
+    }
+  };
+
+  // Derived academic years available from events
+  const availableAcademicYears = Array.from(
+    new Set(
+      events.map((e) => {
+        const d = e.date instanceof Date ? e.date : e.date ? new Date((e.date as any).seconds * 1000) : null;
+        return d ? getAcademicYear(d) : null;
+      }).filter(Boolean),
+    ),
+  ).sort() as string[];
+
   const filteredEvents = events.filter((event) => {
     // Visibility Check
     if (!isAdminUser) {
@@ -227,7 +309,24 @@ export function Events() {
       else matchesStatus = event.status === statusFilter;
     }
 
-    return matchesSearch && matchesCategory && matchesStatus && matchesForane;
+    // Academic year filter
+    let matchesAcademicYear = true;
+    if (academicYearFilter !== "All") {
+      const d = event.date instanceof Date ? event.date : event.date ? new Date((event.date as any).seconds * 1000) : null;
+      matchesAcademicYear = d ? getAcademicYear(d) === academicYearFilter : false;
+    }
+
+    // Date from filter
+    let matchesDateFrom = true;
+    if (dateFromFilter) {
+      const d = event.date instanceof Date ? event.date : event.date ? new Date((event.date as any).seconds * 1000) : null;
+      matchesDateFrom = d ? d >= new Date(dateFromFilter) : false;
+    }
+
+    // For Honor filter (CML category events)
+    const matchesForHonor = !forHonorFilter || event.category === "cml";
+
+    return matchesSearch && matchesCategory && matchesStatus && matchesForane && matchesAcademicYear && matchesDateFrom && matchesForHonor;
   });
 
   const filteredApprovedEvents = approvedEvents.filter((event) => {
@@ -284,18 +383,6 @@ export function Events() {
         }}
       >
         <TabsList>
-          <TabsTrigger value="events">All Events</TabsTrigger>
-          <TabsTrigger value="approved">
-            Approved
-            {approvedEvents.length > 0 && (
-              <Badge
-                variant="secondary"
-                className="ml-2 h-5 px-1.5 text-[10px] bg-green-100 text-green-700"
-              >
-                {approvedEvents.length}
-              </Badge>
-            )}
-          </TabsTrigger>
           {isAdminUser && (
             <TabsTrigger value="approvals">
               Approvals
@@ -309,63 +396,121 @@ export function Events() {
               )}
             </TabsTrigger>
           )}
+          <TabsTrigger value="events">All Events</TabsTrigger>
+          <TabsTrigger value="approved">
+            Approved
+            {approvedEvents.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-2 h-5 px-1.5 text-[10px] bg-green-100 text-green-700"
+              >
+                {approvedEvents.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* Events Tab */}
         <TabsContent value="events" className="space-y-6 mt-4">
           <Card>
-            <CardContent className="p-4 flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search events..."
-                  className="pl-9"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <CardContent className="p-4 space-y-4">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search events..."
+                    className="pl-9"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <select
+                      className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={categoryFilter}
+                      onChange={(e) => setCategoryFilter(e.target.value)}
+                    >
+                      <option value="All">All Categories</option>
+                      <option value="cml">CML</option>
+                      <option value="suvara">Suvara</option>
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <select
+                      className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                      <option value="All">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <select
+                      className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={foraneFilter}
+                      onChange={(e) => setForaneFilter(e.target.value)}
+                    >
+                      <option value="All">All Foranes</option>
+                      {foraneNames.map((forane) => (
+                        <option key={forane} value={forane}>
+                          {forane}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              {/* Enhanced Report Filters */}
+              <div className="flex flex-wrap items-end gap-4 pt-2 border-t border-border">
+                <div className="flex flex-col gap-1 min-w-[160px]">
+                  <Label className="text-xs text-muted-foreground">Academic Year</Label>
                   <select
-                    className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={academicYearFilter}
+                    onChange={(e) => setAcademicYearFilter(e.target.value)}
                   >
-                    <option value="All">All Categories</option>
-                    <option value="cml">CML</option>
-                    <option value="suvara">Suvara</option>
-                  </select>
-                </div>
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <select
-                    className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="All">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <select
-                    className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={foraneFilter}
-                    onChange={(e) => setForaneFilter(e.target.value)}
-                  >
-                    <option value="All">All Foranes</option>
-                    {foraneNames.map((forane) => (
-                      <option key={forane} value={forane}>
-                        {forane}
-                      </option>
+                    <option value="All">All Years</option>
+                    {availableAcademicYears.map((yr) => (
+                      <option key={yr} value={yr}>{yr}</option>
                     ))}
                   </select>
                 </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">From Date</Label>
+                  <Input
+                    type="date"
+                    className="w-40"
+                    value={dateFromFilter}
+                    onChange={(e) => setDateFromFilter(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2 pb-1">
+                  <Checkbox
+                    id="forHonor"
+                    checked={forHonorFilter}
+                    onCheckedChange={(checked) => setForHonorFilter(!!checked)}
+                  />
+                  <Label htmlFor="forHonor" className="text-sm cursor-pointer">For Honor (CML only)</Label>
+                </div>
+                {isAdminUser && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateEventReport}
+                    className="ml-auto"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export PDF ({filteredEvents.length})
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

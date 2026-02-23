@@ -15,7 +15,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../config/firebase';
 
-const BROADCASTS_COLLECTION = 'announcements';
+const BROADCASTS_COLLECTION = 'broadcasts';
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
 export interface NotificationData {

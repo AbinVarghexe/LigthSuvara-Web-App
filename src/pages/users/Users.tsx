@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import {
   Search,
-  Filter,
   MoreVertical,
   Shield,
   School,
@@ -56,7 +55,6 @@ export function Users() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState("All");
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -136,16 +134,20 @@ export function Users() {
     fetchUsers();
   }, []);
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.schoolname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole =
-      roleFilter === "All" || user.role === roleFilter.toLowerCase();
-
-    return matchesSearch && matchesRole;
-  });
+  const filteredUsers = users
+    .filter((user) => {
+      if (user.role !== "school") return false;
+      const name = user.schoolName || user.schoolname || user.fullName || "";
+      return (
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    })
+    .sort((a, b) => {
+      const nameA = (a.schoolName || a.schoolname || a.fullName || "").toLowerCase();
+      const nameB = (b.schoolName || b.schoolname || b.fullName || "").toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
 
   const downloadTemplate = () => {
     const headers = [
@@ -460,22 +462,6 @@ export function Users() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="w-full md:w-48">
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger>
-                <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-muted-foreground" />
-                  <SelectValue placeholder="Role" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Roles</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="school">School</SelectItem>
-                <SelectItem value="animator">Animator</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </CardContent>
       </Card>
 
@@ -546,7 +532,7 @@ export function Users() {
                     ? "Administrator"
                     : user.role === "animator"
                     ? "Animator"
-                    : "School Account"}
+                    : "Sunday School"}
                 </Badge>
               </div>
 
