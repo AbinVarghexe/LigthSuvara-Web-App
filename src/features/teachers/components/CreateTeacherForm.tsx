@@ -28,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 
 import {
   createTeacherSchema,
@@ -85,7 +84,7 @@ export function CreateTeacherForm({
       phone: initialData?.phone || "",
       email: initialData?.email || "",
       parishId: initialData?.parishId || "",
-      classes: initialData?.classes || [],
+      classes: initialData?.classes?.length ? [initialData.classes[0]] : [],
       academicYear: initialData?.academicYear || "",
       dob: initialData?.dob || "",
       qualification: initialData?.qualification || "",
@@ -365,42 +364,26 @@ export function CreateTeacherForm({
         <FormField
           control={form.control}
           name="classes"
-          render={() => (
+          render={({ field }) => (
             <FormItem>
-              <div className="mb-2">
-                <FormLabel className="text-base">Classes *</FormLabel>
-              </div>
-              <div className="grid grid-cols-3 gap-2 border p-2 rounded-md h-32 overflow-y-auto">
-                {ACADEMIC_CLASSES.map((cls) => (
-                  <FormField
-                    key={cls}
-                    control={form.control}
-                    name="classes"
-                    render={({ field }) => (
-                      <FormItem
-                        key={cls}
-                        className="flex flex-row items-center space-x-2 space-y-0"
-                      >
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(cls)}
-                            onCheckedChange={(checked) =>
-                              checked
-                                ? field.onChange([...field.value, cls])
-                                : field.onChange(
-                                    field.value?.filter((v) => v !== cls),
-                                  )
-                            }
-                          />
-                        </FormControl>
-                        <FormLabel className="text-sm font-normal cursor-pointer">
-                          {cls}
-                        </FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                ))}
-              </div>
+              <FormLabel>Class *</FormLabel>
+              <Select
+                onValueChange={(val) => field.onChange([val])}
+                defaultValue={field.value?.[0] || ""}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a class" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {ACADEMIC_CLASSES.map((cls) => (
+                    <SelectItem key={cls} value={cls}>
+                      {cls}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

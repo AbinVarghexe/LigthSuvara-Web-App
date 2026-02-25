@@ -9,6 +9,7 @@ import {
   Trash2,
   FileDown,
   Pencil,
+  MessageSquarePlus,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,6 +52,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -64,9 +66,11 @@ import { cn } from "@/lib/utils";
 import { Teacher, Parish } from "@/features/teachers/types";
 import { TeacherService } from "@/features/teachers/services/teacherService";
 import { AssignmentService } from "@/features/teachers/services/assignmentService";
+import { RemarkService, ObserverRemark } from "@/features/teachers/services/remarkService";
 import { ParishService } from "@/features/parishes/services/parishService";
 import { TeacherList } from "@/features/teachers/components/TeacherList";
 import { PdfService } from "@/features/teachers/services/pdfService";
+import { useAuth } from "@/context/AuthContext";
 
 interface Assignment {
   id: string;
@@ -182,6 +186,7 @@ function ReportFilterBar({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function Observers() {
+  const { currentUser } = useAuth();
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [parishes, setParishes] = useState<Parish[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -207,6 +212,13 @@ export function Observers() {
   const [editNewTeacherId, setEditNewTeacherId] = useState<string>("");
   const [editNewParishId, setEditNewParishId] = useState<string>("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // --- Remark Dialog State ---
+  const [remarkAssignment, setRemarkAssignment] = useState<Assignment | null>(null);
+  const [remarkText, setRemarkText] = useState("");
+  const [existingRemarks, setExistingRemarks] = useState<ObserverRemark[]>([]);
+  const [remarkLoading, setRemarkLoading] = useState(false);
+  const [isSavingRemark, setIsSavingRemark] = useState(false);
 
   // --- All Observers Tab State ---
   const [dirFilterForane, setDirFilterForane] = useState<string>("All");
@@ -389,10 +401,61 @@ export function Observers() {
       toast.success("Assignment updated successfully");
       setEditingAssignment(null);
       setRefreshTrigger((n) => n + 1);
+      // Regenerate PDF after assignment is confirmed updated
+      const newTeacher = allTeachers.find((t) => t.id === editNewTeacherId);
+      const newParish = parishes.find((p) => p.id === editNewParishId);
+      if (newTeacher && newParish) {
+        try {
+          await PdfService.generateTeacherDutyReport(newTeacher, newParish, "General");
+          toast.info("PDF Order regenerated for updated assignment");
+        } catch {
+          // PDF regeneration failure should not block the user
+        }
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to update assignment");
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  const openRemarkDialog = async (assignment: Assignment) => {
+    setRemarkAssignment(assignment);
+    setRemarkText("");
+    setRemarkLoading(true);
+    try {
+      const remarks = await RemarkService.getRemarksByDuty(assignment.id);
+      setExistingRemarks(remarks);
+    } catch {
+      setExistingRemarks([]);
+    } finally {
+      setRemarkLoading(false);
+    }
+  };
+
+  const handleSaveRemark = async () => {
+    if (!remarkAssignment || !remarkText.trim()) {
+      toast.error("Please enter a remark");
+      return;
+    }
+    setIsSavingRemark(true);
+    const teacher = allTeachers.find((t) => t.id === remarkAssignment.teacherId);
+    try {
+      await RemarkService.addRemark({
+        teacherId: remarkAssignment.teacherId,
+        dutyId: remarkAssignment.id,
+        academicYear: teacher?.academicYear || "",
+        remark: remarkText.trim(),
+        createdBy: currentUser?.uid || "admin",
+      });
+      toast.success("Remark saved");
+      setRemarkText("");
+      const updated = await RemarkService.getRemarksByDuty(remarkAssignment.id);
+      setExistingRemarks(updated);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save remark");
+    } finally {
+      setIsSavingRemark(false);
     }
   };
 
@@ -813,6 +876,15 @@ export function Observers() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="text-green-500 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => openRemarkDialog(assignment)}
+                                title="Add/View Remarks"
+                              >
+                                <MessageSquarePlus className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
                                 onClick={() => openEditDialog(assignment)}
                                 title="Edit Assignment"
@@ -1112,6 +1184,63 @@ export function Observers() {
                 </>
               ) : (
                 "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── REMARK DIALOG ─── */}
+      <Dialog
+        open={!!remarkAssignment}
+        onOpenChange={(open) => {
+          if (!open) { setRemarkAssignment(null); setRemarkText(""); }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Observer Remarks</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {remarkLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {existingRemarks.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                    {existingRemarks.map((r) => (
+                      <div key={r.id} className="text-sm border-b last:border-0 pb-2">
+                        <p className="text-foreground">{r.remark}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {r.createdAt ? new Date((r.createdAt as any).seconds * 1000).toLocaleString() : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Add Remark</Label>
+                  <Textarea
+                    placeholder="Enter remark for this observer duty..."
+                    value={remarkText}
+                    onChange={(e) => setRemarkText(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRemarkAssignment(null); setRemarkText(""); }}>
+              Close
+            </Button>
+            <Button onClick={handleSaveRemark} disabled={isSavingRemark || !remarkText.trim()}>
+              {isSavingRemark ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+              ) : (
+                "Save Remark"
               )}
             </Button>
           </DialogFooter>

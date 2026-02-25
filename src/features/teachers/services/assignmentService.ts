@@ -4,7 +4,10 @@ import {
   serverTimestamp,
   query,
   where,
-  getDocs
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import { TeacherService } from "./teacherService";
@@ -17,28 +20,35 @@ export const AssignmentService = {
    * Assign a teacher to a parish
    */
   assignTeacher: async (teacherId: string, parishId: string, classId: string = "General") => {
-    // 1. Validation: Check if parish already has an assignment for this academic year/class context?
-    // Requirement: "One parish -> one teacher only" 
-    // We assume this means generally for the inspection period.
-    
-    const q = query(
+    // 1. Check if the target parish already has an assignment
+    const parishQ = query(
       collection(db, ASSIGNMENTS_COLLECTION),
       where("parishId", "==", parishId)
     );
-    const existing = await getDocs(q);
-    if (!existing.empty) {
+    const parishExisting = await getDocs(parishQ);
+    if (!parishExisting.empty) {
       throw new Error("This parish already has an assigned teacher.");
     }
 
-    // 2. Create Assignment Record
+    // 2. Check if the teacher is already assigned to another parish
+    const teacherQ = query(
+      collection(db, ASSIGNMENTS_COLLECTION),
+      where("teacherId", "==", teacherId)
+    );
+    const teacherExisting = await getDocs(teacherQ);
+    if (!teacherExisting.empty) {
+      throw new Error("This observer is already assigned to another parish.");
+    }
+
+    // 3. Create Assignment Record
     await addDoc(collection(db, ASSIGNMENTS_COLLECTION), {
       teacherId,
       parishId,
       class: classId,
-      dateAssigned: serverTimestamp() // Firestore timestamp
+      dateAssigned: serverTimestamp()
     });
 
-    // 3. Update Teacher Status
+    // 4. Update Teacher Status
     await TeacherService.setAssigned(teacherId, parishId);
     
     return true;
@@ -157,31 +167,51 @@ export const AssignmentService = {
    */
   deleteAssignment: async (assignmentId: string, teacherId: string) => {
     // 1. Delete assignment doc
-    const { deleteDoc, doc } = await import("firebase/firestore");
     await deleteDoc(doc(db, ASSIGNMENTS_COLLECTION, assignmentId));
 
     // 2. Update Teacher Status (Unassign)
-    // @ts-ignore - allowing null for unassignment
     await TeacherService.setAssigned(teacherId, null);
   },
 
   /**
-   * Update an assignment
+   * Update an assignment (reassign observer or change target parish)
    */
   updateAssignment: async (assignmentId: string, oldTeacherId: string, newTeacherId: string, newParishId: string) => {
-     // 1. Unassign old teacher
+     // 1. Validate: check the new parish doesn't already have a DIFFERENT assignment
+     const parishQ = query(
+       collection(db, ASSIGNMENTS_COLLECTION),
+       where("parishId", "==", newParishId)
+     );
+     const parishExisting = await getDocs(parishQ);
+     const parishConflict = parishExisting.docs.find((d) => d.id !== assignmentId);
+     if (parishConflict) {
+       throw new Error("The selected parish already has an assigned observer.");
+     }
+
+     // 2. Validate: check the new teacher is not already assigned to a different parish
+     if (newTeacherId !== oldTeacherId) {
+       const teacherQ = query(
+         collection(db, ASSIGNMENTS_COLLECTION),
+         where("teacherId", "==", newTeacherId)
+       );
+       const teacherExisting = await getDocs(teacherQ);
+       const teacherConflict = teacherExisting.docs.find((d) => d.id !== assignmentId);
+       if (teacherConflict) {
+         throw new Error("The selected observer is already assigned to another parish.");
+       }
+     }
+
+     // 3. Unassign old teacher (if changed)
      if (oldTeacherId && oldTeacherId !== newTeacherId) {
-         // @ts-ignore - allowing null for unassignment
          await TeacherService.setAssigned(oldTeacherId, null);
      }
      
-     // 2. Assign new teacher (if changed)
+     // 4. Assign new teacher
      if (newTeacherId) {
          await TeacherService.setAssigned(newTeacherId, newParishId);
      }
 
-     // 3. Update Assignment Doc
-     const { updateDoc, doc } = await import("firebase/firestore");
+     // 5. Update Assignment Doc
      await updateDoc(doc(db, ASSIGNMENTS_COLLECTION, assignmentId), {
          teacherId: newTeacherId,
          parishId: newParishId

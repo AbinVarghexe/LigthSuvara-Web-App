@@ -45,7 +45,7 @@ export const createTeacherSchema = z.object({
   phone: z.string().min(10, "Valid phone number required"),
   email: z.string().email("Invalid email address"),
   parishId: z.string().min(1, "Parish is required"),
-  classes: z.array(z.string()).min(1, "At least one class is required"),
+  classes: z.array(z.string()).min(1, "Class is required").max(1, "Only one class can be selected"),
   academicYear: z.string().min(1, "Academic Year is required"),
   dob: z.string().min(1, "Date of Birth is required"),
   qualification: z.string().min(1, "Qualification is required"),
