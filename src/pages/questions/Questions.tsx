@@ -77,7 +77,7 @@ import {
   deleteQuestion,
   getNextQuestionOrder,
   reorderQuestions,
-  getTotalMaxMarks,
+  getTotalmaxMark,
   toggleMandatory,
   QuestionData,
 } from "../../features/questions/services/questionService";
@@ -85,8 +85,8 @@ import {
 interface SortableRowProps {
   question: QuestionData;
   editingId: string | null;
-  inlineEditData: { text: string; maxMarks: number };
-  setInlineEditData: (data: { text: string; maxMarks: number }) => void;
+  inlineEditData: { text: string; maxMark: number };
+  setInlineEditData: (data: { text: string; maxMark: number }) => void;
   handleStartEdit: (question: QuestionData) => void;
   handleSaveEdit: (id: string) => void;
   handleCancelEdit: () => void;
@@ -377,7 +377,7 @@ export function Questions() {
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [totalMaxMarks, setTotalMaxMarks] = useState(0);
+  const [totalmaxMark, setTotalmaxMark] = useState(0);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -397,8 +397,8 @@ export function Questions() {
       setLoading(true);
       const questionsData = await getQuestions();
       setQuestions(questionsData);
-      const total = await getTotalMaxMarks();
-      setTotalMaxMarks(total);
+      const total = await getTotalmaxMark();
+      setTotalmaxMark(total);
     } catch (error) {
       console.error("Error fetching questions:", error);
       toast.error("Failed to load questions");
@@ -439,7 +439,7 @@ export function Questions() {
     setEditingId(question.id!);
     setInlineEditData({
       text: question.text,
-      maxMarks: question.maxMarks,
+      maxMark: question.maxMark,
     });
   };
 
@@ -452,7 +452,7 @@ export function Questions() {
     try {
       await updateQuestion(questionId, {
         text: inlineEditData.text,
-        maxMarks: inlineEditData.maxMarks,
+        maxMark: inlineEditData.maxMark,
       });
       toast.success("Question updated successfully");
       setEditingId(null);
@@ -558,7 +558,7 @@ export function Questions() {
     doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
 
     // Right side meta
-    const totalMarksText = `Max. Marks: ${totalMaxMarks}`;
+    const totalMarksText = `Max. Marks: ${totalmaxMark}`;
     doc.text(totalMarksText, pageWidth - margin, yPos, { align: "right" });
     yPos += 6;
 
@@ -685,7 +685,7 @@ export function Questions() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             Total Max Marks:{" "}
-            <span className="font-semibold">{totalMaxMarks}</span>
+            <span className="font-semibold">{totalmaxMark}</span>
           </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
