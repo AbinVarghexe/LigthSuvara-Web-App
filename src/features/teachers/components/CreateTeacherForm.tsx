@@ -69,6 +69,26 @@ export function CreateTeacherForm({
     initialData?.profilePicture || null,
   );
 
+  // Helper to safely convert various date formats (ISO string, Date, or Firebase Timestamp) to ISO string
+  const toIsoDate = (val: any) => {
+    if (!val) return "";
+    // Handle Firebase Timestamp
+    if (val && typeof val === 'object' && 'seconds' in val) {
+      return new Date(val.seconds * 1000).toISOString();
+    }
+    // Handle Date object
+    if (val instanceof Date) {
+      return val.toISOString();
+    }
+    // Assume string or try to parse
+    try {
+      const d = new Date(val);
+      return !isNaN(d.getTime()) ? d.toISOString() : "";
+    } catch {
+      return "";
+    }
+  };
+
   // Initialize form — parishId field is reused as schoolId internally for schema compat
   const form = useForm<CreateTeacherInput>({
     resolver: zodResolver(createTeacherSchema),
@@ -83,7 +103,7 @@ export function CreateTeacherForm({
           : [String(initialData.classes)]
         : [],
       academicYear: initialData?.academicYear || "",
-      dob: initialData?.dob || "",
+      dob: toIsoDate(initialData?.dob),
       qualification: initialData?.qualification || "",
       profilePicture: initialData?.profilePicture || "",
     },
@@ -241,11 +261,15 @@ export function CreateTeacherForm({
                           !field.value && "text-muted-foreground",
                         )}
                       >
-                        {field.value ? (
-                          format(new Date(field.value), "PPP")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
+                        {(() => {
+                          const date = field.value ? new Date(field.value) : null;
+                          const isValidDate = date && !isNaN(date.getTime());
+                          return isValidDate ? (
+                            format(date, "PPP")
+                          ) : (
+                            <span>Pick a date</span>
+                          );
+                        })()}
                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
                     </FormControl>
@@ -253,6 +277,9 @@ export function CreateTeacherForm({
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
+                      captionLayout="dropdown"
+                      fromYear={1950}
+                      toYear={new Date().getFullYear()}
                       selected={field.value ? new Date(field.value) : undefined}
                       onSelect={(date) => field.onChange(date?.toISOString())}
                       disabled={(date) =>

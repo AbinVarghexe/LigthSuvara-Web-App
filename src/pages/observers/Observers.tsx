@@ -162,6 +162,7 @@ export function Observers() {
   const [assignFilterForane, setAssignFilterForane] = useState<string>("All");
   const [assignFilterParishId, setAssignFilterParishId] = useState<string>("All");
   const [assignFilterClass, setAssignFilterClass] = useState<string>("All");
+  const [assignFilterSchoolForane, setAssignFilterSchoolForane] = useState<string>("All");
 
   // --- All Observers Tab State ---
   const [dirFilterForane, setDirFilterForane] = useState<string>("All");
@@ -204,16 +205,30 @@ export function Observers() {
           ],
         );
         const allUsers = usersData as UserData[];
-        const sourceParishesList = allUsers.filter(u => u.role === 'parish' || u.role === 'admin').map(u => ({
-          ...u,
-          id: u.uid || u.id,
-          name: (u as any).name || (u as any).displayName || u.email
-        })) as any[];
-        const schoolsList = allUsers.filter(u => u.role === 'school').map(u => ({
-          ...u,
-          id: u.uid || u.id,
-          name: (u as any).schoolname || (u as any).name || (u as any).displayName || u.email
-        })) as any[];
+        const groupByName = (users: any[]) => {
+          const map = new Map<string, any>();
+          users.forEach(u => {
+            const name = (u as any).schoolname || (u as any).name || (u as any).displayName || u.email;
+            const id = u.uid || u.id;
+            if (map.has(name)) {
+              const existing = map.get(name);
+              if (!existing.ids.includes(id)) {
+                existing.ids.push(id);
+              }
+            } else {
+              map.set(name, {
+                ...u,
+                id, // primary id for selected state
+                ids: [id],
+                name
+              });
+            }
+          });
+          return Array.from(map.values());
+        };
+
+        const sourceParishesList = groupByName(allUsers.filter(u => u.role === 'parish' || u.role === 'school'));
+        const schoolsList = groupByName(allUsers.filter(u => u.role === 'school'));
 
         setAllTeachers(teachersData);
         setSourceParishes(sourceParishesList);
@@ -245,7 +260,8 @@ export function Observers() {
     const matchesSearch = s.name.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
       (s as any).schoolname?.toLowerCase().includes(schoolSearchQuery.toLowerCase());
     const matchesTab = assignmentSubTab === "assigned" ? !!s.assignment : !s.assignment;
-    return matchesSearch && matchesTab;
+    const matchesForane = assignFilterSchoolForane === "All" || (s as any).forane === assignFilterSchoolForane;
+    return matchesSearch && matchesTab && matchesForane;
   });
 
   // Filter logic for All Observers tab
@@ -255,12 +271,19 @@ export function Observers() {
     let result = allTeachers;
     if (dirFilterForane && dirFilterForane !== "All") {
       result = result.filter((t: any) => {
-        const p = sourceParishes.find((s: any) => s.id === (t.parishId || t.schoolId));
+        const p = sourceParishes.find((s: any) =>
+          s.ids ? s.ids.includes(t.parishId || t.schoolId) : s.id === (t.parishId || t.schoolId)
+        );
         return p?.forane === dirFilterForane;
       });
     }
     if (dirFilterParishId && dirFilterParishId !== "All") {
-      result = result.filter((t: any) => (t.parishId || t.schoolId) === dirFilterParishId);
+      const selected = sourceParishes.find(p => p.id === dirFilterParishId);
+      if (selected && selected.ids) {
+        result = result.filter((t: any) => selected.ids.includes(t.parishId || t.schoolId));
+      } else {
+        result = result.filter((t: any) => (t.parishId || t.schoolId) === dirFilterParishId);
+      }
     }
     if (dirFilterClass && dirFilterClass !== "All") {
       result = result.filter(
@@ -351,12 +374,17 @@ export function Observers() {
   const handleGenerateAssignmentReport = async () => {
     const filtered = assignments.filter((a) => {
       const teacher = allTeachers.find((t: any) => t.id === a.teacherId);
-      const assignedParish = schools.find((p: any) => p.id === a.targetSchoolId);
+      const assignedParish = schools.find((p: any) =>
+        p.ids ? p.ids.includes(a.targetSchoolId) : p.id === a.targetSchoolId
+      );
       if (!teacher || !assignedParish) return false;
       const matchesForane =
         rptAssignForane === "All" || assignedParish.forane === rptAssignForane;
+
+      const selectedSource = schools.find(p => p.id === rptAssignParishId);
       const matchesParish =
-        rptAssignParishId === "All" || a.targetSchoolId === rptAssignParishId;
+        rptAssignParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(a.targetSchoolId) : a.targetSchoolId === rptAssignParishId);
+
       const matchesYear =
         rptAssignYear === "All" || a.academicYear === rptAssignYear;
       return matchesForane && matchesParish && matchesYear;
@@ -379,11 +407,16 @@ export function Observers() {
 
   const handleGenerateDirectoryReport = async () => {
     const filtered = allTeachers.filter((t: any) => {
-      const homeParish = schools.find((p: any) => p.id === t.parishId);
+      const homeParish = sourceParishes.find((p: any) =>
+        p.ids ? p.ids.includes(t.parishId || t.schoolId) : p.id === (t.parishId || t.schoolId)
+      );
       const matchesForane =
         rptDirForane === "All" || homeParish?.forane === rptDirForane;
+
+      const selectedSource = sourceParishes.find(p => p.id === rptDirParishId);
       const matchesParish =
-        rptDirParishId === "All" || t.parishId === rptDirParishId;
+        rptDirParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(t.parishId || t.schoolId) : (t.parishId || t.schoolId) === rptDirParishId);
+
       const matchesYear = rptDirYear === "All" || t.academicYear === rptDirYear;
       return matchesForane && matchesParish && matchesYear;
     });
@@ -522,6 +555,24 @@ export function Observers() {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                   <ArrowRight className="h-4 w-4 rotate-90" />
                 </span>
+              </div>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Select
+                  value={assignFilterSchoolForane}
+                  onValueChange={setAssignFilterSchoolForane}
+                >
+                  <SelectTrigger className="w-full md:w-[180px]">
+                    <SelectValue placeholder="All Foranes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Foranes</SelectItem>
+                    {uniqueForanes.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -736,22 +787,27 @@ export function Observers() {
                 {/* Preview count */}
                 <p className="text-xs text-muted-foreground pl-1">
                   {(() => {
-                    const count = assignments.filter((a) => {
+                    const filtered = assignments.filter((a) => {
                       const teacher = allTeachers.find(
                         (t) => t.id === a.teacherId,
                       );
-                      const ap = schools.find((p: any) => p.id === a.targetSchoolId);
+                      const ap = schools.find((p: any) =>
+                        p.ids ? p.ids.includes(a.targetSchoolId) : p.id === a.targetSchoolId
+                      );
                       if (!teacher || !ap) return false;
+
+                      const selectedSource = schools.find(p => p.id === rptAssignParishId);
+                      const matchesParish = rptAssignParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(a.targetSchoolId) : a.targetSchoolId === rptAssignParishId);
+
                       return (
                         (rptAssignForane === "All" ||
                           ap.forane === rptAssignForane) &&
-                        (rptAssignParishId === "All" ||
-                          a.targetSchoolId === rptAssignParishId) &&
+                        matchesParish &&
                         (rptAssignYear === "All" ||
                           a.academicYear === rptAssignYear)
                       );
-                    }).length;
-                    return `${count} assignment(s) will be included in this report.`;
+                    });
+                    return `${filtered.length} assignment(s) will be included in this report.`;
                   })()}
                 </p>
               </CardContent>
@@ -787,17 +843,21 @@ export function Observers() {
                 {/* Preview count */}
                 <p className="text-xs text-muted-foreground pl-1">
                   {(() => {
-                    const count = allTeachers.filter((t: any) => {
-                      const hp = schools.find((p: any) => p.id === t.parishId);
+                    const filtered = allTeachers.filter((t: any) => {
+                      const hp = sourceParishes.find((p: any) =>
+                        p.ids ? p.ids.includes(t.parishId || t.schoolId) : p.id === (t.parishId || t.schoolId)
+                      );
+                      const selectedSource = sourceParishes.find(p => p.id === rptDirParishId);
+                      const matchesParish = rptDirParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(t.parishId || t.schoolId) : (t.parishId || t.schoolId) === rptDirParishId);
+
                       return (
                         (rptDirForane === "All" ||
                           hp?.forane === rptDirForane) &&
-                        (rptDirParishId === "All" ||
-                          t.parishId === rptDirParishId) &&
+                        matchesParish &&
                         (rptDirYear === "All" || t.academicYear === rptDirYear)
                       );
-                    }).length;
-                    return `${count} observer(s) will be included in this report.`;
+                    });
+                    return `${filtered.length} observer(s) will be included in this report.`;
                   })()}
                 </p>
               </CardContent>
@@ -1131,6 +1191,6 @@ export function Observers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div >
+    </div>
   );
 }
