@@ -131,7 +131,7 @@ export function TeacherList({
               <div className="flex items-start gap-2">
                 <BookOpen className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <div className="flex flex-wrap gap-1">
-                  {teacher.classes.map((cls) => (
+                  {Array.isArray(teacher.classes) && teacher.classes.map((cls) => (
                     <span
                       key={cls}
                       className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground"

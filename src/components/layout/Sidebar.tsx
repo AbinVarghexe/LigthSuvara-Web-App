@@ -30,7 +30,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Events", href: "/events", icon: Calendar },
-  { name: "Technical Uses", href: "/users", icon: Church },
+  { name: "Technical Users", href: "/users", icon: Church },
   {
     name: "Teacher Management",
     href: "/teachers",
@@ -94,11 +94,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         className={`
                 w-64 bg-card border-r border-border h-screen flex flex-col 
                 fixed left-0 top-0 overflow-y-auto z-50 transition-transform duration-300
-                ${
-                  isOpen
-                    ? "translate-x-0"
-                    : "-translate-x-full lg:translate-x-0"
-                }
+                ${isOpen
+            ? "translate-x-0"
+            : "-translate-x-full lg:translate-x-0"
+          }
             `}
       >
         {/* Mobile Close Button */}
@@ -157,11 +156,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <div className="space-y-1">
                       <button
                         onClick={() => toggleExpand(item.name)}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
-                          isChildActive
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${isChildActive
                             ? "text-primary bg-primary/10"
                             : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-3">
                           <item.icon className="w-5 h-5" />
@@ -186,11 +184,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                                 <Link
                                   to={child.href}
                                   onClick={() => onClose()}
-                                  className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${
-                                    isChildActive
+                                  className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${isChildActive
                                       ? "bg-primary text-primary-foreground"
                                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                  }`}
+                                    }`}
                                 >
                                   <child.icon className="w-4 h-4" />
                                   <span className="font-medium">
@@ -207,11 +204,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <Link
                       to={item.href}
                       onClick={() => onClose()}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        isActive
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                           ? "bg-primary text-primary-foreground"
                           : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                      }`}
+                        }`}
                     >
                       <item.icon className="w-5 h-5" />
                       <span className="font-medium">{item.name}</span>
