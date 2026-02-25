@@ -29,6 +29,7 @@ export interface NotificationData {
     isBroadcast: boolean;
     isRead: boolean;
     audience: 'public' | 'all' | 'specific';
+    readBy?: string[];
 }
 
 export const uploadMessageImage = async (file: File): Promise<string> => {
@@ -48,6 +49,7 @@ export const sendBroadcast = async (title: string, body: string, imageUrl?: stri
         isBroadcast: true,
         isRead: false,
         audience: 'public',
+        readBy: [],
     });
 };
 
@@ -57,10 +59,11 @@ export const sendToAll = async (title: string, body: string, imageUrl?: string) 
         body,
         imageUrl: imageUrl || null,
         timestamp: serverTimestamp(),
-        recipientId: 'all',
+        recipientId: 'role_school',
         isBroadcast: true,
         isRead: false,
         audience: 'all',
+        readBy: [],
     });
 };
 
@@ -78,6 +81,7 @@ export const sendToSpecific = async (title: string, body: string, schoolIds: str
             isBroadcast: false,
             isRead: false,
             audience: 'specific',
+            readBy: [],
         });
     });
     await batch.commit();

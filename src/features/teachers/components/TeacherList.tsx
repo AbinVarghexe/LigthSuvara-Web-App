@@ -68,7 +68,7 @@ export function TeacherList({
                   <h3 className="font-semibold text-lg">{teacher.name}</h3>
                   <div className="flex items-center text-muted-foreground text-sm">
                     <School className="w-3 h-3 mr-1" />
-                    {teacher.parishName}
+                    {(teacher as any).schoolName || teacher.parishName || "—"}
                   </div>
                 </div>
               </div>

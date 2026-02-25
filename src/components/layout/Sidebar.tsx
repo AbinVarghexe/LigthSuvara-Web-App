@@ -58,9 +58,10 @@ const navigation: NavItem[] = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  onRefresh?: () => void;
 }
 
-export function Sidebar({ isOpen, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
   const location = useLocation();
   const { isAdminUser } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>([
@@ -157,8 +158,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       <button
                         onClick={() => toggleExpand(item.name)}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${isChildActive
-                            ? "text-primary bg-primary/10"
-                            : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                          ? "text-primary bg-primary/10"
+                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
                           }`}
                       >
                         <div className="flex items-center gap-3">
@@ -183,10 +184,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                               <li key={child.name}>
                                 <Link
                                   to={child.href}
-                                  onClick={() => onClose()}
+                                  onClick={() => {
+                                    if (location.pathname === child.href) {
+                                      onRefresh?.();
+                                    }
+                                    onClose();
+                                  }}
                                   className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${isChildActive
-                                      ? "bg-primary text-primary-foreground"
-                                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                     }`}
                                 >
                                   <child.icon className="w-4 h-4" />
@@ -203,10 +209,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   ) : (
                     <Link
                       to={item.href}
-                      onClick={() => onClose()}
+                      onClick={() => {
+                        if (location.pathname === item.href || location.pathname.startsWith(item.href + "/")) {
+                          onRefresh?.();
+                        }
+                        onClose();
+                      }}
                       className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground hover:bg-accent hover:text-accent-foreground"
                         }`}
                     >
                       <item.icon className="w-5 h-5" />

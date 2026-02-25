@@ -5,7 +5,7 @@ import { isAdmin } from '../features/auth/services/authService';
 
 interface AuthContextType {
     currentUser: User | null;
-    userRole: 'admin' | 'school' | null;
+    userRole: 'admin' | 'school' | 'parish' | null;
     loading: boolean;
     isAdminUser: boolean;
 }
@@ -21,7 +21,7 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [userRole, setUserRole] = useState<'admin' | 'school' | null>(null);
+    const [userRole, setUserRole] = useState<'admin' | 'school' | 'parish' | null>(null);
     const [isAdminUser, setIsAdminUser] = useState(false);
     const [loading, setLoading] = useState(true);
 

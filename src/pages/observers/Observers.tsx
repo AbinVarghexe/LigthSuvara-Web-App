@@ -2,14 +2,13 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Loader2,
-  ArrowLeft,
   ArrowRight,
-  Check,
-  ChevronsUpDown,
   Trash2,
   FileDown,
-  Pencil,
   MessageSquarePlus,
+  Calendar,
+  History,
+  Eye,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,19 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -54,62 +40,33 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+  cn,
+} from "@/lib/utils";
 
-import { Teacher, Parish } from "@/features/teachers/types";
+import { Teacher } from "@/features/teachers/types";
 import { TeacherService } from "@/features/teachers/services/teacherService";
 import { AssignmentService } from "@/features/teachers/services/assignmentService";
 import { RemarkService, ObserverRemark } from "@/features/teachers/services/remarkService";
-import { ParishService } from "@/features/parishes/services/parishService";
 import { TeacherList } from "@/features/teachers/components/TeacherList";
-import { PdfService } from "@/features/teachers/services/pdfService";
 import { useAuth } from "@/context/AuthContext";
+import { getUsers, UserData } from "@/features/users/services/userService";
 
-interface Assignment {
-  id: string;
-  teacherId: string;
-  parishId: string;
-  class: string;
-  dateAssigned: any;
-}
-
-// ─── Helper: Filter Bar ───────────────────────────────────────────────────────
-interface ReportFilterBarProps {
-  foranes: string[];
-  parishes: Parish[];
-  academicYears: string[];
-  forane: string;
-  parishId: string;
-  academicYear: string;
-  onForaneChange: (val: string) => void;
-  onParishChange: (val: string) => void;
-  onYearChange: (val: string) => void;
-  onGenerate: () => void;
-  generating?: boolean;
-}
-
+// --- Helper: Filter Bar ---
 function ReportFilterBar({
   foranes,
-  parishes,
+  schools,
   academicYears,
   forane,
-  parishId,
+  schoolId,
   academicYear,
   onForaneChange,
-  onParishChange,
+  onSchoolChange,
   onYearChange,
   onGenerate,
   generating = false,
-}: ReportFilterBarProps) {
-  const filteredParishes =
-    forane === "All" ? parishes : parishes.filter((p) => p.forane === forane);
+}: any) {
+  const filteredSchools =
+    forane === "All" ? schools : schools.filter((s: any) => s.forane === forane);
 
   return (
     <div className="flex flex-wrap gap-3 items-end p-4 bg-muted/40 rounded-lg border">
@@ -119,7 +76,7 @@ function ReportFilterBar({
           value={forane}
           onValueChange={(val) => {
             onForaneChange(val);
-            onParishChange("All");
+            onSchoolChange("All");
           }}
         >
           <SelectTrigger className="h-8 text-sm">
@@ -127,7 +84,7 @@ function ReportFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="All">All Foranes</SelectItem>
-            {foranes.map((f) => (
+            {foranes.map((f: any) => (
               <SelectItem key={f} value={f}>
                 {f}
               </SelectItem>
@@ -136,16 +93,16 @@ function ReportFilterBar({
         </Select>
       </div>
       <div className="space-y-1 min-w-[160px]">
-        <Label className="text-xs">Parish</Label>
-        <Select value={parishId} onValueChange={onParishChange}>
+        <Label className="text-xs">School</Label>
+        <Select value={schoolId} onValueChange={onSchoolChange}>
           <SelectTrigger className="h-8 text-sm">
-            <SelectValue placeholder="All Parishes" />
+            <SelectValue placeholder="All Schools" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="All">All Parishes</SelectItem>
-            {filteredParishes.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
+            <SelectItem value="All">All Schools</SelectItem>
+            {filteredSchools.map((s: any) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.schoolname || s.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -159,7 +116,7 @@ function ReportFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="All">All Years</SelectItem>
-            {academicYears.map((yr) => (
+            {academicYears.map((yr: any) => (
               <SelectItem key={yr} value={yr}>
                 {yr}
               </SelectItem>
@@ -188,43 +145,39 @@ function ReportFilterBar({
 export function Observers() {
   const { currentUser } = useAuth();
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
-  const [parishes, setParishes] = useState<Parish[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [sourceParishes, setSourceParishes] = useState<any[]>([]);
+  const [schools, setSchools] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedAcademicYear] = useState("2025-26");
+  const [expirationDate, setExpirationDate] = useState<Date | null>(null);
 
-  // --- New Duty Tab State ---
-  const [filterParishId, setFilterParishId] = useState<string>("All");
-  const [targetParishId, setTargetParishId] = useState<string | null>(null);
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-  const [isClassOpen, setIsClassOpen] = useState(false);
-  const [filteredTeachers, setFilteredTeachers] = useState<Teacher[]>([]);
-
-  // --- Duty History Tab State ---
-  const [selectedForane, setSelectedForane] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // --- Edit Assignment Dialog State ---
-  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(
-    null,
-  );
-  const [editNewTeacherId, setEditNewTeacherId] = useState<string>("");
-  const [editNewParishId, setEditNewParishId] = useState<string>("");
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-
-  // --- Remark Dialog State ---
-  const [remarkAssignment, setRemarkAssignment] = useState<Assignment | null>(null);
-  const [remarkText, setRemarkText] = useState("");
-  const [existingRemarks, setExistingRemarks] = useState<ObserverRemark[]>([]);
-  const [remarkLoading, setRemarkLoading] = useState(false);
-  const [isSavingRemark, setIsSavingRemark] = useState(false);
+  // --- Assignments Tab State ---
+  const [assignmentSubTab, setAssignmentSubTab] = useState<"unassigned" | "assigned">("unassigned");
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [selectedTargetSchool, setSelectedTargetSchool] = useState<any | null>(null);
+  const [assignSearchQuery, setAssignSearchQuery] = useState("");
+  const [assignFilterForane, setAssignFilterForane] = useState<string>("All");
+  const [assignFilterParishId, setAssignFilterParishId] = useState<string>("All");
+  const [assignFilterClass, setAssignFilterClass] = useState<string>("All");
 
   // --- All Observers Tab State ---
   const [dirFilterForane, setDirFilterForane] = useState<string>("All");
   const [dirFilterParishId, setDirFilterParishId] = useState<string>("All");
   const [dirFilterClass, setDirFilterClass] = useState<string>("All");
   const [dirFilteredTeachers, setDirFilteredTeachers] = useState<Teacher[]>([]);
+
+  // --- Submission View State ---
+  const [viewSubmissionAssignment, setViewSubmissionAssignment] = useState<any | null>(null);
+
+  // --- Remark Dialog State ---
+  const [remarkAssignment, setRemarkAssignment] = useState<any | null>(null);
+  const [remarkText, setRemarkText] = useState("");
+  const [existingRemarks, setExistingRemarks] = useState<ObserverRemark[]>([]);
+  const [remarkLoading, setRemarkLoading] = useState(false);
+  const [isSavingRemark, setIsSavingRemark] = useState(false);
 
   // --- Reports Tab State ---
   // Assignment Report
@@ -243,16 +196,33 @@ export function Observers() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [teachersData, parishesData, assignmentsData] = await Promise.all(
+        const [usersData, teachersData, assignmentsData] = await Promise.all(
           [
+            getUsers(),
             TeacherService.getTeachers(),
-            ParishService.getAllParishes(),
             AssignmentService.getAssignments(),
           ],
         );
+        const allUsers = usersData as UserData[];
+        const sourceParishesList = allUsers.filter(u => u.role === 'parish' || u.role === 'admin').map(u => ({
+          ...u,
+          id: u.uid || u.id,
+          name: (u as any).name || (u as any).displayName || u.email
+        })) as any[];
+        const schoolsList = allUsers.filter(u => u.role === 'school').map(u => ({
+          ...u,
+          id: u.uid || u.id,
+          name: (u as any).schoolname || (u as any).name || (u as any).displayName || u.email
+        })) as any[];
+
         setAllTeachers(teachersData);
-        setParishes(parishesData);
-        setAssignments(assignmentsData as Assignment[]);
+        setSourceParishes(sourceParishesList);
+        setSchools(schoolsList);
+        setAssignments(assignmentsData);
+
+        // Fetch expiration date
+        const expDoc = await AssignmentService.getExpirationDate(selectedAcademicYear);
+        if (expDoc) setExpirationDate(expDoc);
       } catch (error) {
         toast.error("Failed to load data");
       } finally {
@@ -260,41 +230,41 @@ export function Observers() {
       }
     };
     loadData();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, selectedAcademicYear]);
 
-  // Filter logic for New Duty tab
-  useEffect(() => {
-    let result = allTeachers;
-    if (filterParishId && filterParishId !== "All") {
-      result = result.filter((t) => t.parishId === filterParishId);
-    }
-    if (targetParishId) {
-      result = result.filter((t) => t.parishId !== targetParishId);
-    }
-    if (selectedClasses.length > 0) {
-      result = result.filter(
-        (t) =>
-          t.classes && t.classes.some((cls) => selectedClasses.includes(cls)),
-      );
-    }
-    setFilteredTeachers(result);
-  }, [filterParishId, selectedClasses, targetParishId, allTeachers]);
+  // School filters for main Assignments view
+  const [schoolSearchQuery, setSchoolSearchQuery] = useState("");
+
+  // Filtered Schools for Assignments tab
+  const schoolsWithStatus = schools.map(s => {
+    const assignment = assignments.find(a => a.targetSchoolId === s.id && a.academicYear === selectedAcademicYear);
+    return { ...s, assignment };
+  });
+
+  const filteredSchools = schoolsWithStatus.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
+      (s as any).schoolname?.toLowerCase().includes(schoolSearchQuery.toLowerCase());
+    const matchesTab = assignmentSubTab === "assigned" ? !!s.assignment : !s.assignment;
+    return matchesSearch && matchesTab;
+  });
+
+  // Filter logic for All Observers tab
 
   // Filter logic for All Observers tab
   useEffect(() => {
     let result = allTeachers;
     if (dirFilterForane && dirFilterForane !== "All") {
-      result = result.filter((t) => {
-        const p = parishes.find((p) => p.id === t.parishId);
+      result = result.filter((t: any) => {
+        const p = sourceParishes.find((s: any) => s.id === (t.parishId || t.schoolId));
         return p?.forane === dirFilterForane;
       });
     }
     if (dirFilterParishId && dirFilterParishId !== "All") {
-      result = result.filter((t) => t.parishId === dirFilterParishId);
+      result = result.filter((t: any) => (t.parishId || t.schoolId) === dirFilterParishId);
     }
     if (dirFilterClass && dirFilterClass !== "All") {
       result = result.filter(
-        (t) => t.classes && t.classes.includes(dirFilterClass),
+        (t: any) => t.classes && t.classes.includes(dirFilterClass),
       );
     }
     setDirFilteredTeachers(result);
@@ -303,58 +273,24 @@ export function Observers() {
     dirFilterParishId,
     dirFilterClass,
     allTeachers,
-    parishes,
+    sourceParishes,
   ]);
 
   // --- Handlers ---
 
+  // --- Handlers ---
   const handleAssign = async (teacher: Teacher) => {
-    if (!targetParishId) {
-      toast.error("Please select a Target Parish first");
-      return;
-    }
-    if (teacher.parishId === targetParishId) {
-      toast.error("Cannot assign observer to their home parish");
-      return;
-    }
-    if (
-      !window.confirm(
-        `Assign ${teacher.name} to ${parishes.find((p) => p.id === targetParishId)?.name}?`,
-      )
-    )
-      return;
-
+    if (!selectedTargetSchool) return;
     setAssigning(teacher.id);
     try {
       await AssignmentService.assignTeacher(
-        teacher.id,
-        targetParishId,
-        "General",
+        teacher,
+        selectedTargetSchool,
+        selectedAcademicYear,
+        "Observer"
       );
       toast.success(`Assigned ${teacher.name} successfully`);
-      setAllTeachers((prev) =>
-        prev.map((t) =>
-          t.id === teacher.id
-            ? { ...t, assigned: true, assignedParishId: targetParishId }
-            : t,
-        ),
-      );
-      const targetParish = parishes.find((p) => p.id === targetParishId);
-      if (targetParish) {
-        setTimeout(async () => {
-          await PdfService.generateFatherReport(
-            teacher,
-            targetParish,
-            "General",
-          );
-          await PdfService.generateTeacherDutyReport(
-            teacher,
-            targetParish,
-            "General",
-          );
-          toast.info("PDF Orders generated");
-        }, 500);
-      }
+      setIsAssignDialogOpen(false);
       setRefreshTrigger((n) => n + 1);
     } catch (error: any) {
       toast.error(error.message || "Assignment failed");
@@ -363,68 +299,22 @@ export function Observers() {
     }
   };
 
-  const handleDeleteAssignment = async (
-    assignmentId: string,
-    teacherId: string,
-  ) => {
-    if (!window.confirm("Are you sure you want to delete this assignment?"))
-      return;
+
+  const handleDelete = async (assignmentId: string, teacherId: string) => {
+    if (!window.confirm("Are you sure you want to remove this assignment?")) return;
     try {
       await AssignmentService.deleteAssignment(assignmentId, teacherId);
-      toast.success("Assignment deleted");
+      toast.success("Assignment removed");
       setRefreshTrigger((n) => n + 1);
     } catch (error) {
-      toast.error("Failed to delete assignment");
+      toast.error("Failed to remove assignment");
     }
   };
 
-  const openEditDialog = (assignment: Assignment) => {
-    setEditingAssignment(assignment);
-    setEditNewTeacherId(assignment.teacherId);
-    setEditNewParishId(assignment.parishId);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingAssignment) return;
-    if (!editNewTeacherId || !editNewParishId) {
-      toast.error("Please select both an observer and a parish");
-      return;
-    }
-    setIsSavingEdit(true);
-    try {
-      await AssignmentService.updateAssignment(
-        editingAssignment.id,
-        editingAssignment.teacherId,
-        editNewTeacherId,
-        editNewParishId,
-      );
-      toast.success("Assignment updated successfully");
-      setEditingAssignment(null);
-      setRefreshTrigger((n) => n + 1);
-      // Regenerate PDF after assignment is confirmed updated
-      const newTeacher = allTeachers.find((t) => t.id === editNewTeacherId);
-      const newParish = parishes.find((p) => p.id === editNewParishId);
-      if (newTeacher && newParish) {
-        try {
-          await PdfService.generateTeacherDutyReport(newTeacher, newParish, "General");
-          toast.info("PDF Order regenerated for updated assignment");
-        } catch {
-          // PDF regeneration failure should not block the user
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update assignment");
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
-
-  const openRemarkDialog = async (assignment: Assignment) => {
-    setRemarkAssignment(assignment);
-    setRemarkText("");
+  const fetchRemarks = async (assignmentId: string) => {
     setRemarkLoading(true);
     try {
-      const remarks = await RemarkService.getRemarksByDuty(assignment.id);
+      const remarks = await RemarkService.getRemarksByDuty(assignmentId);
       setExistingRemarks(remarks);
     } catch {
       setExistingRemarks([]);
@@ -439,7 +329,7 @@ export function Observers() {
       return;
     }
     setIsSavingRemark(true);
-    const teacher = allTeachers.find((t) => t.id === remarkAssignment.teacherId);
+    const teacher = allTeachers.find((t: any) => t.id === remarkAssignment.teacherId);
     try {
       await RemarkService.addRemark({
         teacherId: remarkAssignment.teacherId,
@@ -450,8 +340,7 @@ export function Observers() {
       });
       toast.success("Remark saved");
       setRemarkText("");
-      const updated = await RemarkService.getRemarksByDuty(remarkAssignment.id);
-      setExistingRemarks(updated);
+      fetchRemarks(remarkAssignment.id);
     } catch (error: any) {
       toast.error(error.message || "Failed to save remark");
     } finally {
@@ -459,33 +348,17 @@ export function Observers() {
     }
   };
 
-  const toggleClassSelection = (cls: string) => {
-    setSelectedClasses((current) =>
-      current.includes(cls)
-        ? current.filter((c) => c !== cls)
-        : [...current, cls],
-    );
-  };
-
-  const toggleSelectAllClasses = () => {
-    if (selectedClasses.length === uniqueClasses.length) {
-      setSelectedClasses([]);
-    } else {
-      setSelectedClasses(uniqueClasses);
-    }
-  };
-
   const handleGenerateAssignmentReport = async () => {
     const filtered = assignments.filter((a) => {
-      const teacher = allTeachers.find((t) => t.id === a.teacherId);
-      const assignedParish = parishes.find((p) => p.id === a.parishId);
+      const teacher = allTeachers.find((t: any) => t.id === a.teacherId);
+      const assignedParish = schools.find((p: any) => p.id === a.targetSchoolId);
       if (!teacher || !assignedParish) return false;
       const matchesForane =
         rptAssignForane === "All" || assignedParish.forane === rptAssignForane;
       const matchesParish =
-        rptAssignParishId === "All" || a.parishId === rptAssignParishId;
+        rptAssignParishId === "All" || a.targetSchoolId === rptAssignParishId;
       const matchesYear =
-        rptAssignYear === "All" || teacher.academicYear === rptAssignYear;
+        rptAssignYear === "All" || a.academicYear === rptAssignYear;
       return matchesForane && matchesParish && matchesYear;
     });
     if (filtered.length === 0) {
@@ -505,8 +378,8 @@ export function Observers() {
   };
 
   const handleGenerateDirectoryReport = async () => {
-    const filtered = allTeachers.filter((t) => {
-      const homeParish = parishes.find((p) => p.id === t.parishId);
+    const filtered = allTeachers.filter((t: any) => {
+      const homeParish = schools.find((p: any) => p.id === t.parishId);
       const matchesForane =
         rptDirForane === "All" || homeParish?.forane === rptDirForane;
       const matchesParish =
@@ -543,387 +416,205 @@ export function Observers() {
     new Set(allTeachers.flatMap((t) => t.classes || [])),
   ).sort();
   const uniqueForanes = Array.from(
-    new Set(parishes.map((p) => p.forane).filter(Boolean)),
+    new Set(sourceParishes.map((p: any) => p.forane).filter(Boolean)),
   ).sort() as string[];
   const uniqueAcademicYears = Array.from(
     new Set(allTeachers.map((t) => t.academicYear).filter(Boolean)),
   ).sort() as string[];
   const dirFilteredParishes =
     dirFilterForane === "All"
-      ? parishes
-      : parishes.filter((p) => p.forane === dirFilterForane);
+      ? sourceParishes
+      : sourceParishes.filter((p: any) => p.forane === dirFilterForane);
 
-  const filteredAssignments = assignments.filter((assignment) => {
-    const teacher = allTeachers.find((t) => t.id === assignment.teacherId);
-    const assignedParish = parishes.find((p) => p.id === assignment.parishId);
-    if (!teacher || !assignedParish) return false;
-    const searchLower = searchQuery.toLowerCase();
-    const matchesSearch =
-      teacher.name.toLowerCase().includes(searchLower) ||
-      assignedParish.name.toLowerCase().includes(searchLower);
-    const matchesForane =
-      selectedForane === "All" || assignedParish.forane === selectedForane;
-    return matchesSearch && matchesForane;
-  });
 
-  const availableObserversForEdit = allTeachers.filter(
-    (t) => !t.assigned || t.id === editingAssignment?.teacherId,
-  );
+  // Unique foranes from schools for assignment dialog filter
+  const uniqueAssignForanes = Array.from(
+    new Set(schools.map((s: any) => s.forane).filter(Boolean))
+  ).sort() as string[];
+
+  // No-op for now
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-          Observer Assignment
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Assign observers to parishes, view history, manage the directory, and
-          generate reports.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100 uppercase">
+            Observer Management
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage school observers, view assignments, and generate reports.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              const dateInput = document.createElement('input');
+              dateInput.type = 'date';
+              dateInput.onchange = async (e) => {
+                const newDate = (e.target as HTMLInputElement).value;
+                if (newDate) {
+                  try {
+                    await AssignmentService.setExpirationDate(selectedAcademicYear, new Date(newDate));
+                    setExpirationDate(new Date(newDate));
+                    toast.success("Expiration date updated");
+                  } catch (err) {
+                    toast.error("Failed to update date");
+                  }
+                }
+              };
+              dateInput.click();
+            }}
+          >
+            <Calendar className="h-4 w-4" />
+            {expirationDate ? new Date(expirationDate).toLocaleDateString() : "Set Expiration"}
+          </Button>
+          <div className="bg-indigo-900 text-white px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-semibold shadow-sm">
+            <History className="h-4 w-4 opacity-70" />
+            {selectedAcademicYear}
+          </div>
+        </div>
       </div>
 
-      <Tabs defaultValue="new-duty" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
-          <TabsTrigger value="new-duty">New Duty</TabsTrigger>
-          <TabsTrigger value="duty-history">Duty History</TabsTrigger>
-          <TabsTrigger value="all-observers">All Observers</TabsTrigger>
+      <Tabs defaultValue="assignments" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsTrigger value="assignments">Assignments</TabsTrigger>
+          <TabsTrigger value="all-observers">Observer Directory</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
-        {/* ─── TAB 1: NEW DUTY ─── */}
-        <TabsContent value="new-duty">
-          <div className="space-y-6">
-            <Card className="bg-muted/50 border-dashed">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-6">
-                  {/* FROM */}
-                  <div className="flex-1 space-y-4">
-                    <label className="text-sm font-semibold flex items-center gap-2">
-                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full ring-1 ring-blue-200">
-                        FROM
-                      </span>
-                      Source (Observers)
-                    </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground ml-1">
-                          Home Parish
-                        </span>
-                        <Select
-                          onValueChange={setFilterParishId}
-                          value={filterParishId}
-                        >
-                          <SelectTrigger className="bg-background">
-                            <SelectValue placeholder="All Sources" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="All">All Parishes</SelectItem>
-                            {parishes.map((p) => (
-                              <SelectItem
-                                key={p.id}
-                                value={p.id}
-                                disabled={p.id === targetParishId}
-                              >
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground ml-1">
-                          Classes
-                        </span>
-                        <Popover
-                          open={isClassOpen}
-                          onOpenChange={setIsClassOpen}
-                        >
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className="w-full justify-between bg-background px-3 font-normal"
-                            >
-                              {selectedClasses.length > 0
-                                ? `${selectedClasses.length} selected`
-                                : "Select classes..."}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[200px] p-0">
-                            <Command>
-                              <CommandInput placeholder="Search class..." />
-                              <CommandList>
-                                <CommandEmpty>No class found.</CommandEmpty>
-                                <CommandGroup>
-                                  <CommandItem
-                                    onSelect={toggleSelectAllClasses}
-                                    className="font-medium"
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        selectedClasses.length ===
-                                          uniqueClasses.length &&
-                                          uniqueClasses.length > 0
-                                          ? "opacity-100"
-                                          : "opacity-0",
-                                      )}
-                                    />
-                                    Select All
-                                  </CommandItem>
-                                  {uniqueClasses.map((cls) => (
-                                    <CommandItem
-                                      key={cls}
-                                      value={cls}
-                                      onSelect={() => toggleClassSelection(cls)}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          selectedClasses.includes(cls)
-                                            ? "opacity-100"
-                                            : "opacity-0",
-                                        )}
-                                      />
-                                      {cls}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                    {selectedClasses.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {selectedClasses.map((cls) => (
-                          <Badge
-                            key={cls}
-                            variant="secondary"
-                            className="px-1.5 py-0 text-[10px] cursor-pointer"
-                            onClick={() => toggleClassSelection(cls)}
-                          >
-                            {cls} ✕
-                          </Badge>
-                        ))}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 text-[10px] px-1"
-                          onClick={() => setSelectedClasses([])}
-                        >
-                          Clear
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ARROW */}
-                  <div className="flex items-center justify-center text-muted-foreground pt-6">
-                    <ArrowRight className="w-8 h-8 hidden md:block text-slate-300" />
-                    <ArrowLeft className="w-8 h-8 md:hidden rotate-90 text-slate-300" />
-                  </div>
-
-                  {/* TO */}
-                  <div className="flex-1 space-y-4">
-                    <label className="text-sm font-semibold flex items-center gap-2">
-                      <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full ring-1 ring-green-200">
-                        TO
-                      </span>
-                      Destination Parish
-                    </label>
-                    <div className="space-y-1">
-                      <span className="text-xs text-muted-foreground ml-1">
-                        Target Parish
-                      </span>
-                      <Select
-                        onValueChange={setTargetParishId}
-                        value={targetParishId || ""}
-                      >
-                        <SelectTrigger className="h-10 text-md font-medium bg-background border-green-200">
-                          <SelectValue placeholder="Select Target..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parishes.map((p) => (
-                            <SelectItem
-                              key={p.id}
-                              value={p.id}
-                              disabled={p.id === filterParishId}
-                            >
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">
-                  Available Observers ({filteredTeachers.length})
-                </h2>
-                {targetParishId && (
-                  <span className="text-sm text-muted-foreground">
-                    Excluding observers from{" "}
-                    {parishes.find((p) => p.id === targetParishId)?.name}
-                  </span>
-                )}
+        <TabsContent value="assignments">
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm">
+              <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
+                <Button
+                  variant={assignmentSubTab === "unassigned" ? "secondary" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "rounded-md px-6 font-semibold",
+                    assignmentSubTab === "unassigned" ? "bg-white shadow-sm text-indigo-900" : "text-gray-500"
+                  )}
+                  onClick={() => setAssignmentSubTab("unassigned")}
+                >
+                  Unassigned
+                </Button>
+                <Button
+                  variant={assignmentSubTab === "assigned" ? "secondary" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "rounded-md px-6 font-semibold",
+                    assignmentSubTab === "assigned" ? "bg-white shadow-sm text-indigo-900" : "text-gray-500"
+                  )}
+                  onClick={() => setAssignmentSubTab("assigned")}
+                >
+                  Assigned
+                </Button>
               </div>
-              {filteredTeachers.length > 0 ? (
-                <TeacherList
-                  teachers={filteredTeachers}
-                  showAssignAction={!!targetParishId}
-                  onAssignClick={handleAssign}
-                  assigningId={assigning}
+              <div className="relative w-full md:w-80">
+                <Input
+                  placeholder="Search schools..."
+                  value={schoolSearchQuery}
+                  onChange={(e) => setSchoolSearchQuery(e.target.value)}
+                  className="pl-10"
                 />
-              ) : (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <p>No available observers found matching criteria.</p>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <ArrowRight className="h-4 w-4 rotate-90" />
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredSchools.map((school) => (
+                <Card key={school.id} className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow">
+                  <CardContent className="p-0">
+                    <div className="p-4 flex gap-4 items-start">
+                      <div className={cn(
+                        "p-3 rounded-xl",
+                        school.assignment ? "bg-indigo-50 text-indigo-700" : "bg-orange-50 text-orange-700"
+                      )}>
+                        <ArrowRight className="h-6 w-6" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <h3 className="font-bold text-indigo-950 truncate max-w-[200px]">
+                          {school.schoolname || school.name}
+                        </h3>
+                        {school.assignment ? (
+                          <>
+                            <p className="text-sm font-semibold text-indigo-800">
+                              Observer: {school.assignment.teacherName}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              From: {school.assignment.sourceSchoolName}
+                            </p>
+                            <div className="flex justify-between items-center mt-3">
+                              <Badge variant="outline" className="text-[10px] bg-indigo-50/50 border-indigo-100 uppercase tracking-wider font-bold text-indigo-700 px-2">
+                                {school.assignment.accessCode}
+                              </Badge>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-indigo-500 hover:bg-indigo-50"
+                                  onClick={() => setViewSubmissionAssignment(school.assignment)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-indigo-700 hover:bg-indigo-50"
+                                  onClick={() => {
+                                    setRemarkAssignment(school.assignment);
+                                    setRemarkText("");
+                                  }}
+                                >
+                                  <MessageSquarePlus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-500 hover:bg-red-50"
+                                  onClick={() => handleDelete(school.assignment.id, school.assignment.teacherId)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm text-gray-500 italic">No observer assigned</p>
+                            <Button
+                              className="w-full mt-4 bg-indigo-900 hover:bg-indigo-800 text-white font-bold"
+                              onClick={() => {
+                                setSelectedTargetSchool(school);
+                                setAssignFilterForane("All");
+                                setAssignFilterParishId("All");
+                                setAssignFilterClass("All");
+                                setAssignSearchQuery("");
+                                setIsAssignDialogOpen(true);
+                              }}
+                            >
+                              Assign
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
+              ))}
+              {filteredSchools.length === 0 && (
+                <div className="col-span-full py-20 text-center space-y-3">
+                  <div className="bg-gray-100 h-20 w-20 rounded-full flex items-center justify-center mx-auto">
+                    <History className="h-10 w-10 text-gray-300" />
+                  </div>
+                  <p className="text-gray-500 font-medium">No {assignmentSubTab} schools found.</p>
+                </div>
               )}
             </div>
-          </div>
-        </TabsContent>
-
-        {/* ─── TAB 2: DUTY HISTORY ─── */}
-        <TabsContent value="duty-history">
-          <div className="space-y-4">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-              <div className="flex gap-2 w-full md:w-auto">
-                <Select
-                  value={selectedForane}
-                  onValueChange={setSelectedForane}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by Forane" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Foranes</SelectItem>
-                    {uniqueForanes.map((f) => (
-                      <SelectItem key={f} value={f}>
-                        {f}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  placeholder="Search Observer or Parish..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="max-w-xs"
-                />
-              </div>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Assignment History ({filteredAssignments.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Observer Name</TableHead>
-                      <TableHead>Home Parish</TableHead>
-                      <TableHead>Assigned Parish</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredAssignments.map((assignment) => {
-                      const teacher = allTeachers.find(
-                        (t) => t.id === assignment.teacherId,
-                      );
-                      const homeParish = parishes.find(
-                        (p) => p.id === teacher?.parishId,
-                      );
-                      const assignedParish = parishes.find(
-                        (p) => p.id === assignment.parishId,
-                      );
-                      if (!teacher || !assignedParish) return null;
-                      return (
-                        <TableRow key={assignment.id}>
-                          <TableCell className="font-medium">
-                            {teacher.name}
-                            <div className="text-xs text-muted-foreground">
-                              {teacher.phone}
-                            </div>
-                          </TableCell>
-                          <TableCell>{homeParish?.name || "Unknown"}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="bg-green-50 text-green-700 border-green-200"
-                            >
-                              {assignedParish.name}
-                            </Badge>
-                            <div className="text-xs text-muted-foreground">
-                              {assignedParish.forane}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-green-500 hover:text-green-700 hover:bg-green-50"
-                                onClick={() => openRemarkDialog(assignment)}
-                                title="Add/View Remarks"
-                              >
-                                <MessageSquarePlus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                                onClick={() => openEditDialog(assignment)}
-                                title="Edit Assignment"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() =>
-                                  handleDeleteAssignment(
-                                    assignment.id,
-                                    teacher.id,
-                                  )
-                                }
-                                title="Delete Assignment"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {filteredAssignments.length === 0 && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={4}
-                          className="text-center py-8 text-muted-foreground"
-                        >
-                          No assignments found matching criteria.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
@@ -971,13 +662,13 @@ export function Observers() {
                     value={dirFilterParishId}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="All Parishes" />
+                      <SelectValue placeholder="All Sources" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All">All Parishes</SelectItem>
-                      {dirFilteredParishes.map((p) => (
+                      <SelectItem value="All">All Schools</SelectItem>
+                      {dirFilteredParishes.map((p: any) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {p.name}
+                          {p.schoolname || p.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1031,13 +722,13 @@ export function Observers() {
               <CardContent className="space-y-4">
                 <ReportFilterBar
                   foranes={uniqueForanes}
-                  parishes={parishes}
+                  schools={schools}
                   academicYears={uniqueAcademicYears}
                   forane={rptAssignForane}
-                  parishId={rptAssignParishId}
+                  schoolId={rptAssignParishId}
                   academicYear={rptAssignYear}
                   onForaneChange={setRptAssignForane}
-                  onParishChange={setRptAssignParishId}
+                  onSchoolChange={setRptAssignParishId}
                   onYearChange={setRptAssignYear}
                   onGenerate={handleGenerateAssignmentReport}
                   generating={generatingAssignReport}
@@ -1049,15 +740,15 @@ export function Observers() {
                       const teacher = allTeachers.find(
                         (t) => t.id === a.teacherId,
                       );
-                      const ap = parishes.find((p) => p.id === a.parishId);
+                      const ap = schools.find((p: any) => p.id === a.targetSchoolId);
                       if (!teacher || !ap) return false;
                       return (
                         (rptAssignForane === "All" ||
                           ap.forane === rptAssignForane) &&
                         (rptAssignParishId === "All" ||
-                          a.parishId === rptAssignParishId) &&
+                          a.targetSchoolId === rptAssignParishId) &&
                         (rptAssignYear === "All" ||
-                          teacher.academicYear === rptAssignYear)
+                          a.academicYear === rptAssignYear)
                       );
                     }).length;
                     return `${count} assignment(s) will be included in this report.`;
@@ -1082,13 +773,13 @@ export function Observers() {
               <CardContent className="space-y-4">
                 <ReportFilterBar
                   foranes={uniqueForanes}
-                  parishes={parishes}
+                  schools={schools}
                   academicYears={uniqueAcademicYears}
                   forane={rptDirForane}
-                  parishId={rptDirParishId}
+                  schoolId={rptDirParishId}
                   academicYear={rptDirYear}
                   onForaneChange={setRptDirForane}
-                  onParishChange={setRptDirParishId}
+                  onSchoolChange={setRptDirParishId}
                   onYearChange={setRptDirYear}
                   onGenerate={handleGenerateDirectoryReport}
                   generating={generatingDirReport}
@@ -1096,8 +787,8 @@ export function Observers() {
                 {/* Preview count */}
                 <p className="text-xs text-muted-foreground pl-1">
                   {(() => {
-                    const count = allTeachers.filter((t) => {
-                      const hp = parishes.find((p) => p.id === t.parishId);
+                    const count = allTeachers.filter((t: any) => {
+                      const hp = schools.find((p: any) => p.id === t.parishId);
                       return (
                         (rptDirForane === "All" ||
                           hp?.forane === rptDirForane) &&
@@ -1115,76 +806,270 @@ export function Observers() {
         </TabsContent>
       </Tabs>
 
-      {/* ─── EDIT ASSIGNMENT DIALOG ─── */}
+      {/* ─── ADD ASSIGNMENT DIALOG (2-STEP) ─── */}
       <Dialog
-        open={!!editingAssignment}
+        open={isAssignDialogOpen}
         onOpenChange={(open) => {
-          if (!open) setEditingAssignment(null);
+          if (!open) setIsAssignDialogOpen(false);
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Assignment</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Observer</Label>
-              <Select
-                value={editNewTeacherId}
-                onValueChange={setEditNewTeacherId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Observer..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableObserversForEdit.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({t.parishName})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <DialogContent className="max-w-3xl bg-white border-none shadow-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-6 bg-indigo-950 text-white rounded-t-none">
+            <div className="flex justify-between items-center">
+              <div>
+                <DialogTitle className="text-xl font-bold">Assign Observer</DialogTitle>
+                <p className="text-indigo-300 text-xs mt-1 uppercase font-bold tracking-wider">
+                  Target: {selectedTargetSchool?.schoolname || selectedTargetSchool?.name}
+                </p>
+              </div>
+              <Badge variant="outline" className="border-indigo-400 text-indigo-200">
+                {selectedAcademicYear}
+              </Badge>
             </div>
-            <div className="space-y-2">
-              <Label>Assigned Parish</Label>
-              <Select
-                value={editNewParishId}
-                onValueChange={setEditNewParishId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Parish..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {parishes.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({p.forane})
-                      </span>
-                    </SelectItem>
+          </DialogHeader>
+
+          <div className="p-6 space-y-6">
+            {/* Filters Section */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-500">Forane</Label>
+                <Select value={assignFilterForane} onValueChange={(val) => {
+                  setAssignFilterForane(val);
+                  setAssignFilterParishId("All"); // reset school when forane changes
+                }}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Foranes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Foranes</SelectItem>
+                    {uniqueAssignForanes.map(f => (
+                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-500">School</Label>
+                <Select value={assignFilterParishId} onValueChange={setAssignFilterParishId}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Schools" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Schools</SelectItem>
+                    {schools
+                      .filter(s => s.id !== selectedTargetSchool?.id && (assignFilterForane === "All" || s.forane === assignFilterForane))
+                      .map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-500">Class</Label>
+                <Select value={assignFilterClass} onValueChange={setAssignFilterClass}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Classes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Classes</SelectItem>
+                    {uniqueClasses.map(cls => (
+                      <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-500">Search Name</Label>
+                <div className="relative">
+                  <Input
+                    placeholder="Search..."
+                    value={assignSearchQuery}
+                    onChange={(e) => setAssignSearchQuery(e.target.value)}
+                    className="h-9 pl-9"
+                  />
+                  <History className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Selection Area */}
+            <div className="border rounded-xl bg-slate-50/50 overflow-hidden">
+              <div className="p-3 border-b bg-white flex justify-between items-center">
+                <h3 className="text-xs font-bold text-slate-600 uppercase">Available Observers</h3>
+                <span className="text-[10px] font-bold text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-full">
+                  {allTeachers.filter(t => {
+                    const teacherSchool = schools.find(s => s.id === t.schoolId);
+                    const matchesForane = assignFilterForane === "All" || teacherSchool?.forane === assignFilterForane;
+                    const matchesSchool = assignFilterParishId === "All" || t.schoolId === assignFilterParishId;
+                    const matchesClass = assignFilterClass === "All" || (t.classes && (Array.isArray(t.classes) ? t.classes.includes(assignFilterClass) : String(t.classes) === assignFilterClass));
+                    const matchesSearch = t.name.toLowerCase().includes(assignSearchQuery.toLowerCase());
+                    const isEligible = t.schoolId !== selectedTargetSchool?.id && !assignments.some(a => a.teacherId === t.id && a.academicYear === selectedAcademicYear);
+                    return matchesForane && matchesSchool && matchesClass && matchesSearch && isEligible;
+                  }).length} found
+                </span>
+              </div>
+              <div className="h-[300px] overflow-y-auto p-2 space-y-1">
+                {allTeachers
+                  .filter(t => {
+                    const teacherSchool = schools.find(s => s.id === t.schoolId);
+                    const matchesForane = assignFilterForane === "All" || teacherSchool?.forane === assignFilterForane;
+                    const matchesSchool = assignFilterParishId === "All" || t.schoolId === assignFilterParishId;
+                    const matchesClass = assignFilterClass === "All" || (t.classes && (Array.isArray(t.classes) ? t.classes.includes(assignFilterClass) : String(t.classes) === assignFilterClass));
+                    const matchesSearch = t.name.toLowerCase().includes(assignSearchQuery.toLowerCase());
+                    const isEligible = t.schoolId !== selectedTargetSchool?.id && !assignments.some(a => a.teacherId === t.id && a.academicYear === selectedAcademicYear);
+                    return matchesForane && matchesSchool && matchesClass && matchesSearch && isEligible;
+                  })
+                  .map(teacher => (
+                    <div
+                      key={teacher.id}
+                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 hover:border-indigo-300 hover:shadow-sm transition-all group"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-900 leading-tight">{teacher.name}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          {(teacher as any).schoolName || schools.find(s => s.id === (teacher as any).schoolId)?.name} • Class {Array.isArray(teacher.classes) ? teacher.classes.join(", ") : (teacher.classes || "N/A")}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 font-bold text-xs"
+                        onClick={() => handleAssign(teacher)}
+                        disabled={!!assigning}
+                      >
+                        {assigning === teacher.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Assign"}
+                      </Button>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                {allTeachers.filter(t => {
+                  const teacherSchool = schools.find(s => s.id === t.schoolId);
+                  const matchesForane = assignFilterForane === "All" || teacherSchool?.forane === assignFilterForane;
+                  const matchesSchool = assignFilterParishId === "All" || t.schoolId === assignFilterParishId;
+                  const matchesClass = assignFilterClass === "All" || (t.classes && (Array.isArray(t.classes) ? t.classes.includes(assignFilterClass) : String(t.classes) === assignFilterClass));
+                  const matchesSearch = t.name.toLowerCase().includes(assignSearchQuery.toLowerCase());
+                  const isEligible = t.schoolId !== selectedTargetSchool?.id && !assignments.some(a => a.teacherId === t.id && a.academicYear === selectedAcademicYear);
+                  return matchesForane && matchesSchool && matchesClass && matchesSearch && isEligible;
+                }).length === 0 && (
+                    <div className="py-20 text-center text-slate-400 italic text-sm">
+                      No eligible observers found matching your filters.
+                    </div>
+                  )}
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditingAssignment(null)}
-            >
+
+          <DialogFooter className="p-4 bg-slate-50 border-t items-center gap-2">
+            <p className="text-[10px] text-slate-400 mr-auto ml-2">
+              Note: Teachers already assigned for {selectedAcademicYear} are hidden.
+            </p>
+            <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="text-slate-500">
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
-              {isSavingEdit ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── SUBMISSION VIEW DIALOG ─── */}
+      <Dialog
+        open={!!viewSubmissionAssignment}
+        onOpenChange={(open) => { if (!open) setViewSubmissionAssignment(null); }}
+      >
+        <DialogContent className="max-w-lg bg-white border-none shadow-2xl p-0 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-br from-indigo-950 to-indigo-700 p-6 text-white">
+            <div className="flex justify-between items-start mb-1">
+              <DialogTitle className="text-lg font-bold text-white">Observer Submission</DialogTitle>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] font-bold uppercase border px-2",
+                  viewSubmissionAssignment?.remarks
+                    ? "border-green-400 text-green-300 bg-green-900/30"
+                    : "border-yellow-400 text-yellow-300 bg-yellow-900/30"
+                )}
+              >
+                {viewSubmissionAssignment?.remarks ? "Submitted" : "Pending"}
+              </Badge>
+            </div>
+            <p className="text-[10px] text-indigo-300 uppercase font-bold tracking-wider">
+              {selectedAcademicYear}
+            </p>
+          </div>
+
+          <div className="p-6 space-y-5">
+            {/* Observer + School card */}
+            <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <span className="text-lg font-bold text-indigo-700">
+                    {viewSubmissionAssignment?.teacherName?.[0] ?? "?"}
+                  </span>
+                </div>
+                <div>
+                  <p className="font-bold text-indigo-950 text-base leading-tight">
+                    {viewSubmissionAssignment?.teacherName ?? "Unknown Observer"}
+                  </p>
+                  <p className="text-[11px] text-indigo-500 font-semibold uppercase tracking-wide">Observer</p>
+                </div>
+              </div>
+              <div className="border-t border-indigo-100 pt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">Target School</p>
+                  <p className="text-sm font-bold text-indigo-950 mt-0.5">
+                    {viewSubmissionAssignment?.targetSchoolName ?? "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">Submitted</p>
+                  <p className="text-sm font-bold text-indigo-950 mt-0.5">
+                    {viewSubmissionAssignment?.remarksSubmittedAt
+                      ? new Date((viewSubmissionAssignment.remarksSubmittedAt as any).seconds * 1000).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+                      : "Pending"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Metrics */}
+            <div className="border border-slate-100 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <span className="text-blue-600 text-xs font-bold">#</span>
+                </div>
+                <p className="font-bold text-slate-800 text-sm">Attendance Metrics</p>
+              </div>
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-slate-500 font-medium">Total Attendance</p>
+                <p className="text-lg font-bold text-indigo-900">
+                  {viewSubmissionAssignment?.totalAttendance ?? <span className="text-slate-400 text-sm italic">N/A</span>}
+                </p>
+              </div>
+              <div className="border-t pt-3">
+                <p className="text-[10px] text-slate-400 uppercase font-bold mb-2">Absentees</p>
+                <p className="text-sm text-indigo-900 font-medium leading-relaxed whitespace-pre-line">
+                  {viewSubmissionAssignment?.absentees || <span className="italic text-slate-400">None reported</span>}
+                </p>
+              </div>
+            </div>
+
+            {/* Observer Remarks */}
+            <div className="border border-slate-100 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                  <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                </div>
+                <p className="font-bold text-slate-800 text-sm">Observer Remarks</p>
+              </div>
+              <p className="text-sm text-indigo-900 leading-relaxed whitespace-pre-line">
+                {viewSubmissionAssignment?.remarks || <span className="italic text-slate-400">No remarks submitted yet.</span>}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 pb-5">
+            <Button variant="outline" onClick={() => setViewSubmissionAssignment(null)} className="w-full">
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1246,6 +1131,6 @@ export function Observers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

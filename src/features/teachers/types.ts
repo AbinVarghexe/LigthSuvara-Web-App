@@ -5,13 +5,15 @@ export interface Teacher {
   name: string;
   phone: string;
   email: string;
-  parishId: string; // ID of the parish the teacher belongs to
-  parishName: string; // stored for convenience/display
-  classes: string[];
+  parishId?: string; // legacy field
+  parishName?: string; // legacy field
+  schoolId?: string; // ID of the school the teacher belongs to
+  schoolName?: string; // stored for convenience/display
+  classes: string[] | string;
   academicYear: string;
   assigned: boolean;
   assignedParishId: string | null;
-  location: {
+  location?: {
     lat: number;
     long: number;
   };

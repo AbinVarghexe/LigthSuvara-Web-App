@@ -29,31 +29,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import {
-  createTeacherSchema,
-  CreateTeacherInput,
-  Parish,
-  Teacher,
-} from "../types";
+import { createTeacherSchema, CreateTeacherInput, Teacher } from "../types";
 import { TeacherService } from "../services/teacherService";
-import { ParishService } from "@/features/parishes/services/parishService";
+import { getUsers, UserData } from "@/features/users/services/userService";
 import { uploadFile } from "@/lib/upload";
 
 const ACADEMIC_CLASSES = [
-  "Class 1",
-  "Class 2",
-  "Class 3",
-  "Class 4",
-  "Class 5",
-  "Class 6",
-  "Class 7",
-  "Class 8",
-  "Class 9",
-  "Class 10",
-  "Class 11",
-  "Class 12",
+  "Class 1", "Class 2", "Class 3", "Class 4",
+  "Class 5", "Class 6", "Class 7", "Class 8",
+  "Class 9", "Class 10", "Class 11", "Class 12",
 ];
 const ACADEMIC_YEARS = ["2024-2025", "2025-2026", "2026-2027"];
+
+interface School {
+  id: string;
+  name: string;
+  forane: string;
+}
 
 interface CreateTeacherFormProps {
   onTeacherAdded: () => void;
@@ -68,23 +60,28 @@ export function CreateTeacherForm({
   initialData,
   isEditing = false,
 }: CreateTeacherFormProps) {
-  const [parishes, setParishes] = useState<Parish[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [schoolSearch, setSchoolSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [loadingParishes, setLoadingParishes] = useState(true);
+  const [loadingSchools, setLoadingSchools] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(
     initialData?.profilePicture || null,
   );
 
-  // Initialize form
+  // Initialize form — parishId field is reused as schoolId internally for schema compat
   const form = useForm<CreateTeacherInput>({
     resolver: zodResolver(createTeacherSchema),
     defaultValues: {
       name: initialData?.name || "",
       phone: initialData?.phone || "",
       email: initialData?.email || "",
-      parishId: initialData?.parishId || "",
-      classes: initialData?.classes?.length ? [initialData.classes[0]] : [],
+      parishId: (initialData as any)?.schoolId || initialData?.parishId || "",
+      classes: initialData?.classes
+        ? Array.isArray(initialData.classes)
+          ? initialData.classes.length ? [initialData.classes[0]] : []
+          : [String(initialData.classes)]
+        : [],
       academicYear: initialData?.academicYear || "",
       dob: initialData?.dob || "",
       qualification: initialData?.qualification || "",
@@ -92,20 +89,32 @@ export function CreateTeacherForm({
     },
   });
 
-  // Fetch parishes on mount
+  // Fetch schools from users collection
   useEffect(() => {
-    const fetchParishes = async () => {
+    const fetchSchools = async () => {
       try {
-        const data = await ParishService.getAllParishes();
-        setParishes(data);
+        const usersData = await getUsers();
+        const allUsers = usersData as UserData[];
+        const schoolsList = allUsers
+          .filter((u) => u.role === "school")
+          .map((u) => ({
+            id: u.uid || u.id,
+            name:
+              (u as any).schoolname ||
+              (u as any).name ||
+              (u as any).displayName ||
+              u.email,
+            forane: (u as any).forane || "",
+          }));
+        setSchools(schoolsList);
       } catch (error) {
-        console.error("Failed to fetch parishes", error);
-        toast.error("Failed to load parishes");
+        console.error("Failed to fetch schools", error);
+        toast.error("Failed to load school list");
       } finally {
-        setLoadingParishes(false);
+        setLoadingSchools(false);
       }
     };
-    fetchParishes();
+    fetchSchools();
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,22 +145,23 @@ export function CreateTeacherForm({
         imageUrl = await uploadFile(imageFile, path);
       }
 
-      const finalData = { ...data, profilePicture: imageUrl };
+      // Resolve school name from selected schoolId (stored in parishId field)
+      const selectedSchool = schools.find((s) => s.id === data.parishId);
+      const schoolId = data.parishId;
+      const schoolName = selectedSchool?.name || "";
+
+      const finalData = {
+        ...data,
+        profilePicture: imageUrl,
+        schoolId,
+        schoolName,
+      };
 
       if (isEditing && initialData) {
         await TeacherService.updateTeacher(initialData.id, finalData);
         toast.success("Teacher updated successfully");
       } else {
-        const selectedParish = parishes.find((p) => p.id === data.parishId);
-        if (!selectedParish) {
-          toast.error("Invalid parish selected");
-          return;
-        }
-        await TeacherService.addTeacher(
-          finalData,
-          selectedParish.location,
-          selectedParish.name,
-        );
+        await TeacherService.addTeacher(finalData, schoolId, schoolName);
         toast.success("Teacher added successfully");
       }
 
@@ -262,23 +272,60 @@ export function CreateTeacherForm({
             name="parishId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Parish *</FormLabel>
+                <FormLabel>Sunday School *</FormLabel>
                 <Select
-                  onValueChange={field.onChange}
+                  onValueChange={(val) => {
+                    field.onChange(val);
+                    setSchoolSearch("");
+                  }}
                   defaultValue={field.value}
-                  disabled={loadingParishes}
+                  disabled={loadingSchools}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select Parish" />
+                      <SelectValue
+                        placeholder={
+                          loadingSchools ? "Loading schools..." : "Select Sunday School"
+                        }
+                      />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {parishes.map((parish) => (
-                      <SelectItem key={parish.id} value={parish.id}>
-                        {parish.name}
-                      </SelectItem>
-                    ))}
+                    {/* Search box inside dropdown */}
+                    <div className="px-2 py-2 sticky top-0 bg-white border-b">
+                      <input
+                        autoFocus
+                        placeholder="Search school..."
+                        value={schoolSearch}
+                        onChange={(e) => setSchoolSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="w-full text-sm px-3 py-1.5 rounded-md border border-input bg-background outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    {schools
+                      .filter((s) =>
+                        s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
+                        s.forane.toLowerCase().includes(schoolSearch.toLowerCase())
+                      )
+                      .map((school) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name}
+                          {school.forane ? (
+                            <span className="text-muted-foreground ml-1 text-xs">
+                              — {school.forane}
+                            </span>
+                          ) : null}
+                        </SelectItem>
+                      ))}
+                    {schools.filter((s) =>
+                      s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
+                      s.forane.toLowerCase().includes(schoolSearch.toLowerCase())
+                    ).length === 0 && (
+                        <div className="py-3 text-center text-sm text-muted-foreground italic">
+                          No schools found
+                        </div>
+                      )}
                   </SelectContent>
                 </Select>
                 <FormMessage />

@@ -18,7 +18,7 @@ export interface UserData {
     id: string;
     uid: string;
     email: string;
-    role: 'admin' | 'school' | 'animator';
+    role: 'admin' | 'school' | 'animator' | 'parish';
     schoolname?: string;
     schoolName?: string;
     fullName?: string;

@@ -17,9 +17,9 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 
-import { Teacher, Parish } from "../types";
+import { Teacher } from "../types";
 import { TeacherService } from "../services/teacherService";
-import { ParishService } from "@/features/parishes/services/parishService";
+import { getUsers, UserData } from "@/features/users/services/userService";
 import { TeacherList } from "./TeacherList";
 
 interface TeacherAssignmentProps {
@@ -32,23 +32,36 @@ export function TeacherAssignment({
   onEditTeacher,
 }: TeacherAssignmentProps) {
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+  const [schools, setSchools] = useState<any[]>([]);
   const [dirFilteredTeachers, setDirFilteredTeachers] = useState<Teacher[]>([]);
   const [dirFilterClass, setDirFilterClass] = useState<string>("All");
   const [dirFilterForane, setDirFilterForane] = useState<string>("All");
-  const [dirFilterParishId, setDirFilterParishId] = useState<string>("All");
-  const [parishes, setParishes] = useState<Parish[]>([]);
+  const [dirFilterSchoolId, setDirFilterSchoolId] = useState<string>("All");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [teachersData, parishesData] = await Promise.all([
+        const [teachersData, usersData] = await Promise.all([
           TeacherService.getTeachers(),
-          ParishService.getAllParishes(),
+          getUsers(),
         ]);
+        const allUsers = usersData as UserData[];
+        const schoolsList = allUsers
+          .filter((u) => u.role === "school")
+          .map((u) => ({
+            ...u,
+            id: u.uid || u.id,
+            name:
+              (u as any).schoolname ||
+              (u as any).name ||
+              (u as any).displayName ||
+              u.email,
+            forane: (u as any).forane || "",
+          }));
         setAllTeachers(teachersData);
-        setParishes(parishesData);
+        setSchools(schoolsList);
       } catch (error) {
         toast.error("Failed to load data");
       } finally {
@@ -60,28 +73,29 @@ export function TeacherAssignment({
 
   useEffect(() => {
     let result = allTeachers;
+
     if (dirFilterForane && dirFilterForane !== "All") {
       result = result.filter((t) => {
-        const teacherParish = parishes.find((p) => p.id === t.parishId);
-        return teacherParish?.forane === dirFilterForane;
+        const teacherSchool = schools.find((s) => s.id === t.schoolId);
+        return teacherSchool?.forane === dirFilterForane;
       });
     }
-    if (dirFilterParishId && dirFilterParishId !== "All") {
-      result = result.filter((t) => t.parishId === dirFilterParishId);
+
+    if (dirFilterSchoolId && dirFilterSchoolId !== "All") {
+      result = result.filter((t) => t.schoolId === dirFilterSchoolId);
     }
+
     if (dirFilterClass && dirFilterClass !== "All") {
-      result = result.filter(
-        (t) => t.classes && t.classes.includes(dirFilterClass),
-      );
+      result = result.filter((t) => {
+        if (!t.classes) return false;
+        return Array.isArray(t.classes)
+          ? t.classes.includes(dirFilterClass)
+          : String(t.classes) === dirFilterClass;
+      });
     }
+
     setDirFilteredTeachers(result);
-  }, [
-    dirFilterForane,
-    dirFilterParishId,
-    dirFilterClass,
-    allTeachers,
-    parishes,
-  ]);
+  }, [dirFilterForane, dirFilterSchoolId, dirFilterClass, allTeachers, schools]);
 
   const handleDelete = async (teacher: Teacher) => {
     if (!window.confirm(`Are you sure you want to delete ${teacher.name}?`))
@@ -104,17 +118,21 @@ export function TeacherAssignment({
   }
 
   const uniqueClasses = Array.from(
-    new Set(allTeachers.flatMap((t) => t.classes || [])),
+    new Set(
+      allTeachers.flatMap((t) =>
+        Array.isArray(t.classes) ? t.classes : t.classes ? [String(t.classes)] : []
+      )
+    )
   ).sort();
 
   const uniqueForanes = Array.from(
-    new Set(parishes.map((p) => p.forane).filter(Boolean)),
+    new Set(schools.map((s) => s.forane).filter(Boolean))
   ).sort() as string[];
 
-  const filteredParishes =
+  const filteredSchools =
     dirFilterForane === "All"
-      ? parishes
-      : parishes.filter((p) => p.forane === dirFilterForane);
+      ? schools
+      : schools.filter((s) => s.forane === dirFilterForane);
 
   return (
     <Card>
@@ -131,7 +149,7 @@ export function TeacherAssignment({
             <Select
               onValueChange={(val) => {
                 setDirFilterForane(val);
-                setDirFilterParishId("All");
+                setDirFilterSchoolId("All");
               }}
               value={dirFilterForane}
             >
@@ -150,19 +168,19 @@ export function TeacherAssignment({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Filter by Home Parish</label>
+            <label className="text-sm font-medium">Filter by Sunday School</label>
             <Select
-              onValueChange={setDirFilterParishId}
-              value={dirFilterParishId}
+              onValueChange={setDirFilterSchoolId}
+              value={dirFilterSchoolId}
             >
               <SelectTrigger>
-                <SelectValue placeholder="All Parishes" />
+                <SelectValue placeholder="All Schools" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Parishes</SelectItem>
-                {filteredParishes.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
+                <SelectItem value="All">All Schools</SelectItem>
+                {filteredSchools.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
                   </SelectItem>
                 ))}
               </SelectContent>

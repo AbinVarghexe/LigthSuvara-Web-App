@@ -22,6 +22,11 @@ const pageTitles: Record<string, string> = {
 export function Layout() {
     const location = useLocation();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const handleRefresh = () => {
+        setRefreshKey(prev => prev + 1);
+    };
 
     // Get title based on path
     let title = pageTitles[location.pathname] || 'Dashboard';
@@ -37,10 +42,17 @@ export function Layout() {
 
     return (
         <div className="flex min-h-screen bg-background">
-            <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+            <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                onRefresh={handleRefresh}
+            />
             <div className="flex-1 flex flex-col lg:ml-64">
                 <Header title={title} onMenuClick={() => setIsSidebarOpen(true)} />
-                <main className="flex-1 p-2 sm:p-6 lg:p-8">
+                <main
+                    key={`${location.pathname}-${refreshKey}`}
+                    className="flex-1 p-2 sm:p-6 lg:p-8 animate-in fade-in duration-500"
+                >
                     <Outlet />
                 </main>
             </div>

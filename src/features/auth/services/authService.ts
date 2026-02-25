@@ -24,7 +24,8 @@ export const isAdmin = async (user: User | null): Promise<boolean> => {
 
     try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        return userDoc.exists() && userDoc.data()?.role === 'admin';
+        const role = userDoc.data()?.role;
+        return userDoc.exists() && (role === 'admin' || role === 'parish');
     } catch (error) {
         console.error("Error checking admin status:", error);
         return false;

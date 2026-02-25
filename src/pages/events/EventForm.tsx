@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { ArrowLeft, Calendar, Image as ImageIcon, Loader2, MapPin, Save } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -21,10 +21,14 @@ import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 export function EventForm() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { currentUser, isAdminUser } = useAuth(); // Get isAdminUser
-    const { register, handleSubmit, setValue, watch, formState: { errors }, reset } = useForm<Omit<EventData, 'date'> & { date: string }>();
+    const { currentUser, isAdminUser } = useAuth();
+    const { register, handleSubmit, control, formState: { errors }, reset } = useForm<Omit<EventData, 'date'> & { date: string }>();
     const [isLoading, setIsLoading] = useState(false);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    // Preserve original creator info so admin edits don't overwrite ownership
+    const [originalCreatorId, setOriginalCreatorId] = useState<string | null>(null);
+    const [originalCreatorSchoolName, setOriginalCreatorSchoolName] = useState<string | null>(null);
+    const [originalCreatorForane, setOriginalCreatorForane] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchEvent = async () => {
@@ -33,17 +37,29 @@ export function EventForm() {
             try {
                 const event = await getEvent(id) as EventData;
                 if (event) {
+                    const rawDate = event.date || (event as any).timestamp;
+                    const dateStr = rawDate
+                        ? new Date(
+                            (rawDate as any).seconds
+                                ? (rawDate as any).seconds * 1000
+                                : rawDate
+                        ).toISOString().split('T')[0]
+                        : '';
                     reset({
                         title: event.title,
                         description: event.description,
                         place: event.place,
-                        date: event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toISOString().split('T')[0] : '',
+                        date: dateStr,
                         category: event.category,
                         isPublic: event.isPublic
                     });
                     if (event.imageUrl) {
                         setImagePreview(event.imageUrl);
                     }
+                    // ── preserve original ownership ──
+                    setOriginalCreatorId(event.creatorId || null);
+                    setOriginalCreatorSchoolName((event as any).creatorSchoolName || null);
+                    setOriginalCreatorForane((event as any).creatorForane || null);
                 }
             } catch (error) {
                 console.error("Error fetching event:", error);
@@ -96,11 +112,21 @@ export function EventForm() {
             };
 
             if (id) {
-                // If editing, keep existing status unless admin changes it (logic could be refined)
-                // For now, let's assume editing doesn't reset status to pending for admins, 
-                // but maybe for users it should? 
-                // Let's keep it simple: if admin, approved. If user, pending (re-review).
-                await updateEvent(id, eventData);
+                // On edit: preserve the original creator — do NOT overwrite with admin's UID
+                const updatePayload: EventData = {
+                    title: data.title,
+                    description: data.description,
+                    place: data.place,
+                    date: new Date(data.date),
+                    category: data.category,
+                    isPublic: data.isPublic || false,
+                    status: isAdminUser ? 'approved' : 'pending',
+                    creatorId: originalCreatorId || currentUser.uid,
+                    creatorSchoolName: originalCreatorSchoolName || schoolName,
+                    ...(originalCreatorForane ? { creatorForane: originalCreatorForane } : forane ? { creatorForane: forane } : {}),
+                    ...(imagePreview ? { imageUrl: imagePreview } : {}),
+                };
+                await updateEvent(id, updatePayload);
                 toast.success('Event updated successfully');
             } else {
                 await createEvent(eventData);
@@ -172,18 +198,28 @@ export function EventForm() {
 
                         <div className="space-y-2">
                             <Label htmlFor="category">Category</Label>
-                            <Select
-                                onValueChange={(value: string) => setValue('category', value as 'cml' | 'suvara')}
-                                defaultValue={watch('category')}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="cml">CML</SelectItem>
-                                    <SelectItem value="suvara">Suvara</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Controller
+                                name="category"
+                                control={control}
+                                rules={{ required: 'Category is required' }}
+                                render={({ field }) => (
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value || ''}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select category" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="CML">CML</SelectItem>
+                                            <SelectItem value="SUVARA">Suvara</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            />
+                            {errors.category && (
+                                <p className="text-sm text-red-500">{errors.category.message as string}</p>
+                            )}
                         </div>
 
                         <div className="space-y-2">

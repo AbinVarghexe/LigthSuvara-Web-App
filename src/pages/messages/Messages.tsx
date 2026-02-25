@@ -63,6 +63,7 @@ export function Messages() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [schools, setSchools] = useState<UserData[]>([]);
+  const [parishes, setParishes] = useState<UserData[]>([]);
 
   // Image attachment state
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -81,6 +82,7 @@ export function Messages() {
   // Detail dialog
   const [selectedNotification, setSelectedNotification] =
     useState<NotificationData | null>(null);
+  const [viewersDialogOpen, setViewersDialogOpen] = useState(false);
 
   // Edit state
   const [editingNotification, setEditingNotification] =
@@ -114,15 +116,16 @@ export function Messages() {
   });
 
   useEffect(() => {
-    const fetchSchools = async () => {
+    const fetchUsers = async () => {
       try {
         const users = await getUsers();
         setSchools(users.filter((u) => u.role === "school"));
+        setParishes(users.filter((u) => u.role === "parish"));
       } catch (error) {
-        console.error("Error fetching schools:", error);
+        console.error("Error fetching users:", error);
       }
     };
-    fetchSchools();
+    fetchUsers();
   }, []);
 
   useEffect(() => {
@@ -233,24 +236,24 @@ export function Messages() {
         toast.success("Message sent to all users");
       } else if (audience === "specific") {
         if (selectedSchools.length === 0) {
-          toast.error("Please select at least one school");
+          toast.error("Please select at least one unit");
           setIsLoading(false);
           return;
         }
-        const schoolNames = selectedSchools.map((id) => {
-          const s = schools.find((sc) => sc.id === id);
+        const unitNames = selectedSchools.map((id) => {
+          const s = schools.find((sc) => sc.id === id) || parishes.find((p) => p.id === id);
           return (
-            s?.schoolName || s?.schoolname || s?.fullName || s?.email || id
+            s?.fullName || s?.schoolname || s?.schoolName || s?.email || id
           );
         });
         await sendToSpecific(
           title,
           message,
           selectedSchools,
-          schoolNames,
+          unitNames,
           imageUrl,
         );
-        toast.success(`Message sent to ${selectedSchools.length} schools`);
+        toast.success(`Message sent to ${selectedSchools.length} observer(s)`);
       }
 
       // Update Rate Limit Timestamp
@@ -365,11 +368,11 @@ export function Messages() {
         prev.map((n) =>
           n.id === editingNotification.id
             ? {
-                ...n,
-                title: editTitle,
-                body: editBody,
-                imageUrl: imageUrl || undefined,
-              }
+              ...n,
+              title: editTitle,
+              body: editBody,
+              imageUrl: imageUrl || undefined,
+            }
             : n,
         ),
       );
@@ -526,10 +529,10 @@ export function Messages() {
                           htmlFor="specific"
                           className="font-semibold cursor-pointer"
                         >
-                          Specific Schools
+                          Specific Parish
                         </Label>
                         <p className="text-sm text-muted-foreground">
-                          Select specific schools to receive this message.
+                          Select specific parishes (observers) to receive this.
                         </p>
                       </div>
                       <School
@@ -539,40 +542,40 @@ export function Messages() {
                   </RadioGroup>
                 </div>
 
-                {/* School Picker */}
+                {/* Parish Picker */}
                 {audience === "specific" && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-top-4">
-                    <Label>Select Schools</Label>
+                    <Label>Select Parishes (Observers)</Label>
                     <div className="border border-border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2 bg-muted/50">
-                      {schools.map((school) => (
+                      {parishes.map((parish) => (
                         <div
-                          key={school.id}
+                          key={parish.id}
                           className="flex items-center space-x-2 bg-background p-3 rounded-md border border-border"
                         >
                           <Checkbox
-                            id={school.id}
-                            checked={selectedSchools.includes(school.id)}
-                            onCheckedChange={() => toggleSchool(school.id)}
+                            id={parish.id}
+                            checked={selectedSchools.includes(parish.id)}
+                            onCheckedChange={() => toggleSchool(parish.id)}
                           />
                           <Label
-                            htmlFor={school.id}
+                            htmlFor={parish.id}
                             className="flex-1 cursor-pointer font-normal"
                           >
-                            {school.schoolname ||
-                              school.schoolName ||
-                              school.fullName ||
-                              school.email}
+                            {parish.fullName ||
+                              parish.schoolname ||
+                              parish.schoolName ||
+                              parish.email}
                           </Label>
                         </div>
                       ))}
-                      {schools.length === 0 && (
+                      {parishes.length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-2">
-                          No schools found.
+                          No parishes found.
                         </p>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground text-right">
-                      {selectedSchools.length} schools selected
+                      {selectedSchools.length} parishes selected
                     </p>
                   </div>
                 )}
@@ -811,9 +814,17 @@ export function Messages() {
                               </Badge>
                             </div>
                           )}
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
-                            <Clock className="w-3 h-3" />
-                            {formatTimestamp(n.timestamp)}
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3 h-3" />
+                              {formatTimestamp(n.timestamp)}
+                            </div>
+                            {n.readBy && n.readBy.length > 0 && (
+                              <div className="flex items-center gap-1.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 px-1.5 py-0.5 rounded-md font-medium">
+                                <Eye className="w-3 h-3" />
+                                Seen by {n.readBy.length}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -883,7 +894,7 @@ export function Messages() {
               {selectedNotification?.audience === "specific" &&
                 selectedNotification.recipientNames && (
                   <p className="text-sm text-muted-foreground mt-2">
-                    Sent to: {selectedNotification.recipientNames.join(", ")}
+                    Sent to Observer(s): {selectedNotification.recipientNames.join(", ")}
                   </p>
                 )}
             </div>
@@ -892,8 +903,27 @@ export function Messages() {
                 {selectedNotification?.body}
               </p>
             </div>
+            {selectedNotification?.readBy &&
+              selectedNotification.readBy.length > 0 && (
+                <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                  <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                    <Eye className="w-4 h-4" />
+                    <span className="text-sm font-medium">
+                      Viewed by {selectedNotification.readBy.length} schools
+                    </span>
+                  </div>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="text-blue-700 dark:text-blue-300 h-auto p-0 font-semibold"
+                    onClick={() => setViewersDialogOpen(true)}
+                  >
+                    View Details
+                  </Button>
+                </div>
+              )}
             {selectedNotification?.imageUrl && (
-              <div className="space-y-2">
+              <div className="space-y-2 mt-4">
                 <Label className="text-sm font-medium">Attached Image</Label>
                 <img
                   src={selectedNotification.imageUrl}
@@ -902,6 +932,58 @@ export function Messages() {
                 />
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Viewers List Dialog */}
+      <Dialog open={viewersDialogOpen} onOpenChange={setViewersDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Viewed By</DialogTitle>
+            <DialogDescription>
+              Schools that have opened this notification
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto space-y-2 py-2">
+            {selectedNotification?.readBy?.map((uid) => {
+              const school = schools.find((s) => s.id === uid);
+              const schoolName =
+                school?.schoolname ||
+                school?.schoolName ||
+                school?.fullName ||
+                school?.email ||
+                "Unknown User";
+              const location = school?.forane || "";
+
+              return (
+                <div
+                  key={uid}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30"
+                >
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <School className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{schoolName}</p>
+                    {location && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {location}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {(!selectedNotification?.readBy ||
+              selectedNotification.readBy.length === 0) && (
+                <p className="text-center py-4 text-muted-foreground">
+                  No schools have viewed this message yet.
+                </p>
+              )}
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button onClick={() => setViewersDialogOpen(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
