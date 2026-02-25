@@ -161,17 +161,17 @@ const SortableRow = ({
             type="number"
             min={1}
             max={100}
-            value={inlineEditData.maxMarks}
+            value={inlineEditData.maxMark}
             onChange={(e) =>
               setInlineEditData({
                 ...inlineEditData,
-                maxMarks: parseInt(e.target.value) || 10,
+                maxMark: parseInt(e.target.value) || 10,
               })
             }
             className="w-20"
           />
         ) : (
-          <span className="font-semibold">{question.maxMarks}</span>
+          <span className="font-semibold">{question.maxMark}</span>
         )}
       </TableCell>
       <TableCell>
@@ -268,17 +268,17 @@ const QuestionCard = ({
                   type="number"
                   min={1}
                   max={100}
-                  value={inlineEditData.maxMarks}
+                  value={inlineEditData.maxMark}
                   onChange={(e) =>
                     setInlineEditData({
                       ...inlineEditData,
-                      maxMarks: parseInt(e.target.value) || 10,
+                      maxMark: parseInt(e.target.value) || 10,
                     })
                   }
                   className="w-16 h-7 text-xs"
                 />
               ) : (
-                <span>{question.maxMarks} Marks</span>
+                <span>{question.maxMark} Marks</span>
               )}
             </div>
             <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
@@ -382,15 +382,15 @@ export function Questions() {
   // Form state
   const [formData, setFormData] = useState({
     text: "",
-    maxMarks: 10,
+    maxMark: 10,
     mandatory: true,
   });
 
   // Inline edit state
   const [inlineEditData, setInlineEditData] = useState<{
     text: string;
-    maxMarks: number;
-  }>({ text: "", maxMarks: 10 });
+    maxMark: number;
+  }>({ text: "", maxMark: 10 });
 
   const fetchQuestions = async () => {
     try {
@@ -421,13 +421,13 @@ export function Questions() {
       const nextOrder = await getNextQuestionOrder();
       await createQuestion({
         text: formData.text,
-        maxMarks: formData.maxMarks,
+        maxMark: formData.maxMark,
         mandatory: formData.mandatory,
         order: nextOrder,
       });
       toast.success("Question created successfully");
       setIsCreateDialogOpen(false);
-      setFormData({ text: "", maxMarks: 10, mandatory: true });
+      setFormData({ text: "", maxMark: 10, mandatory: true });
       fetchQuestions();
     } catch (error) {
       console.error("Error creating question:", error);
@@ -465,7 +465,7 @@ export function Questions() {
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setInlineEditData({ text: "", maxMarks: 10 });
+    setInlineEditData({ text: "", maxMark: 10 });
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
@@ -603,7 +603,7 @@ export function Questions() {
 
     questions.forEach((question, index) => {
       const questionText = `${index + 1}. ${question.text}`;
-      const marksText = `[${question.maxMarks}]`;
+      const marksText = `[${question.maxMark}]`;
 
       // Calculate height needed for question text
       // Indent text slightly if it wraps? standard split
@@ -634,7 +634,7 @@ export function Questions() {
       yPos += textHeight + 2; // move past text
 
       // Draw dotted lines for answer space (optional, but looks "proper")
-      const linesToDraw = Math.max(2, Math.ceil(question.maxMarks * 0.5)); // rough estimate: 0.5 lines per mark
+      const linesToDraw = Math.max(2, Math.ceil(question.maxMark * 0.5)); // rough estimate: 0.5 lines per mark
 
       doc.setDrawColor(200);
       doc.setLineWidth(0.1);
@@ -730,17 +730,17 @@ export function Questions() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="maxMarks">Maximum Marks</Label>
+                  <Label htmlFor="maxMark">Maximum Marks</Label>
                   <Input
-                    id="maxMarks"
+                    id="maxMark"
                     type="number"
                     min={1}
                     max={100}
-                    value={formData.maxMarks}
+                    value={formData.maxMark}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        maxMarks: parseInt(e.target.value) || 10,
+                        maxMark: parseInt(e.target.value) || 10,
                       })
                     }
                   />
