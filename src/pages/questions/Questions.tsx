@@ -220,6 +220,7 @@ const QuestionRow = ({
 
 
 
+
 const DEFAULT_PARTS = ['I'];
 
 export function Questions() {
@@ -229,7 +230,6 @@ export function Questions() {
   // Dialog States
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
   // Manual Reorder Dialog States
   const [reorderQuestion, setReorderQuestion] = useState<QuestionData | null>(null);
   const [newOrderPos, setNewOrderPos] = useState<number | ''>('');
@@ -302,7 +302,6 @@ export function Questions() {
         setParts(newParts);
         setPartTitles(newPartTitles);
       }
-
     } catch (error) {
       console.error("Error fetching questions:", error);
       toast.error("Failed to load questions");
@@ -432,6 +431,7 @@ export function Questions() {
       toast.error("Failed to save question");
     }
   };
+
 
   const handleDeleteQuestion = async (questionId: string) => {
     try {
@@ -709,11 +709,11 @@ export function Questions() {
             <Plus className="w-4 h-4 mr-2" />
             Add Question
           </Button>
-        </div>
-      </div>
+        </div >
+      </div >
 
       {/* Parts Configuration */}
-      <Card>
+      < Card >
         <div
           className="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           onClick={() => setShowPartConfig(!showPartConfig)}
@@ -724,79 +724,107 @@ export function Questions() {
           </div>
           {showPartConfig ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
         </div>
-        {showPartConfig && (
-          <CardContent className="pt-0 pb-4 border-t mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {parts.map(part => (
-                <div key={part} className="flex items-center gap-2">
-                  <Label className="w-16 whitespace-nowrap">Part {part}:</Label>
-                  <div className="flex-1 flex items-center gap-2">
-                    <Input
-                      placeholder="Enter part title..."
-                      value={partTitles[part] || ""}
-                      onChange={e => setPartTitles({ ...partTitles, [part]: e.target.value })}
-                    />
-                    {part !== 'I' && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemovePart(part)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        title="Delete Part"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
+        {
+          showPartConfig && (
+            <CardContent className="pt-0 pb-4 border-t mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {parts.map(part => (
+                  <div key={part} className="flex items-center gap-2">
+                    <Label className="w-16 whitespace-nowrap">Part {part}:</Label>
+                    <div className="flex-1 flex items-center gap-2">
+                      <Input
+                        placeholder="Enter part title..."
+                        value={partTitles[part] || ""}
+                        onChange={e => setPartTitles({ ...partTitles, [part]: e.target.value })}
+                      />
+                      {part !== 'I' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemovePart(part)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          title="Delete Part"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" className="mt-4" onClick={handleAddPart}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add More Parts
-            </Button>
-          </CardContent>
-        )}
-      </Card>
+                ))}
+              </div>
+              <Button variant="outline" className="mt-4" onClick={handleAddPart}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add More Parts
+              </Button>
+            </CardContent>
+          )
+        }
+      </Card >
 
       {/* Questions List */}
-      <div className="space-y-4">
-        {questions.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center text-gray-500">
-              <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No questions found</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {parts.map(part => {
-              const partQuestions = questions.filter(q => (q.part || 'I') === part);
+      < div className="space-y-4" >
+        {
+          questions.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No questions found</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {parts.map(part => {
+                const partQuestions = questions.filter(q => (q.part || 'I') === part);
 
-              return (
-                <Card key={`part-${part}`} className="mb-6">
-                  <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b pb-4">
-                    <div className="flex justify-between items-center">
-                      <CardTitle className="text-lg">Part {part}{partTitles[part] ? `: ${partTitles[part]}` : ''}</CardTitle>
-                      <span className="text-sm text-gray-500">{partQuestions.length} Questions</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="hidden md:block">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[50px]">#</TableHead>
-                            <TableHead className="w-[50px]"></TableHead>
-                            <TableHead>Question Details</TableHead>
-                            <TableHead className="w-[100px]">Marks</TableHead>
-                            <TableHead className="w-[120px]">Mandatory</TableHead>
-                            <TableHead className="w-[120px] text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {partQuestions.length > 0 ? (
-                            partQuestions.map((question) => (
+                return (
+                  <Card key={`part-${part}`} className="mb-6">
+                    <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b pb-4">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-lg">Part {part}{partTitles[part] ? `: ${partTitles[part]}` : ''}</CardTitle>
+                        <span className="text-sm text-gray-500">{partQuestions.length} Questions</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="hidden md:block">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[50px]">#</TableHead>
+                              <TableHead className="w-[50px]"></TableHead>
+                              <TableHead>Question Details</TableHead>
+                              <TableHead className="w-[100px]">Marks</TableHead>
+                              <TableHead className="w-[120px]">Mandatory</TableHead>
+                              <TableHead className="w-[120px] text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {partQuestions.length > 0 ? (
+                              partQuestions.map((question) => (
+                                <QuestionRow
+                                  key={question.id}
+                                  question={question}
+                                  globalIndex={questions.findIndex(q => q.id === question.id) + 1}
+                                  handleStartEdit={handleStartEdit}
+                                  handleDeleteQuestion={handleDeleteQuestion}
+                                  handleToggleMandatory={handleToggleMandatory}
+                                  handleLongPress={setReorderQuestion}
+                                />
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center text-gray-500 bg-gray-50/50">
+                                  No questions in this part
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div className="md:hidden p-4 space-y-4 min-h-[50px]">
+                        {partQuestions.length > 0 ? (
+                          partQuestions.map((question) => (
+                            <div key={question.id}>
                               <QuestionRow
                                 key={question.id}
                                 question={question}
@@ -806,46 +834,22 @@ export function Questions() {
                                 handleToggleMandatory={handleToggleMandatory}
                                 handleLongPress={setReorderQuestion}
                               />
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={6} className="h-24 text-center text-gray-500 bg-gray-50/50">
-                                No questions in this part
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    <div className="md:hidden p-4 space-y-4 min-h-[50px]">
-                      {partQuestions.length > 0 ? (
-                        partQuestions.map((question) => (
-                          <div key={question.id}>
-                            <QuestionRow
-                              key={question.id}
-                              question={question}
-                              globalIndex={questions.findIndex(q => q.id === question.id) + 1}
-                              handleStartEdit={handleStartEdit}
-                              handleDeleteQuestion={handleDeleteQuestion}
-                              handleToggleMandatory={handleToggleMandatory}
-                              handleLongPress={setReorderQuestion}
-                            />
+                            </div>
+                          ))
+                        ) : (
+                          <div className="h-24 flex items-center justify-center text-center text-gray-500 bg-gray-50/50 rounded border border-dashed">
+                            No questions in this part
                           </div>
-                        ))
-                      ) : (
-                        <div className="h-24 flex items-center justify-center text-center text-gray-500 bg-gray-50/50 rounded border border-dashed">
-                          No questions in this part
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )
+        }
+      </div >
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -1045,6 +1049,6 @@ export function Questions() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }
