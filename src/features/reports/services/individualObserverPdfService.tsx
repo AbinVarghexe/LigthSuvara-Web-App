@@ -6,19 +6,41 @@ import logoUrl from '../../../assets/reportlogo.jpg';
 
 // Helper to convert image URL to Base64
 async function fetchImageAsBase64(url: string): Promise<string> {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Network response was not ok");
-        const blob = await response.blob();
+    const blobToBase64 = (blob: Blob): Promise<string> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
             reader.onerror = reject;
             reader.readAsDataURL(blob);
         });
-    } catch (e) {
-        console.warn("Failed to load logo", e);
-        return "";
+    };
+
+    try {
+        const response = await fetch(url, { mode: 'cors' });
+        if (!response.ok) throw new Error("Network response was not ok");
+        const blob = await response.blob();
+        return await blobToBase64(blob);
+    } catch (error) {
+        console.warn("Direct fetch failed, attempting primary CORS proxy...", url);
+        try {
+            const proxyUrl1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const proxyResponse1 = await fetch(proxyUrl1);
+            if (!proxyResponse1.ok) throw new Error("Primary proxy failed");
+            const proxyBlob1 = await proxyResponse1.blob();
+            return await blobToBase64(proxyBlob1);
+        } catch (proxyError1) {
+            console.warn("Primary proxy failed, attempting secondary proxy...", url);
+            try {
+                const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                const proxyResponse2 = await fetch(proxyUrl2);
+                if (!proxyResponse2.ok) throw new Error("Secondary proxy failed");
+                const proxyBlob2 = await proxyResponse2.blob();
+                return await blobToBase64(proxyBlob2);
+            } catch (proxyError2) {
+                console.error("Failed to fetch image for PDF even with multiple proxies:", url);
+                return "";
+            }
+        }
     }
 }
 
