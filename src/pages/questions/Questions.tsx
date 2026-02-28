@@ -5,13 +5,11 @@ import {
   GripVertical,
   Trash2,
   Edit,
-  Save,
   X,
   HelpCircle,
   Download,
   Settings,
   PlusCircle,
-  MinusCircle,
   ChevronDown,
   ChevronUp
 } from "lucide-react";
@@ -41,7 +39,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../../components/ui/dialog";
 import {
   AlertDialog,
@@ -62,7 +59,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
+
 import { createMalayalamPDF } from "../../lib/pdfFonts";
 
 import {

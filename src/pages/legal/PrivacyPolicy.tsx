@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { useOutletContext } from 'react-router';
 import { LegalLayoutContextType } from '../../components/layout/LegalLayout';
@@ -200,8 +200,8 @@ export const PrivacyPolicy = () => {
 
                                 <h4 className="font-semibold mt-4 mb-2">4.1 DATA STORAGE</h4>
                                 <p className="text-sm text-muted-foreground mb-2">
-                                    Light Suvara uses Firebase, Google's mobile and web application development platform, 
-                                    for data storage and authentication. Your data is stored on secure servers provided by 
+                                    Light Suvara uses Firebase, Google's mobile and web application development platform,
+                                    for data storage and authentication. Your data is stored on secure servers provided by
                                     Firebase/Google Cloud Platform.
                                 </p>
                                 <ul className="list-disc list-inside text-sm text-muted-foreground ml-4">
@@ -223,8 +223,8 @@ export const PrivacyPolicy = () => {
 
                                 <h4 className="font-semibold mt-4 mb-2">4.3 DATA RETENTION</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    We retain your information only as long as necessary to provide our services 
-                                    and fulfill the purposes outlined in this Privacy Policy. You may request 
+                                    We retain your information only as long as necessary to provide our services
+                                    and fulfill the purposes outlined in this Privacy Policy. You may request
                                     deletion of your account and associated data at any time.
                                 </p>
                             </section>
@@ -234,7 +234,7 @@ export const PrivacyPolicy = () => {
 
                                 <h4 className="font-semibold mt-4 mb-2">5.1 WE DO NOT SELL YOUR DATA</h4>
                                 <p className="text-sm text-muted-foreground mb-2">
-                                    Light Suvara does not sell, rent, or trade your personal information to third 
+                                    Light Suvara does not sell, rent, or trade your personal information to third
                                     parties for marketing purposes.
                                 </p>
 
@@ -248,7 +248,7 @@ export const PrivacyPolicy = () => {
 
                                 <h4 className="font-semibold mt-4 mb-2">5.3 LEGAL REQUIREMENTS</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    We may disclose your information if required by law, court order, or government 
+                                    We may disclose your information if required by law, court order, or government
                                     request, or to protect our rights and safety.
                                 </p>
                             </section>
@@ -258,25 +258,25 @@ export const PrivacyPolicy = () => {
 
                                 <h4 className="font-semibold mt-4 mb-2">6.1 ACCESS AND CORRECTION</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    You can access and update your profile information directly through the App's 
+                                    You can access and update your profile information directly through the App's
                                     settings.
                                 </p>
 
                                 <h4 className="font-semibold mt-4 mb-2">6.2 ACCOUNT DELETION</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    You may request deletion of your account by contacting us. This will permanently 
+                                    You may request deletion of your account by contacting us. This will permanently
                                     remove your personal data from our systems.
                                 </p>
 
                                 <h4 className="font-semibold mt-4 mb-2">6.3 NOTIFICATION PREFERENCES</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    You can control push notification settings through your device settings or the 
+                                    You can control push notification settings through your device settings or the
                                     App's notification preferences.
                                 </p>
 
                                 <h4 className="font-semibold mt-4 mb-2">6.4 DATA PORTABILITY</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    You have the right to request a copy of your personal data in a structured, 
+                                    You have the right to request a copy of your personal data in a structured,
                                     machine-readable format.
                                 </p>
                             </section>
@@ -284,10 +284,10 @@ export const PrivacyPolicy = () => {
                             <section id="section-7" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">7. CHILDREN'S PRIVACY</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Light Suvara is designed for Sunday School management and may contain information 
-                                    about minors enrolled in Sunday School programs. However, the App itself is 
-                                    intended for use by adults (18 years or older) such as teachers, administrators, 
-                                    and parents. We do not knowingly collect personal information directly from 
+                                    Light Suvara is designed for Sunday School management and may contain information
+                                    about minors enrolled in Sunday School programs. However, the App itself is
+                                    intended for use by adults (18 years or older) such as teachers, administrators,
+                                    and parents. We do not knowingly collect personal information directly from
                                     children under 13 without parental consent.
                                 </p>
                             </section>
@@ -295,9 +295,9 @@ export const PrivacyPolicy = () => {
                             <section id="section-8" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">8. INTERNATIONAL USERS</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Light Suvara is primarily designed for users in [Your Region/Country]. If you 
-                                    access the App from other locations, your information may be transferred to and 
-                                    processed in countries where our service providers operate. By using the App, 
+                                    Light Suvara is primarily designed for users in [Your Region/Country]. If you
+                                    access the App from other locations, your information may be transferred to and
+                                    processed in countries where our service providers operate. By using the App,
                                     you consent to such transfers.
                                 </p>
                             </section>
@@ -305,7 +305,7 @@ export const PrivacyPolicy = () => {
                             <section id="section-9" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">9. CALIFORNIA PRIVACY RIGHTS</h3>
                                 <p className="text-sm text-muted-foreground mb-2">
-                                    If you are a California resident, you have additional rights under the California 
+                                    If you are a California resident, you have additional rights under the California
                                     Consumer Privacy Act (CCPA):
                                 </p>
                                 <ul className="list-disc list-inside text-sm text-muted-foreground ml-4">
@@ -320,8 +320,8 @@ export const PrivacyPolicy = () => {
                             <section id="section-10" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">10. COOKIES AND TRACKING</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Light Suvara may use cookies and similar tracking technologies to enhance user 
-                                    experience and collect usage data. You can control cookie settings through your 
+                                    Light Suvara may use cookies and similar tracking technologies to enhance user
+                                    experience and collect usage data. You can control cookie settings through your
                                     device or browser settings.
                                 </p>
                             </section>
@@ -344,8 +344,8 @@ export const PrivacyPolicy = () => {
                             <section id="section-12" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">12. THIRD-PARTY LINKS</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    The App may contain links to external websites or services. We are not responsible 
-                                    for the privacy practices of these third parties. We encourage you to review their 
+                                    The App may contain links to external websites or services. We are not responsible
+                                    for the privacy practices of these third parties. We encourage you to review their
                                     privacy policies.
                                 </p>
                             </section>
@@ -366,7 +366,7 @@ export const PrivacyPolicy = () => {
                             <section id="section-14" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">14. CONTACT INFORMATION</h3>
                                 <p className="text-sm text-muted-foreground mb-2">
-                                    If you have questions, concerns, or requests regarding this Privacy Policy or 
+                                    If you have questions, concerns, or requests regarding this Privacy Policy or
                                     your personal data, please contact us:
                                 </p>
                                 <div className="bg-muted p-4 rounded-lg mt-4">
@@ -380,7 +380,7 @@ export const PrivacyPolicy = () => {
                             <section id="section-15" className="scroll-mt-24">
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">15. CONSENT</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    By using Light Suvara, you consent to our Privacy Policy and agree to its terms. 
+                                    By using Light Suvara, you consent to our Privacy Policy and agree to its terms.
                                     If you do not agree with this policy, please do not use our App.
                                 </p>
                             </section>
@@ -389,12 +389,12 @@ export const PrivacyPolicy = () => {
                                 <h3 className="text-lg font-bold mb-4 border-b pb-2">16. ACKNOWLEDGMENT</h3>
                                 <div className="bg-muted p-4 rounded-lg">
                                     <p className="text-sm text-muted-foreground">
-                                        This Privacy Policy was last updated on {currentDate}. By continuing to use 
-                                        Light Suvara after this date, you acknowledge that you have read, understood, 
+                                        This Privacy Policy was last updated on {currentDate}. By continuing to use
+                                        Light Suvara after this date, you acknowledge that you have read, understood,
                                         and agree to be bound by this Privacy Policy.
                                     </p>
                                     <p className="text-sm text-muted-foreground mt-2">
-                                        For the most current version of this Privacy Policy, please check within the 
+                                        For the most current version of this Privacy Policy, please check within the
                                         App or contact us directly.
                                     </p>
                                 </div>

@@ -899,19 +899,7 @@ export function Reports() {
     }
   };
 
-  // Generic stub generator (kept for Programs)
-  const makeStubGenerator =
-    (label: string, setGenerating: (v: boolean) => void, count: number) =>
-      async () => {
-        if (count === 0) {
-          toast.warning("No records match the selected filters.");
-          return;
-        }
-        setGenerating(true);
-        await new Promise((r) => setTimeout(r, 700));
-        toast.success(`${label} generated for ${count} record(s).`);
-        setGenerating(false);
-      };
+
   if (loading) {
     return (
       <div className="h-full w-full flex items-center justify-center">

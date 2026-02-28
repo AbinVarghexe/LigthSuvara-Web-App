@@ -28,7 +28,7 @@ export function ColorBends({
   noise = 0.1
 }: ColorBendsProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationIdRef = useRef<number>();
+  const animationIdRef = useRef<number>(0);
   const timeRef = useRef(0);
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
 
@@ -100,7 +100,7 @@ export function ColorBends({
         const blobGradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
         blobGradient.addColorStop(0, color + '40');
         blobGradient.addColorStop(1, color + '00');
-        
+
         ctx.fillStyle = blobGradient;
         ctx.fillRect(0, 0, width, height);
       });

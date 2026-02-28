@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Shield, FileText, ArrowLeft, X } from 'lucide-react';
+import { Shield, ArrowLeft, X } from 'lucide-react';
 import logoDark from '../../assets/Logo-dark.png';
 import logoWhite from '../../assets/Logo-white.png';
 import { TocItem } from './LegalLayout';

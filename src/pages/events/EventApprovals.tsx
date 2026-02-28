@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { CheckCircle, XCircle, Loader2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { getEvents, updateEventStatus, EventData } from '../../features/events/services/eventService';
-import { getUsers, UserData } from '../../features/users/services/userService';
+import { getUsers } from '../../features/users/services/userService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
@@ -14,11 +14,11 @@ import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 export function EventApprovals() {
     const { isAdminUser, currentUser } = useAuth();
     const [events, setEvents] = useState<EventData[]>([]);
-    const [users, setUsers] = useState<UserData[]>([]);
+
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [foraneFilter, setForaneFilter] = useState('All');
-    const [currentUserForane, setCurrentUserForane] = useState<string | null>(null);
+
 
     // Hardcoded forane names
     const foraneNames = [
@@ -44,19 +44,14 @@ export function EventApprovals() {
     const fetchPendingEvents = async () => {
         try {
             setLoading(true);
-            const usersData = await getUsers();
-            setUsers(usersData);
-            
+            await getUsers();
+
+
             // Fetch current user's forane
-            let userForane: string | null = null;
             if (currentUser) {
-                const currentUserData = usersData.find(u => u.uid === currentUser.uid);
-                if (currentUserData?.forane) {
-                    userForane = currentUserData.forane;
-                    setCurrentUserForane(userForane);
-                }
+                // current user forane state check removed since it is unused
             }
-            
+
             // Fetch events with forane filter from backend
             const foraneToQuery = foraneFilter !== 'All' ? foraneFilter : undefined;
             const allEvents = await getEvents(undefined, foraneToQuery);

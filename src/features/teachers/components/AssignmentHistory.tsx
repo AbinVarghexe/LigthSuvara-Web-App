@@ -18,14 +18,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trash2, Edit, FileDown } from "lucide-react";
+import { Loader2, Trash2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 
 import { AssignmentService } from "../services/assignmentService";
 import { TeacherService } from "../services/teacherService";
 import { ParishService } from "@/features/parishes/services/parishService";
 import { Teacher, Parish } from "../types";
-import { PdfService } from "../services/pdfService";
 
 interface Assignment {
   id: string;
@@ -46,9 +45,7 @@ export function AssignmentHistory({ refreshTrigger }: AssignmentHistoryProps) {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [selectedYear, setSelectedYear] = useState<string>(
-    new Date().getFullYear().toString(),
-  );
+
   const [selectedForane, setSelectedForane] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -194,7 +191,7 @@ export function AssignmentHistory({ refreshTrigger }: AssignmentHistoryProps) {
                     <TableCell className="font-medium">
                       {teacher.name}
                       <div className="text-xs text-muted-foreground">
-                        {teacher.mobile}
+                        {teacher.phone}
                       </div>
                     </TableCell>
                     <TableCell>{homeParish?.name || "Unknown"}</TableCell>

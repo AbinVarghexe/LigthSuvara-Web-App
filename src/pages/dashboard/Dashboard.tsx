@@ -3,7 +3,6 @@ import {
   Calendar,
   Users,
   School,
-  FileText,
   CheckCircle2,
   Loader2,
   TrendingUp,
@@ -56,11 +55,6 @@ export function Dashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [activePrograms, setActivePrograms] = useState(0);
-  const [animatorStats, setAnimatorStats] = useState({
-    total: 0,
-    assigned: 0,
-    unassigned: 0,
-  });
   const [radarData, setRadarData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -142,7 +136,6 @@ export function Dashboard() {
         setUsers(usersData);
         setNotifications(notificationsData);
         setActivePrograms(programsData?.length || 0);
-        setAnimatorStats(animatorStatsData);
         setRadarData(processedRadarData);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -177,10 +170,10 @@ export function Dashboard() {
   const getEventDate = (event: EventData) => {
     return event.date
       ? new Date(
-          (event.date as any).seconds
-            ? (event.date as any).seconds * 1000
-            : event.date
-        )
+        (event.date as any).seconds
+          ? (event.date as any).seconds * 1000
+          : event.date
+      )
       : new Date();
   };
 
@@ -457,12 +450,12 @@ export function Dashboard() {
                     const creator = users.find((u) => u.id === event.creatorId);
                     const schoolName =
                       event.creatorSchoolName &&
-                      event.creatorSchoolName !== "Admin"
+                        event.creatorSchoolName !== "Admin"
                         ? event.creatorSchoolName
                         : creator?.schoolName ||
-                          creator?.schoolname ||
-                          creator?.fullName ||
-                          "Unknown";
+                        creator?.schoolname ||
+                        creator?.fullName ||
+                        "Unknown";
 
                     const formatDate = (date: any) => {
                       if (!date) return "N/A";

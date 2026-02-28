@@ -1,0 +1,25 @@
+src/components/EventReportPreview.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/layout/LegalSidebar.tsx(2,18): error TS6133: 'FileText' is declared but its value is never read.
+src/components/react-bits/ColorBends.tsx(31,26): error TS2554: Expected 1 arguments, but got 0.
+src/features/teachers/components/AssignmentHistory.tsx(21,27): error TS6133: 'Edit' is declared but its value is never read.
+src/features/teachers/components/AssignmentHistory.tsx(28,1): error TS6133: 'PdfService' is declared but its value is never read.
+src/features/teachers/components/AssignmentHistory.tsx(49,10): error TS6133: 'selectedYear' is declared but its value is never read.
+src/features/teachers/components/AssignmentHistory.tsx(49,24): error TS6133: 'setSelectedYear' is declared but its value is never read.
+src/features/teachers/components/AssignmentHistory.tsx(197,34): error TS2339: Property 'mobile' does not exist on type 'Teacher'.
+src/features/teachers/services/pdfService.ts(1,1): error TS6133: 'jsPDF' is declared but its value is never read.
+src/features/teachers/services/pdfService.ts(166,34): error TS2339: Property 'join' does not exist on type 'string | string[]'.
+  Property 'join' does not exist on type 'string'.
+src/pages/auth/Login.tsx(4,32): error TS6133: 'Facebook' is declared but its value is never read.
+src/pages/auth/Login.tsx(4,42): error TS6133: 'Chrome' is declared but its value is never read.
+src/pages/dashboard/Dashboard.tsx(6,3): error TS6133: 'FileText' is declared but its value is never read.
+src/pages/dashboard/Dashboard.tsx(59,10): error TS6133: 'animatorStats' is declared but its value is never read.
+src/pages/events/EventApprovals.tsx(17,12): error TS6133: 'users' is declared but its value is never read.
+src/pages/events/EventApprovals.tsx(21,12): error TS6133: 'currentUserForane' is declared but its value is never read.
+src/pages/legal/PrivacyPolicy.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/programs/ProgramAnalytics.tsx(7,5): error TS6133: 'Filter' is declared but its value is never read.
+src/pages/questions/Questions.tsx(8,3): error TS6133: 'Save' is declared but its value is never read.
+src/pages/questions/Questions.tsx(14,3): error TS6133: 'MinusCircle' is declared but its value is never read.
+src/pages/questions/Questions.tsx(44,3): error TS6133: 'DialogTrigger' is declared but its value is never read.
+src/pages/questions/Questions.tsx(65,1): error TS6133: 'jsPDF' is declared but its value is never read.
+src/pages/reports/Reports.tsx(903,9): error TS6133: 'makeStubGenerator' is declared but its value is never read.
+src/pages/reports/templates/ProgramPdfTemplate.tsx(1,1): error TS6133: 'React' is declared but its value is never read.

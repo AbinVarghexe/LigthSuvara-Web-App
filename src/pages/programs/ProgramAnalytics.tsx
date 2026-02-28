@@ -4,7 +4,6 @@ import {
     Loader2,
     Users,
     Trophy,
-    Filter,
     BarChart4,
     LayoutDashboard,
     ArrowUpRight,

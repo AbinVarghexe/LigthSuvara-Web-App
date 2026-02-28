@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import generateEventPdf from '../lib/generatePdf';
 
 export default function EventReportPreview() {
