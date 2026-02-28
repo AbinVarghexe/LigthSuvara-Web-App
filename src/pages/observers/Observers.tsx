@@ -153,6 +153,7 @@ function ReportFilterBar({
 export function Observers() {
   const { currentUser } = useAuth();
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [sourceParishes, setSourceParishes] = useState<any[]>([]);
   const [schools, setSchools] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -212,7 +213,7 @@ export function Observers() {
             AssignmentService.getAssignments(),
           ],
         );
-        const allUsers = usersData as UserData[];
+        const allUsersRaw = usersData as UserData[];
         const groupByName = (users: any[]) => {
           const map = new Map<string, any>();
           users.forEach(u => {
@@ -235,9 +236,10 @@ export function Observers() {
           return Array.from(map.values());
         };
 
-        const sourceParishesList = groupByName(allUsers.filter(u => u.role === 'parish' || u.role === 'school'));
-        const schoolsList = groupByName(allUsers.filter(u => u.role === 'school'));
+        const sourceParishesList = groupByName(allUsersRaw.filter(u => u.role === 'parish' || u.role === 'school'));
+        const schoolsList = groupByName(allUsersRaw.filter(u => u.role === 'school'));
 
+        setAllUsers(usersData);
         setAllTeachers(teachersData);
         setSourceParishes(sourceParishesList);
         setSchools(schoolsList);
@@ -406,7 +408,7 @@ export function Observers() {
       await PremiumAnimatorObserverPdfService.generateObserverAssignmentReport(
         filtered,
         allTeachers,
-        sourceParishes as any,
+        allUsers as any,
         rptAssignForane,
         rptAssignParishId,
         rptAssignYear
@@ -442,7 +444,7 @@ export function Observers() {
     try {
       await PremiumAnimatorObserverPdfService.generateObserverDirectoryReport(
         filtered,
-        sourceParishes as any,
+        allUsers as any,
         rptDirForane,
         rptDirParishId,
         rptDirYear
