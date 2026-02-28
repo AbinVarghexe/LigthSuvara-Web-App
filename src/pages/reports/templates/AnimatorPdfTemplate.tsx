@@ -19,6 +19,13 @@ export const AnimatorPdfTemplate = ({
         const foraneName = pInfo?.forane || (a.parishName?.split('-')[0]?.trim()) || 'Unknown Forane';
         const parishName = pInfo?.name || a.parishName || 'Unknown Parish';
 
+        // Skip explicitly unassigned/unknown strings from DB
+        const fLower = foraneName.toLowerCase();
+        const pLower = parishName.toLowerCase();
+        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
+            return acc;
+        }
+
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
 

@@ -32,6 +32,13 @@ export const ObserverDirPdfTemplate = ({
     const grouped = observers.reduce((acc, obs) => {
         const { forane: foraneName, name: parishName } = getParishInfo(obs.parishId || obs.schoolId || '', users);
 
+        // Skip explicitly unassigned/unknown strings from DB
+        const fLower = foraneName.toLowerCase();
+        const pLower = parishName.toLowerCase();
+        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
+            return acc;
+        }
+
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
 
@@ -140,6 +147,13 @@ export const ObserverAssignPdfTemplate = ({
     const grouped = assignments.reduce((acc, a) => {
         const t = teachers.find(teach => teach.id === a.teacherId);
         const { forane: foraneName, name: parishName } = getParishInfo(t?.parishId || '', users);
+
+        // Skip explicitly unassigned/unknown strings from DB
+        const fLower = foraneName.toLowerCase();
+        const pLower = parishName.toLowerCase();
+        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
+            return acc;
+        }
 
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];

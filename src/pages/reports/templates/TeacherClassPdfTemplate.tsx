@@ -17,15 +17,19 @@ export const TeacherClassPdfTemplate = ({
 
     // Group teachers by Forane -> Parish
     const grouped = teachers.reduce((acc, t) => {
-        let foraneName = 'Unassigned';
-        let parishName = 'Unassigned';
+        if (!t.parishId) return acc;
 
-        if (t.parishId) {
-            const p = parishes.find(p => p.id === t.parishId);
-            if (p) {
-                foraneName = p.forane || 'Unknown Forane';
-                parishName = p.name || 'Unknown Parish';
-            }
+        const p = parishes.find(p => p.id === t.parishId);
+        if (!p || !p.forane || !p.name) return acc;
+
+        const foraneName = p.forane;
+        const parishName = p.name;
+
+        // Skip explicitly unassigned/unknown strings from DB
+        const fLower = foraneName.toLowerCase();
+        const pLower = parishName.toLowerCase();
+        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
+            return acc;
         }
 
         if (!acc[foraneName]) acc[foraneName] = {};
