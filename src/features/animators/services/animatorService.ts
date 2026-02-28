@@ -36,10 +36,13 @@ export interface AnimatorWithUser {
     id: string;
     uid: string;
     email: string;
-    fullName: string;
+    name: string;
     phoneNumber?: string;
     profileImageUrl?: string;
-    parish?: string;
+    role: string;
+    parish?: string; // Kept for backward compatibility if needed, but pref parishName
+    parishId?: string;
+    parishName?: string;
     address?: string;
     assignments: AnimatorAssignment[];
 }
@@ -52,31 +55,34 @@ export const getAnimators = async (): Promise<AnimatorWithUser[]> => {
         where('role', '==', 'animator')
     );
     const usersSnapshot = await getDocs(usersQuery);
-    
+
     const animators: AnimatorWithUser[] = [];
-    
+
     for (const userDoc of usersSnapshot.docs) {
         const userData = userDoc.data();
-        
+
         // Get animator assignments
         const assignmentDoc = await getDoc(doc(db, 'animator_assignments', userDoc.id));
-        const assignments = assignmentDoc.exists() 
-            ? (assignmentDoc.data()?.assignments || []) 
+        const assignments = assignmentDoc.exists()
+            ? (assignmentDoc.data()?.assignments || [])
             : [];
-        
+
         animators.push({
             id: userDoc.id,
             uid: userDoc.id,
             email: userData.email || '',
-            fullName: userData.fullName || userData.name || '',
+            name: userData.name || userData.fullName || '',
             phoneNumber: userData.phoneNumber,
             parish: userData.parish,
+            parishId: userData.parishId,
+            parishName: userData.parishName,
             address: userData.address,
             profileImageUrl: userData.profileImageUrl,
+            role: userData.role || 'animator',
             assignments
         });
     }
-    
+
     return animators;
 };
 
@@ -86,22 +92,25 @@ export const getAnimator = async (animatorId: string): Promise<AnimatorWithUser 
     if (!userDoc.exists() || userDoc.data()?.role !== 'animator') {
         return null;
     }
-    
+
     const userData = userDoc.data();
     const assignmentDoc = await getDoc(doc(db, 'animator_assignments', animatorId));
-    const assignments = assignmentDoc.exists() 
-        ? (assignmentDoc.data()?.assignments || []) 
+    const assignments = assignmentDoc.exists()
+        ? (assignmentDoc.data()?.assignments || [])
         : [];
-    
+
     return {
         id: userDoc.id,
         uid: userDoc.id,
         email: userData.email || '',
-        fullName: userData.fullName || userData.name || '',
+        name: userData.name || userData.fullName || '',
         phoneNumber: userData.phoneNumber,
         parish: userData.parish,
+        parishId: userData.parishId,
+        parishName: userData.parishName,
         address: userData.address,
         profileImageUrl: userData.profileImageUrl,
+        role: userData.role || 'animator',
         assignments
     };
 };
@@ -109,9 +118,10 @@ export const getAnimator = async (animatorId: string): Promise<AnimatorWithUser 
 export const createAnimator = async (
     email: string,
     password: string,
-    fullName: string,
+    name: string,
+    parishId: string,
+    parishName: string,
     phoneNumber?: string,
-    parish?: string,
     address?: string
 ): Promise<string> => {
     // Use a secondary Firebase app to create the user without
@@ -123,21 +133,23 @@ export const createAnimator = async (
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
         const uid = userCredential.user.uid;
 
-        // Create user document with animator role
+        // Create user document with animator role matching Flutter app structure
         await setDoc(doc(db, 'users', uid), {
             uid,
             email,
-            fullName,
+            name,
             role: 'animator',
+            parishId,
+            parishName,
             phoneNumber: phoneNumber || '',
-            parish: parish || '',
             address: address || '',
-            createdAt: Timestamp.now()
+            createdAt: Timestamp.now(),
+            createdBy: auth.currentUser?.uid || ''
         });
 
         // Create empty animator_assignments document
         await setDoc(doc(db, 'animator_assignments', uid), {
-            animatorName: fullName,
+            animatorName: name,
             animatorEmail: email,
             assignments: []
         });
@@ -155,9 +167,10 @@ export const updateAnimator = async (
 ): Promise<void> => {
     // 1. Update user document
     const userUpdateDoc: any = {};
-    if (updates.fullName !== undefined) userUpdateDoc.fullName = updates.fullName;
+    if (updates.name !== undefined) userUpdateDoc.name = updates.name;
     if (updates.phoneNumber !== undefined) userUpdateDoc.phoneNumber = updates.phoneNumber;
-    if (updates.parish !== undefined) userUpdateDoc.parish = updates.parish;
+    if (updates.parishId !== undefined) userUpdateDoc.parishId = updates.parishId;
+    if (updates.parishName !== undefined) userUpdateDoc.parishName = updates.parishName;
     if (updates.address !== undefined) userUpdateDoc.address = updates.address;
 
     if (Object.keys(userUpdateDoc).length > 0) {
@@ -165,10 +178,10 @@ export const updateAnimator = async (
     }
 
     // 2. Sync animatorName if it changed
-    if (updates.fullName !== undefined) {
-        await updateDoc(doc(db, 'animator_assignments', animatorId), {
-            animatorName: updates.fullName
-        });
+    if (updates.name !== undefined) {
+        await setDoc(doc(db, 'animator_assignments', animatorId), {
+            animatorName: updates.name
+        }, { merge: true });
     }
 };
 
@@ -178,13 +191,13 @@ export const addAssignment = async (
     assignment: AnimatorAssignment
 ): Promise<void> => {
     const assignmentDoc = await getDoc(doc(db, 'animator_assignments', animatorId));
-    
+
     if (assignmentDoc.exists()) {
         const currentAssignments = assignmentDoc.data()?.assignments || [];
-        if (currentAssignments.length >= 2) {
-            throw new Error('Animator already has maximum 2 assignments');
+        if (currentAssignments.length >= 7) {
+            throw new Error('Animator already has maximum 7 assignments');
         }
-        
+
         // Check if school is already assigned to this animator
         const schoolAlreadyAssigned = currentAssignments.some(
             (a: AnimatorAssignment) => a.schoolUserId === assignment.schoolUserId
@@ -192,7 +205,7 @@ export const addAssignment = async (
         if (schoolAlreadyAssigned) {
             throw new Error('This school is already assigned to this animator');
         }
-        
+
         await updateDoc(doc(db, 'animator_assignments', animatorId), {
             assignments: arrayUnion(assignment)
         });
@@ -200,10 +213,10 @@ export const addAssignment = async (
         // Create new assignment document
         const userDoc = await getDoc(doc(db, 'users', animatorId));
         if (!userDoc.exists()) throw new Error('Animator not found');
-        
+
         const userData = userDoc.data();
         await setDoc(doc(db, 'animator_assignments', animatorId), {
-            animatorName: userData.fullName || '',
+            animatorName: userData.name || userData.fullName || '',
             animatorEmail: userData.email || '',
             assignments: [assignment]
         });
@@ -228,18 +241,18 @@ export const getUnassignedSchools = async () => {
         where('role', '==', 'school')
     );
     const schoolsSnapshot = await getDocs(schoolsQuery);
-    
+
     // Get all assignments
     const assignmentsSnapshot = await getDocs(collection(db, 'animator_assignments'));
     const assignedSchoolIds = new Set<string>();
-    
+
     assignmentsSnapshot.docs.forEach(doc => {
         const assignments = doc.data()?.assignments || [];
         assignments.forEach((a: AnimatorAssignment) => {
             assignedSchoolIds.add(a.schoolUserId);
         });
     });
-    
+
     // Filter schools without assignments
     return schoolsSnapshot.docs
         .filter(doc => !assignedSchoolIds.has(doc.id))
@@ -265,6 +278,6 @@ export const getAnimatorStats = async () => {
         total: animators.length,
         assigned: animators.filter(a => a.assignments.length > 0).length,
         unassigned: animators.filter(a => a.assignments.length === 0).length,
-        fullyAssigned: animators.filter(a => a.assignments.length === 2).length
+        fullyAssigned: animators.filter(a => a.assignments.length === 7).length
     };
 };

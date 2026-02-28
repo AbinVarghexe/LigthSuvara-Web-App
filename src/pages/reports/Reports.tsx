@@ -41,11 +41,20 @@ import {
 } from "../../components/ui/chart";
 
 import { createMalayalamPDF } from "../../lib/pdfFonts";
+import { EventData, getEvents } from "../../features/events/services/eventService";
+import { EventPdfService } from "../../features/events/services/eventPdfService";
+import { PremiumSundaySchoolPdfService } from "../../features/reports/services/sundaySchoolPdfService";
+import { PremiumTeacherClassPdfService } from "../../features/reports/services/teacherClassPdfService";
+import { PremiumAnimatorObserverPdfService } from "../../features/reports/services/animatorObserverPdfServices";
+import { UserData, getUsers } from "../../features/users/services/userService";
+import { getAnimators, AnimatorWithUser } from "../../features/animators/services/animatorService";
 import {
-  getEvents,
-  EventData,
-} from "../../features/events/services/eventService";
-import { getUsers, UserData } from "../../features/users/services/userService";
+  getPrograms,
+  getProgramRegistrations,
+  ProgramData,
+  ProgramRegistration
+} from "../../features/programs/services/programService";
+import { PremiumProgramPdfService } from "../../features/reports/services/programPdfService";
 import {
   Card,
   CardContent,
@@ -53,7 +62,7 @@ import {
   CardTitle,
   CardDescription,
   CardFooter,
-} from "../../components/ui/card";
+} from "@/components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Separator } from "../../components/ui/separator";
 import {
@@ -66,14 +75,12 @@ import { Label } from "../../components/ui/label";
 import { useAuth } from "../../context/AuthContext";
 import { TeacherService } from "../../features/teachers/services/teacherService";
 import { AssignmentService } from "../../features/teachers/services/assignmentService";
-import { ParishService } from "../../features/parishes/services/parishService";
-import { PdfService } from "../../features/teachers/services/pdfService";
-import { Teacher, Parish } from "../../features/teachers/types";
+import { Teacher } from "../../features/teachers/types";
 
 // ─── Shared Filter Bar ────────────────────────────────────────────────────────
 interface FilterBarProps {
   foranes: string[];
-  parishes?: { id: string; name: string }[];
+  parishes?: { id: string; name: string; forane?: string }[];
   academicYears?: string[];
   forane: string;
   parishId?: string;
@@ -230,8 +237,11 @@ export function Reports() {
 
   // Teachers / Observers data
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [parishes, setParishes] = useState<Parish[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
+
+  // Programs data
+  const [programsList, setProgramsList] = useState<ProgramData[]>([]);
+  const [registrations, setRegistrations] = useState<ProgramRegistration[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -257,7 +267,7 @@ export function Reports() {
   // ── Sunday School Report state ──
   const [ssForane, setSsForane] = useState("All");
   const [ssParish, setSsParish] = useState("All");
-  const [ssYear, setSsYear] = useState("All");
+  // Academic Year isn't strictly needed for Sunday School entities based on new requirements
   const [generatingSs, setGeneratingSs] = useState(false);
 
   // ── Class-wise Teacher Report state ──
@@ -271,6 +281,7 @@ export function Reports() {
   const [pgForane, setPgForane] = useState("All");
   const [pgParish, setPgParish] = useState("All");
   const [pgYear, setPgYear] = useState("All");
+  const [pgSelectedProgramId, setPgSelectedProgramId] = useState("All");
   const [generatingPg, setGeneratingPg] = useState(false);
 
   // ── Animator Management Report state ──
@@ -290,21 +301,7 @@ export function Reports() {
   const [obsDirYear, setObsDirYear] = useState("All");
   const [generatingObsDir, setGeneratingObsDir] = useState(false);
 
-  const foraneNames = [
-    "Mundakayam",
-    "Kumily",
-    "Kanjirappally",
-    "Anakkara",
-    "Erumely",
-    "Ponkunnam",
-    "Kattappana",
-    "Upputhara",
-    "Ranny",
-    "Pathanamthitta",
-    "Velichiyani",
-    "Mundiyeruma",
-    "Peruvanthanam",
-  ];
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -313,20 +310,23 @@ export function Reports() {
           eventsData,
           usersData,
           teachersData,
-          parishesData,
           assignmentsData,
+          programsData,
+          registrationsData,
         ] = await Promise.all([
           getEvents(),
           getUsers(),
           TeacherService.getTeachers(),
-          ParishService.getAllParishes(),
           AssignmentService.getAssignments(),
+          getPrograms(),
+          getProgramRegistrations(),
         ]);
         setEvents(eventsData as EventData[]);
         setUsers(usersData);
         setTeachers(teachersData);
-        setParishes(parishesData);
         setAssignments(assignmentsData as any[]);
+        setProgramsList(programsData);
+        setRegistrations(registrationsData);
       } catch (error) {
         console.error("Error fetching report data:", error);
         toast.error("Failed to load report data");
@@ -346,12 +346,29 @@ export function Reports() {
     return Array.from(names).sort();
   }, [users]);
 
+  const dynamicParishes = useMemo(() => {
+    return users
+      .filter((u) => u.role === "school")
+      .map((u) => ({
+        id: u.uid || u.id,
+        name: u.schoolName || u.schoolname || "Unknown",
+        forane: u.forane || "Unknown Forane",
+        location: { lat: 0, long: 0 }
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [users]);
+
   const uniqueForanes = useMemo(
     () =>
       Array.from(
-        new Set(parishes.map((p) => p.forane).filter(Boolean)),
+        new Set(
+          users
+            .filter((u) => u.role === "school")
+            .map((u) => u.forane)
+            .filter(Boolean),
+        ),
       ).sort() as string[],
-    [parishes],
+    [users],
   );
 
   const uniqueAcademicYears = useMemo(
@@ -365,10 +382,10 @@ export function Reports() {
   const getEventDate = (event: EventData) =>
     event.date
       ? new Date(
-          (event.date as any).seconds
-            ? (event.date as any).seconds * 1000
-            : event.date,
-        )
+        (event.date as any).seconds
+          ? (event.date as any).seconds * 1000
+          : event.date,
+      )
       : new Date();
 
   const filteredEvents = events.filter((event) => {
@@ -557,24 +574,10 @@ export function Reports() {
     if (!event) return;
     setGeneratingEventPdf(true);
     try {
-      const doc = await createMalayalamPDF();
-      doc.setFontSize(20);
-      doc.setFont("NotoSansMalayalam", "bold");
-      doc.text("Light Suvara Event Report", 20, 20);
-      doc.setFontSize(16);
-      doc.setFont("NotoSansMalayalam", "normal");
-      doc.text(event.title, 20, 40);
-      doc.setFontSize(12);
-      doc.text(`Date: ${getEventDate(event).toLocaleDateString()}`, 20, 55);
-      doc.text(`Venue: ${event.place}`, 20, 65);
-      doc.text(`Category: ${event.category.toUpperCase()}`, 20, 75);
-      doc.text(`Created By: ${event.creatorSchoolName}`, 20, 85);
-      doc.text(`Status: ${event.isPublic ? "Published" : "Draft"}`, 20, 95);
-      doc.text(doc.splitTextToSize(event.description, 170), 20, 110);
-      doc.save(`${event.title.replace(/\s+/g, "-").toLowerCase()}-report.pdf`);
-      toast.success("Report generated successfully");
+      await EventPdfService.generateEventPdf(event);
+      toast.success("Event report generated successfully");
     } catch {
-      toast.error("Failed to generate PDF");
+      toast.error("Failed to generate event PDF");
     } finally {
       setGeneratingEventPdf(false);
     }
@@ -639,19 +642,18 @@ export function Reports() {
     }
   };
 
-  // Derived counts for observer reports
   const obsAssignCount = assignments.filter((a) => {
-    const ap = parishes.find((p) => p.id === a.parishId);
     const t = teachers.find((t) => t.id === a.teacherId);
+    const hp = dynamicParishes.find((p) => p.id === t?.parishId);
     return (
-      (obsAssignForane === "All" || ap?.forane === obsAssignForane) &&
-      (obsAssignParish === "All" || a.parishId === obsAssignParish) &&
+      (obsAssignForane === "All" || hp?.forane === obsAssignForane) &&
+      (obsAssignParish === "All" || t?.parishId === obsAssignParish) &&
       (obsAssignYear === "All" || t?.academicYear === obsAssignYear)
     );
   }).length;
 
   const obsDirCount = teachers.filter((t) => {
-    const hp = parishes.find((p) => p.id === t.parishId);
+    const hp = dynamicParishes.find((p) => p.id === t.parishId);
     return (
       (obsDirForane === "All" || hp?.forane === obsDirForane) &&
       (obsDirParish === "All" || t.parishId === obsDirParish) &&
@@ -676,7 +678,7 @@ export function Reports() {
 
   // Class-wise teacher count & breakdown
   const tmClassFiltered = teachers.filter((t) => {
-    const hp = parishes.find((p) => p.id === t.parishId);
+    const hp = dynamicParishes.find((p) => p.id === t.parishId);
     return (
       (tmClassForane === "All" || hp?.forane === tmClassForane) &&
       (tmClassParish === "All" || t.parishId === tmClassParish) &&
@@ -692,7 +694,7 @@ export function Reports() {
     .map((cls) => ({
       cls,
       count: teachers.filter((t) => {
-        const hp = parishes.find((p) => p.id === t.parishId);
+        const hp = dynamicParishes.find((p) => p.id === t.parishId);
         return (
           (tmClassForane === "All" || hp?.forane === tmClassForane) &&
           (tmClassParish === "All" || t.parishId === tmClassParish) &&
@@ -707,28 +709,29 @@ export function Reports() {
 
   const handleGenerateSundaySchoolReport = async () => {
     const filteredUsers = users.filter((u) => {
+      const isSchoolRole = u.role === "school";
       const matchForane = ssForane === "All" || u.forane === ssForane;
       const matchParish =
         ssParish === "All" ||
         u.schoolName === ssParish ||
         u.schoolname === ssParish;
-      return matchForane && matchParish;
+      return isSchoolRole && matchForane && matchParish;
     });
 
     if (filteredUsers.length === 0) {
-      toast.warning("No records found.");
+      toast.warning("No Sunday School records found.");
       return;
     }
     setGeneratingSs(true);
     try {
-      await PdfService.generateSundaySchoolReport(
+      await PremiumSundaySchoolPdfService.generateReport(
         filteredUsers,
         ssForane,
         ssParish,
       );
-      toast.success("Report generated");
+      toast.success("Sunday School report generated");
     } catch {
-      toast.error("Failed to generate report");
+      toast.error("Failed to generate Sunday School report");
     } finally {
       setGeneratingSs(false);
     }
@@ -741,44 +744,53 @@ export function Reports() {
     }
     setGeneratingTmClass(true);
     try {
-      await PdfService.generateTeacherClassReport(
+      await PremiumTeacherClassPdfService.generateReport(
         tmClassFiltered,
-        tmClassForane,
-        tmClassParish,
+        dynamicParishes,
         tmClassYear,
         tmClassFilter,
+        tmClassForane,
+        tmClassParish,
       );
-      toast.success("Report generated");
+      toast.success("Teacher report generated");
     } catch {
-      toast.error("Failed to generate report");
+      toast.error("Failed to generate teacher report");
     } finally {
       setGeneratingTmClass(false);
     }
   };
 
   const handleGenerateAnimatorReport = async () => {
-    // Filter animators
-    const animators = users.filter((u) => {
-      const isAnimator = u.role === "animator";
-      const matchForane = amForane === "All" || u.forane === amForane;
-      const matchParish =
-        amParish === "All" ||
-        u.schoolName === amParish ||
-        u.schoolname === amParish;
-      // Note: Assuming parish filter applies to schoolName for animators too
-      return isAnimator && matchForane && matchParish;
-    });
-
-    if (animators.length === 0) {
-      toast.warning("No animators found.");
-      return;
-    }
     setGeneratingAm(true);
     try {
-      await PdfService.generateAnimatorReport(animators, amForane, amParish);
-      toast.success("Report generated");
-    } catch {
-      toast.error("Failed to generate report");
+      const allAnimators = await getAnimators();
+
+      const filteredAnimators: AnimatorWithUser[] = allAnimators.filter((a) => {
+        const pInfo = dynamicParishes.find(p => p.id === a.parishId);
+
+        const matchForane = amForane === "All" ||
+          (a.parishName && a.parishName.toLowerCase().includes(amForane.toLowerCase())) ||
+          (pInfo?.forane?.trim().toLowerCase() === amForane.trim().toLowerCase());
+
+        const selectedParish = dynamicParishes.find(p => p.id === amParish);
+        const matchParish = amParish === "All" ||
+          a.parishId === amParish ||
+          (selectedParish && a.parishName &&
+            a.parishName.trim().toLowerCase() === selectedParish.name.trim().toLowerCase());
+
+        return matchForane && matchParish;
+      });
+
+      if (filteredAnimators.length === 0) {
+        toast.warning("No animators found.");
+        return;
+      }
+
+      await PremiumAnimatorObserverPdfService.generateAnimatorReport(filteredAnimators, dynamicParishes, amForane, amParish);
+      toast.success("Animator report generated");
+    } catch (error) {
+      console.error("Animator report error:", error);
+      toast.error("Failed to generate animator report");
     } finally {
       setGeneratingAm(false);
     }
@@ -786,11 +798,11 @@ export function Reports() {
 
   const handleGenerateObsAssignReport = async () => {
     const filtered = assignments.filter((a) => {
-      const ap = parishes.find((p) => p.id === a.parishId);
       const t = teachers.find((t) => t.id === a.teacherId);
+      const hp = dynamicParishes.find((p) => p.id === t?.parishId);
       return (
-        (obsAssignForane === "All" || ap?.forane === obsAssignForane) &&
-        (obsAssignParish === "All" || a.parishId === obsAssignParish) &&
+        (obsAssignForane === "All" || hp?.forane === obsAssignForane) &&
+        (obsAssignParish === "All" || t?.parishId === obsAssignParish) &&
         (obsAssignYear === "All" || t?.academicYear === obsAssignYear)
       );
     });
@@ -801,17 +813,17 @@ export function Reports() {
     }
     setGeneratingObsAssign(true);
     try {
-      await PdfService.generateObserverAssignmentReport(
+      await PremiumAnimatorObserverPdfService.generateObserverAssignmentReport(
         filtered,
         teachers,
-        parishes,
+        users,
         obsAssignForane,
         obsAssignParish,
         obsAssignYear,
       );
-      toast.success("Report generated");
+      toast.success("Assignment report generated");
     } catch {
-      toast.error("Failed to generate report");
+      toast.error("Failed to generate assignment report");
     } finally {
       setGeneratingObsAssign(false);
     }
@@ -819,7 +831,7 @@ export function Reports() {
 
   const handleGenerateObsDirReport = async () => {
     const filtered = teachers.filter((t) => {
-      const hp = parishes.find((p) => p.id === t.parishId);
+      const hp = dynamicParishes.find((p) => p.id === t.parishId);
       return (
         (obsDirForane === "All" || hp?.forane === obsDirForane) &&
         (obsDirParish === "All" || t.parishId === obsDirParish) &&
@@ -834,33 +846,72 @@ export function Reports() {
 
     setGeneratingObsDir(true);
     try {
-      await PdfService.generateObserverDirectoryReport(
+      await PremiumAnimatorObserverPdfService.generateObserverDirectoryReport(
         filtered,
+        users,
         obsDirForane,
         obsDirParish,
         obsDirYear,
       );
-      toast.success("Report generated");
+      toast.success("Directory report generated");
     } catch {
-      toast.error("Failed to generate report");
+      toast.error("Failed to generate directory report");
     } finally {
       setGeneratingObsDir(false);
+    }
+  };
+
+  const handleGenerateProgramReport = async () => {
+    const filtered = registrations.filter((r) => {
+      const matchProgram = pgSelectedProgramId === "All" || r.programId === pgSelectedProgramId;
+      const schoolInfo = users.find(u => u.uid === r.schoolUserId || u.id === r.schoolUserId);
+      const matchForane = pgForane === "All" ||
+        (schoolInfo?.forane === pgForane) ||
+        (dynamicParishes.find(p => p.id === r.parishUserId)?.forane === pgForane);
+      const matchParish = pgParish === "All" || r.parishUserId === pgParish || r.schoolUserId === pgParish;
+
+      return matchProgram && matchForane && matchParish;
+    });
+
+    if (filtered.length === 0) {
+      toast.warning("No registrations found for the selected filters.");
+      return;
+    }
+
+    setGeneratingPg(true);
+    try {
+      const programName = pgSelectedProgramId === "All" ? "All Programs" :
+        programsList.find(p => p.id === pgSelectedProgramId)?.name || "Program";
+
+      await PremiumProgramPdfService.generateReport(
+        filtered,
+        programName,
+        pgForane,
+        pgParish === "All" ? "All Parishes" : (dynamicParishes.find(p => p.id === pgParish)?.name || "All Parishes"),
+        users
+      );
+      toast.success("Program report generated");
+    } catch (error) {
+      console.error("Program report error:", error);
+      toast.error("Failed to generate program report");
+    } finally {
+      setGeneratingPg(false);
     }
   };
 
   // Generic stub generator (kept for Programs)
   const makeStubGenerator =
     (label: string, setGenerating: (v: boolean) => void, count: number) =>
-    async () => {
-      if (count === 0) {
-        toast.warning("No records match the selected filters.");
-        return;
-      }
-      setGenerating(true);
-      await new Promise((r) => setTimeout(r, 700));
-      toast.success(`${label} generated for ${count} record(s).`);
-      setGenerating(false);
-    };
+      async () => {
+        if (count === 0) {
+          toast.warning("No records match the selected filters.");
+          return;
+        }
+        setGenerating(true);
+        await new Promise((r) => setTimeout(r, 700));
+        toast.success(`${label} generated for ${count} record(s).`);
+        setGenerating(false);
+      };
   if (loading) {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -1091,19 +1142,19 @@ export function Reports() {
                 {(evtForane !== "All" ||
                   evtSchool !== "All" ||
                   evtRole !== "All") && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={() => {
-                      setEvtForane("All");
-                      setEvtSchool("All");
-                      setEvtRole("All");
-                    }}
-                  >
-                    Clear all
-                  </Button>
-                )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => {
+                        setEvtForane("All");
+                        setEvtSchool("All");
+                        setEvtRole("All");
+                      }}
+                    >
+                      Clear all
+                    </Button>
+                  )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Select value={evtForane} onValueChange={setEvtForane}>
@@ -1112,7 +1163,7 @@ export function Reports() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Foranes</SelectItem>
-                    {foraneNames.map((f) => (
+                    {uniqueForanes.map((f) => (
                       <SelectItem key={f} value={f}>
                         {f}
                       </SelectItem>
@@ -1147,36 +1198,36 @@ export function Reports() {
               {(evtForane !== "All" ||
                 evtSchool !== "All" ||
                 evtRole !== "All") && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {evtForane !== "All" && (
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => setEvtForane("All")}
-                    >
-                      Forane: {evtForane} ✕
-                    </Badge>
-                  )}
-                  {evtSchool !== "All" && (
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => setEvtSchool("All")}
-                    >
-                      School: {evtSchool} ✕
-                    </Badge>
-                  )}
-                  {evtRole !== "All" && (
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => setEvtRole("All")}
-                    >
-                      Role: {evtRole} ✕
-                    </Badge>
-                  )}
-                </div>
-              )}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {evtForane !== "All" && (
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() => setEvtForane("All")}
+                      >
+                        Forane: {evtForane} ✕
+                      </Badge>
+                    )}
+                    {evtSchool !== "All" && (
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() => setEvtSchool("All")}
+                      >
+                        School: {evtSchool} ✕
+                      </Badge>
+                    )}
+                    {evtRole !== "All" && (
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() => setEvtRole("All")}
+                      >
+                        Role: {evtRole} ✕
+                      </Badge>
+                    )}
+                  </div>
+                )}
             </div>
 
             <CardContent className="p-6 space-y-8">
@@ -1355,7 +1406,7 @@ export function Reports() {
             </CardHeader>
             <CardContent className="space-y-3">
               <FilterBar
-                foranes={foraneNames}
+                foranes={uniqueForanes}
                 parishes={schoolNames.map((n) => ({ id: n, name: n }))}
                 forane={ssForane}
                 parishId={ssParish}
@@ -1404,7 +1455,7 @@ export function Reports() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All">All Foranes</SelectItem>
-                      {(uniqueForanes.length ? uniqueForanes : foraneNames).map(
+                      {uniqueForanes.map(
                         (f) => (
                           <SelectItem key={f} value={f}>
                             {f}
@@ -1428,8 +1479,8 @@ export function Reports() {
                     <SelectContent>
                       <SelectItem value="All">All Parishes</SelectItem>
                       {(tmClassForane === "All"
-                        ? parishes
-                        : parishes.filter((p) => p.forane === tmClassForane)
+                        ? dynamicParishes
+                        : dynamicParishes.filter((p) => p.forane === tmClassForane)
                       ).map((p) => (
                         <SelectItem key={p.id} value={p.id}>
                           {p.name}
@@ -1542,30 +1593,54 @@ export function Reports() {
               <SectionHeader
                 icon={GraduationCap}
                 title="Programs Report"
-                description="Export program participation data filtered by forane and parish"
+                description="Export program participation data filtered by program, forane and parish"
               />
             </CardHeader>
-            <CardContent className="space-y-3">
-              <FilterBar
-                foranes={foraneNames}
-                parishes={parishes}
-                academicYears={uniqueAcademicYears}
-                forane={pgForane}
-                parishId={pgParish}
-                academicYear={pgYear}
-                onForaneChange={setPgForane}
-                onParishChange={setPgParish}
-                onYearChange={setPgYear}
-                onGenerate={makeStubGenerator(
-                  "Programs report",
-                  setGeneratingPg,
-                  0,
-                )}
-                generating={generatingPg}
-                extraLabel="Export Report"
-              />
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted/40 rounded-lg border space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Select Program</Label>
+                  <Select value={pgSelectedProgramId} onValueChange={setPgSelectedProgramId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Programs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Programs</SelectItem>
+                      {programsList.map((p) => (
+                        <SelectItem key={p.id} value={p.id || ""}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <FilterBar
+                  foranes={uniqueForanes}
+                  parishes={dynamicParishes.map((p) => ({ id: p.id, name: p.name, forane: p.forane }))}
+                  academicYears={uniqueAcademicYears}
+                  forane={pgForane}
+                  parishId={pgParish}
+                  academicYear={pgYear}
+                  onForaneChange={setPgForane}
+                  onParishChange={setPgParish}
+                  onYearChange={setPgYear}
+                  onGenerate={handleGenerateProgramReport}
+                  generating={generatingPg}
+                  extraLabel="Export Program PDF"
+                />
+              </div>
+
               <p className="text-xs text-muted-foreground pl-1">
-                Program data will be included based on selected filters.
+                {registrations.filter((r) => {
+                  const matchProgram = pgSelectedProgramId === "All" || r.programId === pgSelectedProgramId;
+                  const schoolInfo = users.find(u => u.uid === r.schoolUserId || u.id === r.schoolUserId);
+                  const matchForane = pgForane === "All" ||
+                    (schoolInfo?.forane === pgForane) ||
+                    (dynamicParishes.find(p => p.id === r.parishUserId)?.forane === pgForane);
+                  const matchParish = pgParish === "All" || r.parishUserId === pgParish || r.schoolUserId === pgParish;
+                  return matchProgram && matchForane && matchParish;
+                }).length} record(s) matched your filters.
               </p>
             </CardContent>
           </Card>
@@ -1583,8 +1658,8 @@ export function Reports() {
             </CardHeader>
             <CardContent className="space-y-3">
               <FilterBar
-                foranes={foraneNames}
-                parishes={parishes}
+                foranes={uniqueForanes}
+                parishes={dynamicParishes.map((p) => ({ id: p.id, name: p.name, forane: p.forane }))}
                 academicYears={uniqueAcademicYears}
                 forane={amForane}
                 parishId={amParish}
@@ -1618,8 +1693,8 @@ export function Reports() {
             </CardHeader>
             <CardContent className="space-y-3">
               <FilterBar
-                foranes={uniqueForanes.length ? uniqueForanes : foraneNames}
-                parishes={parishes}
+                foranes={uniqueForanes}
+                parishes={dynamicParishes.map((p) => ({ id: p.id, name: p.name, forane: p.forane }))}
                 academicYears={uniqueAcademicYears}
                 forane={obsAssignForane}
                 parishId={obsAssignParish}
@@ -1652,8 +1727,8 @@ export function Reports() {
             </CardHeader>
             <CardContent className="space-y-3">
               <FilterBar
-                foranes={uniqueForanes.length ? uniqueForanes : foraneNames}
-                parishes={parishes}
+                foranes={uniqueForanes}
+                parishes={dynamicParishes.map((p) => ({ id: p.id, name: p.name, forane: p.forane }))}
                 academicYears={uniqueAcademicYears}
                 forane={obsDirForane}
                 parishId={obsDirParish}

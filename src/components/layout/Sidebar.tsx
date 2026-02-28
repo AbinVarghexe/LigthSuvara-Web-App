@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  Info
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -37,7 +38,21 @@ const navigation: NavItem[] = [
     icon: BookUser,
     adminOnly: true,
   },
-  { name: "Programs", href: "/programs", icon: GraduationCap, adminOnly: true },
+  {
+    name: "Programs",
+    href: "/programs",
+    icon: GraduationCap,
+    adminOnly: true,
+    children: [
+      { name: "Manage List", href: "/programs", icon: GraduationCap },
+      {
+        name: "Registrations",
+        href: "/program-registrations",
+        icon: UserCheck,
+      },
+      { name: "Analytics", href: "/program-analytics", icon: BarChart3 },
+    ],
+  },
   {
     name: "Animator Management",
     href: "/animators",
@@ -52,6 +67,12 @@ const navigation: NavItem[] = [
   },
   { name: "Messages", href: "/messages", icon: MessageSquare },
   { name: "Reports", href: "/reports", icon: BarChart3 },
+  {
+    name: "Theme & Programs",
+    href: "/theme",
+    icon: Info,
+    adminOnly: true,
+  },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

@@ -44,9 +44,13 @@ import {
 } from "../../components/ui/tabs";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
+import { getUser } from "../../features/users/services/userService";
 import { useAuth } from "../../context/AuthContext";
 import { ImageWithFallback } from "../../components/figma/ImageWithFallback";
-import { createMalayalamPDF } from "../../lib/pdfFonts";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import { EventPdfService } from "../../features/events/services/eventPdfService";
+
 
 export function Events() {
   const { isAdminUser, currentUser } = useAuth();
@@ -74,6 +78,7 @@ export function Events() {
   const [approvedLoading, setApprovedLoading] = useState(true);
   const [approvedForaneFilter, setApprovedForaneFilter] = useState("All");
   const [approvedSearchTerm, setApprovedSearchTerm] = useState("");
+  const [downloadingEventId, setDownloadingEventId] = useState<string | null>(null);
 
   // Determine active tab from URL
   const activeTab =
@@ -220,58 +225,270 @@ export function Events() {
     return `${year - 1}-${year}`;
   };
 
+  const handleDownloadEvent = async (event: EventData) => {
+    if (!event.id) return;
+    setDownloadingEventId(event.id);
+    try {
+      await EventPdfService.generateEventPdf(event);
+      toast.success("Event report downloaded");
+    } catch (error) {
+      console.error("Error downloading event PDF:", error);
+      toast.error("Failed to generate PDF. Please try again.");
+    } finally {
+      setDownloadingEventId(null);
+    }
+  };
+
   // Generate PDF report for filtered events
   const handleGenerateEventReport = async () => {
     if (filteredEvents.length === 0) {
       toast.warning("No events match the selected filters. Please adjust filters before generating a report.");
       return;
     }
+    toast.loading("Building beautiful events report...", { id: "ev-pdf" });
     try {
-      const doc = await createMalayalamPDF();
-      doc.setFontSize(18);
-      doc.setFont("NotoSansMalayalam", "bold");
-      doc.text("Events Report", 14, 20);
-      doc.setFontSize(11);
-      doc.setFont("NotoSansMalayalam", "normal");
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
-      const filterDesc = [
-        academicYearFilter !== "All" ? `Year: ${academicYearFilter}` : "",
-        categoryFilter !== "All" ? `Category: ${categoryFilter.toUpperCase()}` : "",
-        statusFilter !== "All" ? `Status: ${statusFilter}` : "",
-        forHonorFilter ? "For Honor: Yes" : "",
-        dateFromFilter ? `From: ${dateFromFilter}` : "",
-      ].filter(Boolean).join(" | ");
-      if (filterDesc) doc.text(`Filters: ${filterDesc}`, 14, 38);
+      // Load SUVARA logo as base64
+      let logoHtml = '';
+      try {
+        const resp = await fetch('/assets/app_logo.png');
+        const blob = await resp.blob();
+        const base64 = await new Promise<string>((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result as string);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        });
+        logoHtml = `<img src="${base64}" style="width:70px;height:70px;object-fit:contain;border-radius:8px;" alt="Logo" />`;
+      } catch { logoHtml = ''; }
 
-      let y = 50;
-      const lineHeight = 10;
-      doc.setFont("NotoSansMalayalam", "bold");
-      doc.text("#", 14, y);
-      doc.text("Title", 22, y);
-      doc.text("Date", 110, y);
-      doc.text("Category", 145, y);
-      doc.text("Status", 175, y);
-      y += lineHeight;
-      doc.line(14, y - 5, 200, y - 5);
-      doc.setFont("NotoSansMalayalam", "normal");
-      doc.setFontSize(9);
+      // Helper: convert event date to formatted string
+      const fmtDate = (date: any): string => {
+        if (!date) return 'N/A';
+        const d = date?.seconds ? new Date(date.seconds * 1000) : new Date(date);
+        if (isNaN(d.getTime())) return 'N/A';
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+      };
 
-      filteredEvents.forEach((event, i) => {
-        if (y > 270) { doc.addPage(); y = 20; }
-        const evDate = toDate(event.date);
-        doc.text(`${i + 1}.`, 14, y);
-        doc.text(doc.splitTextToSize(event.title, 85), 22, y);
-        doc.text(evDate ? evDate.toLocaleDateString() : "N/A", 110, y);
-        doc.text((event.category || "").toUpperCase(), 145, y);
-        doc.text(event.status || (event.isPublic ? "approved" : "pending"), 175, y);
-        y += lineHeight;
-      });
+      const statusColor = (s?: string) => {
+        if (s === 'approved') return { bg: '#dcfce7', text: '#166534', label: 'Approved' };
+        if (s === 'rejected') return { bg: '#fee2e2', text: '#991b1b', label: 'Rejected' };
+        return { bg: '#fef9c3', text: '#854d0e', label: 'Pending' };
+      };
 
-      doc.save(`events_report_${new Date().toISOString().split("T")[0]}.pdf`);
-      toast.success(`Report generated for ${filteredEvents.length} event(s).`);
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast.error("Failed to generate PDF report");
+      const categoryColor = (c?: string) => {
+        if (c === 'cml') return { bg: '#ede9fe', text: '#5b21b6', label: 'CML' };
+        return { bg: '#dbeafe', text: '#1e40af', label: 'Suvara' };
+      };
+
+      // Build filter summary
+      const activeFilters = [
+        academicYearFilter !== 'All' ? `Year: ${academicYearFilter}` : '',
+        categoryFilter !== 'All' ? `Category: ${categoryFilter.toUpperCase()}` : '',
+        statusFilter !== 'All' ? `Status: ${statusFilter}` : '',
+        foraneFilter !== 'All' ? `Forane: ${foraneFilter}` : '',
+        forHonorFilter ? 'For Honor: Yes' : '',
+        dateFromFilter ? `From: ${dateFromFilter}` : '',
+      ].filter(Boolean);
+
+      // Pre-fetch actual creator details to avoid "Admin" or "N/A"
+      const eventsWithResolvedCreators = await Promise.all(
+        filteredEvents.map(async (event) => {
+          let resolvedSchool = (event as any).creatorSchoolName || 'N/A';
+          let resolvedForane = (event as any).creatorForane || (event as any).forane || 'N/A';
+
+          if (event.creatorId) {
+            try {
+              const user = await getUser(event.creatorId);
+              if (user) {
+                // Prioritize authentic DB data over stale/cached event metadata
+                resolvedSchool =
+                  (event as any).creatorSchoolName && (event as any).creatorSchoolName !== "Admin"
+                    ? (event as any).creatorSchoolName
+                    : user.schoolName || user.schoolname || user.fullName || resolvedSchool;
+                resolvedForane = user.forane || resolvedForane;
+              }
+            } catch (err) {
+              console.warn("Could not fetch user for consolidated report", err);
+            }
+          }
+
+          return {
+            ...event,
+            resolvedSchool,
+            resolvedForane
+          };
+        })
+      );
+
+      // Build event cards HTML - Text Focused, Premium Layout
+      const eventCardsHtml = eventsWithResolvedCreators.map((event, i) => {
+        const sc = statusColor(event.status || (event.isPublic ? 'approved' : 'pending'));
+        const cc = categoryColor(event.category);
+
+        return `
+          <div style="background:#fff;border-radius:12px;overflow:hidden;margin-bottom:20px;padding:24px;border:1px solid #e5e7eb;page-break-inside:avoid;box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <span style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:#f3f4f6;color:#4b5563;border-radius:50%;font-size:12px;font-weight:700;">${i + 1}</span>
+                <h3 style="margin:0;font-size:18px;font-weight:700;color:#111827;">${event.title}</h3>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <span style="background:${cc.bg};color:${cc.text};padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${cc.label}</span>
+                <span style="background:${sc.bg};color:${sc.text};padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${sc.label}</span>
+              </div>
+            </div>
+            
+            ${event.description ? `<p style="margin:0 0 20px 0;font-size:13px;color:#374151;line-height:1.6;">${event.description}</p>` : ''}
+            
+            <div style="display:grid;grid-template-columns: 1fr 1fr;gap:16px;background:#f9fafb;padding:16px;border-radius:8px;border:1px solid #f3f4f6;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#6b7280;">
+                <span style="font-size:14px;">📍</span>
+                <span><strong>Place:</strong> ${event.place || 'N/A'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#6b7280;">
+                <span style="font-size:14px;">📅</span>
+                <span><strong>Date:</strong> ${fmtDate(event.date)}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#6b7280;">
+                <span style="font-size:14px;">🏫</span>
+                <span><strong>School:</strong> ${(event as any).resolvedSchool || 'N/A'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#6b7280;">
+                <span style="font-size:14px;">🗺️</span>
+                <span><strong>Forane:</strong> ${(event as any).resolvedForane || 'N/A'}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+      const filterBadges = activeFilters.map(f =>
+        `<span style="background:rgba(255,255,255,0.1);padding:4px 14px;border-radius:6px;font-size:11px;border: 1px solid rgba(255,255,255,0.2);font-weight:500;">${f}</span>`
+      ).join('');
+
+      const htmlContent = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: #fff; color: #111827; }
+  .header { background: #1e3a8a; color: white; padding: 48px 50px; }
+  .header-top { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+  .org-title { font-size: 32px; font-weight: 800; letter-spacing: 1px; }
+  .org-sub { font-size: 11px; opacity: 0.8; margin-top: 4px; letter-spacing: 1px; font-weight: 600; }
+  .report-name { font-size: 16px; font-weight: 500; opacity: 0.9; margin-top: 12px; }
+  .filters-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .summary-bar { background: #f8fafc; padding: 24px 50px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 48px; }
+  .stat { text-align: left; }
+  .stat-num { font-size: 28px; font-weight: 800; color: #1e3a8a; }
+  .stat-label { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .content { padding: 40px 50px; }
+  .footer { padding: 32px 50px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; margin-top: 40px; }
+</style>
+</head><body>
+
+<div class="header">
+  <div class="header-top">
+    ${logoHtml}
+    <div>
+      <div class="org-title">SUVARA</div>
+      <div class="org-sub">CENTRE FOR CATECHESIS, EPARCHY OF KANJIRAPALLY</div>
+      <div class="report-name">Events Document Report &mdash; ${today}</div>
+    </div>
+  </div>
+  ${filterBadges ? `<div class="filters-row">${filterBadges}</div>` : ''}
+</div>
+
+<div class="summary-bar">
+  <div class="stat">
+    <div class="stat-num">${filteredEvents.length}</div>
+    <div class="stat-label">Total Volume</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">${filteredEvents.filter(e => e.status === 'approved').length}</div>
+    <div class="stat-label">Approved</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">${filteredEvents.filter(e => !e.status || e.status === 'pending').length}</div>
+    <div class="stat-label">Pending Review</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">${filteredEvents.filter(e => e.category === 'cml').length}</div>
+    <div class="stat-label">CML Events</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">${filteredEvents.filter(e => e.category === 'suvara').length}</div>
+    <div class="stat-label">Suvara Phase</div>
+  </div>
+</div>
+
+<div class="content">
+  ${eventCardsHtml}
+</div>
+
+<div class="footer">
+  This is an official document generated by the SUVARA Administrative Interface <br/> ${today} &bull; ${filteredEvents.length} distinct events logged
+</div>
+
+</body></html>`;
+
+      // Create hidden container div
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '1000px'; // Wider for better horizontal spacing
+      container.style.backgroundColor = '#fff';
+
+      // We only need the inner content for DIV injection
+      const bodyContent = htmlContent.match(/<body>([\s\S]*)<\/body>/)?.[1] || htmlContent;
+      const styleContent = htmlContent.match(/<style>([\s\S]*)<\/style>/)?.[0] || '';
+
+      container.innerHTML = `${styleContent}${bodyContent}`;
+      document.body.appendChild(container);
+
+      try {
+        toast.loading("Rendering high-quality document...", { id: "ev-pdf" });
+        await new Promise(r => setTimeout(r, 800)); // Layout is simpler now, shorter wait
+
+        toast.loading("Generating vector-grade PDF...", { id: "ev-pdf" });
+        const canvas = await html2canvas(container, {
+          scale: 3, // Increased scale for sharp text and fine lines
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 1000,
+          windowWidth: 1000,
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfH = (imgProps.height * pdfW) / imgProps.width;
+        let leftH = pdfH;
+        let pos = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, pos, pdfW, pdfH);
+        leftH -= pageH;
+
+        while (leftH > 0) {
+          pos = leftH - pdfH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, pos, pdfW, pdfH);
+          leftH -= pageH;
+        }
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        pdf.save(`suvara_events_report_${dateStr}.pdf`);
+        toast.success(`Events report generated — ${filteredEvents.length} event(s)`, { id: "ev-pdf" });
+      } finally {
+        document.body.removeChild(container);
+      }
+    } catch (error: any) {
+      console.error("Error generating events PDF:", error);
+      toast.error(`Failed to generate PDF: ${error.message || "Unknown error"}`, { id: "ev-pdf" });
     }
   };
 
@@ -574,6 +791,25 @@ export function Events() {
                         </div>
                       </div>
                     </Link>
+                    <div className="mt-4 flex justify-end px-4 pb-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-blue-600 border-blue-200 hover:bg-blue-50"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDownloadEvent(event);
+                        }}
+                        disabled={downloadingEventId === event.id}
+                      >
+                        {downloadingEventId === event.id ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        Download PDF
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -598,12 +834,12 @@ export function Events() {
                       );
                       const schoolName =
                         event.creatorSchoolName &&
-                        event.creatorSchoolName !== "Admin"
+                          event.creatorSchoolName !== "Admin"
                           ? event.creatorSchoolName
                           : creator?.schoolName ||
-                            creator?.schoolname ||
-                            creator?.fullName ||
-                            "Unknown";
+                          creator?.schoolname ||
+                          creator?.fullName ||
+                          "Unknown";
 
                       return (
                         <TableRow key={event.id}>
@@ -661,12 +897,27 @@ export function Events() {
                             />
                           </TableCell>
                           <TableCell className="text-right">
-                            <Link
-                              to={`/events/${event.id}`}
-                              className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                            >
-                              View
-                            </Link>
+                            <div className="flex justify-end gap-2">
+                              <Link
+                                to={`/events/${event.id}`}
+                                className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                              >
+                                View
+                              </Link>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                                onClick={() => handleDownloadEvent(event)}
+                                disabled={downloadingEventId === event.id}
+                              >
+                                {downloadingEventId === event.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Download className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -808,12 +1059,12 @@ export function Events() {
                           );
                           const schoolName =
                             event.creatorSchoolName &&
-                            event.creatorSchoolName !== "Admin"
+                              event.creatorSchoolName !== "Admin"
                               ? event.creatorSchoolName
                               : creator?.schoolName ||
-                                creator?.schoolname ||
-                                creator?.fullName ||
-                                "Unknown";
+                              creator?.schoolname ||
+                              creator?.fullName ||
+                              "Unknown";
 
                           return (
                             <TableRow key={event.id}>
@@ -869,12 +1120,27 @@ export function Events() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Link
-                                  to={`/events/${event.id}`}
-                                  className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                                >
-                                  View
-                                </Link>
+                                <div className="flex justify-end gap-2">
+                                  <Link
+                                    to={`/events/${event.id}`}
+                                    className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                                  >
+                                    View
+                                  </Link>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                                    onClick={() => handleDownloadEvent(event)}
+                                    disabled={downloadingEventId === event.id}
+                                  >
+                                    {downloadingEventId === event.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -1064,10 +1330,10 @@ export function Events() {
                               <TableCell className="text-gray-600">
                                 {event.date
                                   ? new Date(
-                                      (event.date as any).seconds
-                                        ? (event.date as any).seconds * 1000
-                                        : event.date,
-                                    ).toLocaleDateString()
+                                    (event.date as any).seconds
+                                      ? (event.date as any).seconds * 1000
+                                      : event.date,
+                                  ).toLocaleDateString()
                                   : "N/A"}
                               </TableCell>
                               <TableCell className="text-right">

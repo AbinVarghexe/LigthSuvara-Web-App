@@ -12,7 +12,7 @@ import {
 import { db } from '../../../config/firebase';
 import { getQuestions, QuestionData } from '../../questions/services/questionService';
 import { getUser } from '../../users/services/userService';
-import { getAnimator, AnimatorWithUser } from '../../animators/services/animatorService';
+import { getAnimator } from '../../animators/services/animatorService';
 
 export interface MarksData {
     id?: string;
@@ -26,13 +26,16 @@ export interface MarksData {
     marks: Record<string, number>; // Map of question ID to marks
     remarks?: string;
     questionRemarks?: Record<string, string>; // Map of question ID to remarks
+    textValues?: Record<string, string>; // Map of sub-field ID to text value
     pdfUrl?: string;
+    forane?: string;
     locked: boolean;
     submittedAt?: Timestamp;
 }
 
 export interface MarksWithDetails extends MarksData {
     questions: QuestionData[];
+    labelsMap: Record<string, string>; // Map of [id]_sub_[index] to label text
     totalMarks: number;
     maxTotalMarks: number;
     percentage: number;
@@ -40,55 +43,80 @@ export interface MarksWithDetails extends MarksData {
 
 // Map cache for resolving Sunday School names
 const schoolNameCache = new Map<string, string>();
+const foraneNameCache = new Map<string, string>();
+// Cache by animatorId + unitId to handle multi-assignment animators
 const animatorAssignmentCache = new Map<string, string>();
+const animatorForaneCache = new Map<string, string>();
 
 /** Helper to resolve "unknown" Sunday School names efficiently */
 export const enrichMarksData = async (marksArray: MarksData[]): Promise<MarksData[]> => {
     const enriched = await Promise.all(
         marksArray.map(async (mark) => {
             let sundaySchool = mark.sundaySchool;
-            if (!sundaySchool || sundaySchool.toLowerCase() === 'unknown') {
-                if (schoolNameCache.has(mark.schoolId)) {
-                    sundaySchool = schoolNameCache.get(mark.schoolId)!;
-                } else if (mark.animatorId && animatorAssignmentCache.has(mark.animatorId)) {
-                     sundaySchool = animatorAssignmentCache.get(mark.animatorId)!;
+            let forane = mark.forane;
+            const sId = mark.schoolId;
+
+            const needsSundaySchool = !sundaySchool || sundaySchool.toLowerCase() === 'unknown';
+            const needsForane = !forane;
+
+            if (needsSundaySchool || needsForane) {
+                const animatorCacheKey = mark.animatorId ? `${mark.animatorId}_${mark.unitId}` : null;
+
+                if (sId && schoolNameCache.has(sId)) {
+                    if (needsSundaySchool) sundaySchool = schoolNameCache.get(sId)!;
+                    if (needsForane) forane = foraneNameCache.get(sId) || forane;
+                } else if (animatorCacheKey && animatorAssignmentCache.has(animatorCacheKey)) {
+                    if (needsSundaySchool) sundaySchool = animatorAssignmentCache.get(animatorCacheKey)!;
+                    if (needsForane) forane = animatorForaneCache.get(animatorCacheKey) || forane;
                 } else if (mark.animatorId) {
                     try {
                         const animator = await getAnimator(mark.animatorId);
                         if (animator && animator.assignments && animator.assignments.length > 0) {
-                             // Prefer assignment matching unitId or fallback to the first assignment
-                             const assignment = animator.assignments.find(a => a.unitId === mark.unitId) || animator.assignments[0];
-                             const resolvedName = assignment.schoolname || assignment.parish || 'Unknown';
-                             animatorAssignmentCache.set(mark.animatorId, resolvedName);
-                             sundaySchool = resolvedName;
-                        } else {
-                             // Fallback to getting school user manually as previously implemented
-                             const userDoc = await getUser(mark.schoolId);
-                             const resolvedName = userDoc.schoolName || userDoc.schoolname || userDoc.fullName || 'Unknown';
-                             schoolNameCache.set(mark.schoolId, resolvedName);
-                             sundaySchool = resolvedName;
+                            const assignment = animator.assignments.find(a => a.unitId === mark.unitId) || animator.assignments[0];
+                            const resolvedName = assignment.schoolname || assignment.parish || 'Unknown';
+                            const resolvedForane = assignment.forane || '';
+
+                            if (animatorCacheKey) {
+                                animatorAssignmentCache.set(animatorCacheKey, resolvedName);
+                                animatorForaneCache.set(animatorCacheKey, resolvedForane);
+                            }
+
+                            if (needsSundaySchool) sundaySchool = resolvedName;
+                            if (needsForane) forane = resolvedForane;
+                        } else if (sId) {
+                            const userDoc = await getUser(sId);
+                            const resolvedName = userDoc.schoolName || userDoc.schoolname || userDoc.fullName || 'Unknown';
+                            const resolvedForane = userDoc.forane || '';
+
+                            schoolNameCache.set(sId, resolvedName);
+                            foraneNameCache.set(sId, resolvedForane);
+
+                            if (needsSundaySchool) sundaySchool = resolvedName;
+                            if (needsForane) forane = resolvedForane;
                         }
                     } catch (error) {
-                        console.error(`Failed to resolve school name for animator ${mark.animatorId} / school ${mark.schoolId}`, error);
-                        schoolNameCache.set(mark.schoolId, 'Unknown');
-                        sundaySchool = 'Unknown';
+                        console.error(`Failed to resolve data for animator ${mark.animatorId} / school ${sId}`, error);
                     }
-                } else if (mark.schoolId) {
+                } else if (sId) {
                     try {
-                        const userDoc = await getUser(mark.schoolId);
+                        const userDoc = await getUser(sId);
                         const resolvedName = userDoc.schoolName || userDoc.schoolname || userDoc.fullName || 'Unknown';
-                        schoolNameCache.set(mark.schoolId, resolvedName);
-                        sundaySchool = resolvedName;
+                        const resolvedForane = userDoc.forane || '';
+
+                        schoolNameCache.set(sId, resolvedName);
+                        foraneNameCache.set(sId, resolvedForane);
+
+                        if (needsSundaySchool) sundaySchool = resolvedName;
+                        if (needsForane) forane = resolvedForane;
                     } catch (error) {
-                        console.error(`Failed to resolve school name for ${mark.schoolId}`, error);
-                        schoolNameCache.set(mark.schoolId, 'Unknown');
-                        sundaySchool = 'Unknown';
+                        console.error(`Failed to resolve school data for ${sId}`, error);
                     }
                 }
             }
             return {
                 ...mark,
-                sundaySchool
+                sundaySchool,
+                forane
             };
         })
     );
@@ -108,7 +136,14 @@ export const getMarks = async (year?: string): Promise<MarksData[]> => {
         q = query(collection(db, 'marks'), orderBy('submittedAt', 'desc'));
     }
     const snapshot = await getDocs(q);
-    const rawMarks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MarksData[];
+    const rawMarks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            schoolId: data.schoolUserId || data.schoolId || ''
+        } as MarksData;
+    });
     return await enrichMarksData(rawMarks);
 };
 
@@ -120,7 +155,14 @@ export const getMarksByAnimator = async (animatorId: string): Promise<MarksData[
         orderBy('submittedAt', 'desc')
     );
     const snapshot = await getDocs(q);
-    const rawMarks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MarksData[];
+    const rawMarks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            schoolId: data.schoolUserId || data.schoolId || ''
+        } as MarksData;
+    });
     return await enrichMarksData(rawMarks);
 };
 
@@ -132,7 +174,14 @@ export const getMarksBySchool = async (schoolId: string): Promise<MarksData[]> =
         orderBy('submittedAt', 'desc')
     );
     const snapshot = await getDocs(q);
-    const rawMarks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MarksData[];
+    const rawMarks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            schoolId: data.schoolUserId || data.schoolId || ''
+        } as MarksData;
+    });
     return await enrichMarksData(rawMarks);
 };
 
@@ -140,30 +189,49 @@ export const getMarksBySchool = async (schoolId: string): Promise<MarksData[]> =
 export const getMarksWithDetails = async (marksId: string): Promise<MarksWithDetails | null> => {
     const docRef = doc(db, 'marks', marksId);
     const docSnap = await getDoc(docRef);
-    
+
     if (!docSnap.exists()) return null;
-    
-    const marksData = { id: docSnap.id, ...docSnap.data() } as MarksData;
+
+    const data = docSnap.data();
+    const marksData = {
+        id: docSnap.id,
+        ...data,
+        schoolId: data.schoolUserId || data.schoolId || ''
+    } as MarksData;
     const questions = await getQuestions();
-    
-    // Calculate totals
+
+    const labelsMap: Record<string, string> = {};
     let totalMarks = 0;
     let maxTotalMarks = 0;
-    
+
     questions.forEach(q => {
-        if (q.id && marksData.marks[q.id] !== undefined) {
-            totalMarks += marksData.marks[q.id];
+        const subFields = q.subFields || [];
+        if (subFields.length > 0) {
+            subFields.forEach((sf, i) => {
+                const subKey = `${q.id}_sub_${i}`;
+                labelsMap[subKey] = sf.text;
+                if (marksData.marks[subKey] !== undefined) {
+                    totalMarks += (marksData.marks[subKey] || 0);
+                }
+                maxTotalMarks += (sf.maxMark || 0);
+            });
+        } else {
+            if (q.id && marksData.marks[q.id] !== undefined) {
+                totalMarks += (marksData.marks[q.id] || 0);
+            }
+            maxTotalMarks += (q.maxMark || 0);
         }
-        maxTotalMarks += q.maxMarks;
     });
-    
+
     const percentage = maxTotalMarks > 0 ? (totalMarks / maxTotalMarks) * 100 : 0;
-    
+
     const enrichedMarksData = (await enrichMarksData([marksData]))[0];
 
     return {
         ...enrichedMarksData,
         questions,
+        labelsMap,
+        textValues: marksData.textValues || {},
         totalMarks,
         maxTotalMarks,
         percentage
@@ -181,18 +249,39 @@ export const getAvailableYears = async (): Promise<string[]> => {
 export const getMarksStats = async (year?: string) => {
     const marks = await getMarks(year);
     const questions = await getQuestions();
-    const maxTotalMarks = questions.reduce((sum, q) => sum + q.maxMarks, 0);
-    
+
+    let maxTotalMarks = 0;
+    questions.forEach(q => {
+        const subFields = q.subFields || [];
+        if (subFields.length > 0) {
+            subFields.forEach(sf => {
+                maxTotalMarks += (sf.maxMark || 0);
+            });
+        } else {
+            maxTotalMarks += (q.maxMark || 0);
+        }
+    });
+
     let totalMarksSum = 0;
     marks.forEach(m => {
-        Object.values(m.marks).forEach(mark => {
-            totalMarksSum += mark;
+        questions.forEach(q => {
+            const subFields = q.subFields || [];
+            if (subFields.length > 0) {
+                subFields.forEach((_, i) => {
+                    const subKey = `${q.id}_sub_${i}`;
+                    if (m.marks[subKey] !== undefined) {
+                        totalMarksSum += m.marks[subKey];
+                    }
+                });
+            } else if (q.id && m.marks[q.id] !== undefined) {
+                totalMarksSum += m.marks[q.id];
+            }
         });
     });
-    
+
     const averageTotal = marks.length > 0 ? totalMarksSum / marks.length : 0;
     const averagePercentage = maxTotalMarks > 0 ? (averageTotal / maxTotalMarks) * 100 : 0;
-    
+
     return {
         totalSubmissions: marks.length,
         lockedSubmissions: marks.filter(m => m.locked).length,
@@ -208,8 +297,8 @@ export const searchMarks = async (searchTerm: string, year?: string): Promise<Ma
     const marks = await getMarks(year);
     // Since getMarks calls enrichMarksData, marks array already has resolved values.
     const lowerSearch = searchTerm.toLowerCase();
-    
-    return marks.filter(m => 
+
+    return marks.filter(m =>
         (m.parish && m.parish.toLowerCase().includes(lowerSearch)) ||
         (m.sundaySchool && m.sundaySchool.toLowerCase().includes(lowerSearch)) ||
         (m.animatorName && m.animatorName.toLowerCase().includes(lowerSearch))
@@ -220,28 +309,55 @@ export const searchMarks = async (searchTerm: string, year?: string): Promise<Ma
 export const getQuestionWiseStats = async (year?: string) => {
     const marks = await getMarks(year);
     const questions = await getQuestions();
-    
+
     const questionStats = questions.map(q => {
         if (!q.id) return null;
-        
-        const marksForQuestion = marks
-            .filter(m => m.marks[q.id!] !== undefined)
-            .map(m => m.marks[q.id!]);
-        
-        const average = marksForQuestion.length > 0
-            ? marksForQuestion.reduce((sum, m) => sum + m, 0) / marksForQuestion.length
-            : 0;
-        
+
+        let subFieldCount = (q.subFields || []).length;
+        let average = 0;
+        let submissions = 0;
+        let qMaxMark = q.maxMark || 0;
+
+        if (subFieldCount > 0) {
+            let totalSubSum = 0;
+            let totalSubMax = 0;
+
+            q.subFields!.forEach((sf, i) => {
+                const subKey = `${q.id}_sub_${i}`;
+                const marksForSub = marks
+                    .filter(m => m.marks[subKey] !== undefined)
+                    .map(m => m.marks[subKey]);
+
+                if (marksForSub.length > 0) {
+                    totalSubSum += marksForSub.reduce((sum, m) => sum + m, 0) / marksForSub.length;
+                    submissions = Math.max(submissions, marksForSub.length);
+                }
+                totalSubMax += (sf.maxMark || 0);
+            });
+
+            average = totalSubSum;
+            qMaxMark = totalSubMax;
+        } else {
+            const marksForQuestion = marks
+                .filter(m => m.marks[q.id!] !== undefined)
+                .map(m => m.marks[q.id!]);
+
+            average = marksForQuestion.length > 0
+                ? marksForQuestion.reduce((sum, m) => sum + m, 0) / marksForQuestion.length
+                : 0;
+            submissions = marksForQuestion.length;
+        }
+
         return {
             questionId: q.id,
             questionText: q.text,
-            maxMarks: q.maxMarks,
+            maxMarks: qMaxMark,
             averageMarks: average,
-            submissions: marksForQuestion.length,
-            percentage: q.maxMarks > 0 ? (average / q.maxMarks) * 100 : 0
+            submissions: submissions,
+            percentage: qMaxMark > 0 ? (average / qMaxMark) * 100 : 0
         };
     }).filter(Boolean);
-    
+
     return questionStats;
 };
 
@@ -264,14 +380,14 @@ export const updateMarksRemark = async (marksId: string, remark: string): Promis
 // Update question-specific remark (admin only)
 export const updateQuestionRemark = async (marksId: string, questionId: string, remark: string): Promise<void> => {
     const docRef = doc(db, 'marks', marksId);
-    
+
     // First get the current doc to update the nested object
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) return;
-    
+
     const currentData = docSnap.data();
     const currentQuestionRemarks = currentData.questionRemarks || {};
-    
+
     await updateDoc(docRef, {
         questionRemarks: {
             ...currentQuestionRemarks,
@@ -283,18 +399,35 @@ export const updateQuestionRemark = async (marksId: string, questionId: string, 
 // Update question mark (admin only)
 export const updateQuestionMark = async (marksId: string, questionId: string, newMark: number): Promise<void> => {
     const docRef = doc(db, 'marks', marksId);
-    
+
     // First get the current doc to update the nested object
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) return;
-    
+
     const currentData = docSnap.data();
     const currentMarks = currentData.marks || {};
-    
+
     await updateDoc(docRef, {
         marks: {
             ...currentMarks,
             [questionId]: newMark
+        }
+    });
+};
+
+// Update question-specific text value (sub-fields)
+export const updateQuestionTextValue = async (marksId: string, subKey: string, text: string): Promise<void> => {
+    const docRef = doc(db, 'marks', marksId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return;
+
+    const currentData = docSnap.data();
+    const currentTextValues = currentData.textValues || {};
+
+    await updateDoc(docRef, {
+        textValues: {
+            ...currentTextValues,
+            [subKey]: text
         }
     });
 };

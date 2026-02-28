@@ -14,12 +14,24 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 
+export interface SubField {
+    text: string;
+    maxMark: number | null;
+    isReadOnly?: boolean;
+    adminText?: string;
+    adminMark?: number;
+}
+
 export interface QuestionData {
     id?: string;
     text: string;
-    maxMarks: number;
+    maxMark: number | null;
     order: number;
-    mandatory?: boolean;
+    isMandatory?: boolean;
+    isReadOnly?: boolean;
+    part?: string;
+    partTitle?: string;
+    subFields?: SubField[];
     createdAt?: Timestamp;
 }
 
@@ -68,7 +80,7 @@ export const reorderQuestions = async (questions: QuestionData[]) => {
     questions.forEach((question, index) => {
         if (question.id) {
             const docRef = doc(db, 'questions', question.id);
-            batch.update(docRef, { order: index + 1 });
+            batch.update(docRef, { order: index + 1, part: question.part || 'I' });
         }
     });
     return await batch.commit();
@@ -76,10 +88,10 @@ export const reorderQuestions = async (questions: QuestionData[]) => {
 
 export const getTotalMaxMarks = async (): Promise<number> => {
     const questions = await getQuestions();
-    return questions.reduce((total, q) => total + q.maxMarks, 0);
+    return questions.reduce((total, q) => total + (q.maxMark || 0), 0);
 };
 
 export const toggleMandatory = async (questionId: string, currentValue: boolean) => {
     const docRef = doc(db, 'questions', questionId);
-    return await updateDoc(docRef, { mandatory: !currentValue });
+    return await updateDoc(docRef, { isMandatory: !currentValue });
 };

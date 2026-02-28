@@ -12,6 +12,7 @@ import {
   XCircle,
   Maximize2,
   X,
+  Download,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -34,6 +35,7 @@ import {
   updateEventStatus,
   EventData,
 } from "../../features/events/services/eventService";
+import { EventPdfService } from "../../features/events/services/eventPdfService";
 import { getUser } from "../../features/users/services/userService";
 import { useAuth } from "../../context/AuthContext";
 
@@ -47,6 +49,7 @@ export function EventDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -144,6 +147,20 @@ export function EventDetail() {
     } finally { setActionLoading(false); }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!event) return;
+    setDownloadingPdf(true);
+    try {
+      await EventPdfService.generateEventPdf(event);
+      toast.success("Event report downloaded");
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      toast.error("Failed to generate PDF");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -185,6 +202,23 @@ export function EventDetail() {
               )}
             </>
           )}
+
+          {/* Universal Download Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf}
+            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+          >
+            {downloadingPdf ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-1" />
+            )}
+            Download PDF
+          </Button>
+
           {canEdit && (
             <>
               <Link to={`/events/${event.id}/edit`}>

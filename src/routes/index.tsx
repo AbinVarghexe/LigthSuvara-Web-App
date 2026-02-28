@@ -11,6 +11,8 @@ import { Notifications } from "../pages/notifications/Notifications";
 import { Reports } from "../pages/reports/Reports";
 import { Settings } from "../pages/settings/Settings";
 import { Programs } from "../pages/programs/Programs";
+import { ProgramRegistrations } from "../pages/programs/ProgramRegistrations";
+import { ProgramAnalytics } from "../pages/programs/ProgramAnalytics";
 import { Questions } from "../pages/questions/Questions";
 import { Animators } from "../pages/animators/Animators";
 import { Marks } from "../pages/marks/Marks";
@@ -21,6 +23,7 @@ import { PrivacyPolicy } from "../pages/legal/PrivacyPolicy";
 import { LegalLayout } from "../components/layout/LegalLayout";
 import TeacherManagementPage from "../pages/teachers/TeacherManagementPage";
 import { Observers } from "../pages/observers/Observers";
+import { ThemePrograms } from "../pages/theme/ThemePrograms";
 
 export const router = createBrowserRouter([
   {
@@ -59,6 +62,8 @@ export const router = createBrowserRouter([
           { path: "users", Component: Users },
           { path: "users/:id", Component: UserDetail },
           { path: "programs", Component: Programs },
+          { path: "program-registrations", Component: ProgramRegistrations },
+          { path: "program-analytics", Component: ProgramAnalytics },
           { path: "questions", Component: Questions },
           { path: "animators", Component: Animators },
           { path: "marks", Component: Marks },
@@ -68,6 +73,7 @@ export const router = createBrowserRouter([
           { path: "settings", Component: Settings },
           { path: "teachers", Component: TeacherManagementPage },
           { path: "observers", Component: Observers },
+          { path: "theme", Component: ThemePrograms },
         ],
       },
     ],

@@ -1,0 +1,204 @@
+import React from 'react';
+import { ProgramRegistration } from '../../../features/programs/services/programService';
+import { UserData } from '../../../features/users/services/userService';
+
+interface ProgramPdfTemplateProps {
+    registrations: ProgramRegistration[];
+    programName: string;
+    forane: string;
+    parish: string;
+    users: UserData[];
+}
+
+export const ProgramPdfTemplate = ({ registrations, programName, forane, parish, users }: ProgramPdfTemplateProps) => {
+    const todayDate = new Date().toISOString().split('T')[0];
+
+    // Calculate Summary Stats
+    const totalStudents = registrations.reduce((acc, reg) => acc + (reg.studentCount || (reg.studentName ? 1 : 0)), 0);
+    const uniqueSchools = new Set(registrations.map(reg => reg.schoolUserId)).size;
+
+    // Geographic Grouping Logic with Totals
+    const groupedData = registrations.reduce((acc: any, reg) => {
+        const schoolInfo = users.find(u => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
+        const regForane = schoolInfo?.forane || 'Unknown Forane';
+        const regParish = reg.schoolName || 'Unknown Parish';
+        const count = reg.studentCount || (reg.studentName ? 1 : 0);
+
+        if (!acc[regForane]) {
+            acc[regForane] = { parishes: {}, total: 0 };
+        }
+        if (!acc[regForane].parishes[regParish]) {
+            acc[regForane].parishes[regParish] = { regs: [], total: 0 };
+        }
+
+        acc[regForane].parishes[regParish].regs.push(reg);
+        acc[regForane].parishes[regParish].total += count;
+        acc[regForane].total += count;
+
+        return acc;
+    }, {});
+
+    const sortedForanes = Object.keys(groupedData).sort();
+
+    return (
+        <div id="program-pdf-container" style={{
+            padding: '22px 30px',
+            backgroundColor: '#ffffff',
+            width: '600px',
+            minHeight: '825px',
+            color: '#1a1a1a',
+            fontFamily: "'Inter', Arial, sans-serif",
+            boxSizing: 'border-box',
+            position: 'relative',
+        }}>
+            <style>
+                {`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Malayalam:wght@400;700&display=swap');`}
+            </style>
+
+            {/* Premium Header Decoration */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #2563eb, #3b82f6)' }}></div>
+
+            {/* Header Content */}
+            <div style={{ marginBottom: '22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <div style={{ fontSize: '8px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '3px' }}>
+                        Suvara Administrative Report
+                    </div>
+                    <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0', letterSpacing: '-0.3px' }}>
+                        {programName} <span style={{ color: '#6b7280', fontWeight: 400 }}>| Summary</span>
+                    </h1>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '9px', color: '#4b5563', fontWeight: 500 }}>
+                        <span><strong>Forane:</strong> {forane || 'All'}</span>
+                        <span><strong>Parish:</strong> {parish || 'All'}</span>
+                        <span><strong>Date:</strong> {todayDate}</span>
+                    </div>
+                </div>
+                <div>
+                    <div style={{ background: '#f8fafc', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '70px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Total Students</div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#2563eb' }}>{totalStudents}</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '18px' }}>
+                <div style={{ padding: '11px', background: '#f1f5f9', borderRadius: '9px', display: 'flex', alignItems: 'center', gap: '9px' }}>
+                    <div style={{ width: '27px', height: '27px', borderRadius: '6px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <span style={{ fontSize: '14px' }}>🏫</span>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Registered Schools</div>
+                        <div style={{ fontSize: '12px', fontWeight: 800 }}>{uniqueSchools}</div>
+                    </div>
+                </div>
+
+                <div style={{ padding: '11px', background: '#eff6ff', borderRadius: '9px', display: 'flex', alignItems: 'center', gap: '9px' }}>
+                    <div style={{ width: '27px', height: '27px', borderRadius: '6px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <span style={{ fontSize: '14px' }}>👥</span>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '7px', color: '#3b82f6', fontWeight: 700, textTransform: 'uppercase' }}>Avg. Per School</div>
+                        <div style={{ fontSize: '12px', fontWeight: 800 }}>{uniqueSchools > 0 ? (totalStudents / uniqueSchools).toFixed(1) : 0}</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Grouped Data Display */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {sortedForanes.length === 0 ? (
+                    <div style={{ padding: '22px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: '9px' }}>
+                        No registrations found matching the specified filters.
+                    </div>
+                ) : (
+                    sortedForanes.map((fName) => (
+                        <div key={fName} style={{ marginBottom: '8px' }}>
+                            <div style={{
+                                padding: '4px 11px',
+                                background: '#1e293b',
+                                color: '#fff',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '9px',
+                                width: '100%',
+                                boxSizing: 'border-box'
+                            }}>
+                                <span style={{ fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                    Forane: {fName}
+                                </span>
+                                <span style={{ fontSize: '8px', fontWeight: 500, opacity: 0.9 }}>
+                                    Total: {groupedData[fName].total} Student(s)
+                                </span>
+                            </div>
+
+                            {Object.keys(groupedData[fName].parishes).sort().map((pName) => (
+                                <div key={pName} style={{ marginBottom: '11px', border: '1px solid #f1f5f9', borderRadius: '8px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        padding: '7px 11px',
+                                        background: '#f8fafc',
+                                        borderBottom: '1px solid #f1f5f9',
+                                        color: '#111827',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <span style={{ fontWeight: 800, fontSize: '10px' }}>{pName}</span>
+                                        <span style={{ fontSize: '8px', fontWeight: 600, color: '#3b82f6' }}>
+                                            Count: {groupedData[fName].parishes[pName].total}
+                                        </span>
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '8.5px', fontFamily: "'Noto Sans Malayalam', 'Inter', sans-serif" }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                                                <th style={{ padding: '6px 11px', width: '22px' }}>#</th>
+                                                <th style={{ padding: '6px 11px' }}>Student Name</th>
+                                                <th style={{ padding: '6px 11px', textAlign: 'center', width: '45px' }}>Entry</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {groupedData[fName].parishes[pName].regs.map((reg: any, i: number) => (
+                                                <tr key={reg.id || i} style={{ borderBottom: i === groupedData[fName].parishes[pName].regs.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '6px 11px', color: '#94a3b8' }}>{i + 1}</td>
+                                                    <td style={{ padding: '6px 11px', color: '#4b5563' }}>
+                                                        {reg.isCountOnly ? (
+                                                            <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: '7.5px', background: '#eff6ff', padding: '1px 4px', borderRadius: '2px' }}>
+                                                                Count only
+                                                            </span>
+                                                        ) : (
+                                                            reg.studentName || 'N/A'
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '6px 11px', color: '#111827', fontWeight: 700, textAlign: 'center' }}>
+                                                        {reg.isCountOnly ? reg.studentCount : ''}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))}
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Signature Area */}
+            <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ textAlign: 'center', width: '135px' }}>
+                    <div style={{ height: '30px', borderBottom: '1px solid #e2e8f0', marginBottom: '4px' }}></div>
+                    <div style={{ fontSize: '8px', fontWeight: 700, color: '#1a1a1a', textTransform: 'uppercase' }}>Administrator</div>
+                    <div style={{ fontSize: '7px', color: '#64748b' }}>Eparchy of Kanjirapally</div>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ position: 'absolute', bottom: '22px', left: '30px', right: '30px', borderTop: '1px solid #f1f5f9', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '7.5px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                <div>SUVARA NEXTGEN • PROGRAM REGISTRY</div>
+                <div>GENERATED: {new Date().toLocaleString()}</div>
+            </div>
+        </div>
+    );
+
+};

@@ -212,6 +212,7 @@ export function TeacherAssignment({
           <TeacherList
             teachers={dirFilteredTeachers}
             showAssignAction={false}
+            showStatus={false}
             onDeleteClick={handleDelete}
             onEditClick={onEditTeacher}
           />

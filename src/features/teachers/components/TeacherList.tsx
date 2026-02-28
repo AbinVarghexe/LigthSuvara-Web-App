@@ -23,6 +23,7 @@ interface TeacherListProps {
   assigningId?: string | null;
   onDeleteClick?: (teacher: Teacher) => void;
   onEditClick?: (teacher: Teacher) => void;
+  showStatus?: boolean;
 }
 
 export function TeacherList({
@@ -32,6 +33,7 @@ export function TeacherList({
   assigningId = null,
   onDeleteClick,
   onEditClick,
+  showStatus = true,
 }: TeacherListProps) {
   if (teachers.length === 0) {
     return (
@@ -50,7 +52,7 @@ export function TeacherList({
       {teachers.map((teacher) => (
         <Card
           key={teacher.id}
-          className={`hover:shadow-md transition-shadow ${teacher.assigned ? "bg-muted/40 opacity-50 grayscale" : "bg-white"}`}
+          className={`hover:shadow-md transition-shadow ${showStatus && teacher.assigned ? "bg-muted/40 opacity-50 grayscale" : "bg-white"}`}
         >
           <CardContent className="p-6">
             <div className="flex justify-between items-start mb-4">
@@ -74,17 +76,21 @@ export function TeacherList({
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                {teacher.assigned ? (
-                  <Badge variant="secondary" className="gap-1">
-                    <CheckCircle className="w-3 h-3" /> Assigned
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant="outline"
-                    className="bg-green-50 text-green-700 border-green-200"
-                  >
-                    Available
-                  </Badge>
+                {showStatus && (
+                  <>
+                    {teacher.assigned ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <CheckCircle className="w-3 h-3" /> Assigned
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-green-50 text-green-700 border-green-200"
+                      >
+                        Available
+                      </Badge>
+                    )}
+                  </>
                 )}
                 <div className="flex gap-1">
                   {onEditClick && (

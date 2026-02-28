@@ -35,6 +35,8 @@ export interface ProgramRegistration {
     schoolName: string;
     parishUserId: string;
     status: 'pending_parish' | 'approved_parish' | 'locked' | 'rejected';
+    isCountOnly?: boolean;
+    studentCount?: number;
     submittedAt?: Timestamp;
     approvedAt?: Timestamp;
 }
@@ -100,7 +102,7 @@ export const getProgramRegistrations = async (programId?: string) => {
     }
     const snapshot = await getDocs(q);
     const registrations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ProgramRegistration[];
-    
+
     // Sort in memory since we removed the composite index requirement
     return registrations.sort((a, b) => {
         const timeA = a.submittedAt?.toMillis() || 0;
@@ -158,5 +160,20 @@ export const subscribeToPrograms = (
         callback(programs);
     }, (error) => {
         console.error('Error subscribing to programs:', error);
+    });
+};
+
+export const subscribeToAllRegistrations = (
+    callback: (registrations: ProgramRegistration[]) => void
+) => {
+    const q = query(
+        collection(db, 'program_registrations'),
+        orderBy('submittedAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+        const registrations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ProgramRegistration));
+        callback(registrations);
+    }, (error) => {
+        console.error('Error subscribing to all registrations:', error);
     });
 };

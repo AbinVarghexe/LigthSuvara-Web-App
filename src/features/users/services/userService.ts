@@ -7,10 +7,9 @@ import {
     deleteDoc,
     query,
     where,
-    writeBatch
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { updateProfile, User } from 'firebase/auth';
+import { updateProfile } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, storage, auth, functions } from '../../../config/firebase';
 
@@ -22,6 +21,7 @@ export interface UserData {
     schoolname?: string;
     schoolName?: string;
     fullName?: string;
+    name?: string;
     phoneNumber?: string;
     profileImageUrl?: string;
     forane?: string;
@@ -57,6 +57,15 @@ export const getEventsByUser = async (userId: string) => {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const getParishes = async (): Promise<UserData[]> => {
+    const q = query(
+        collection(db, 'users'),
+        where('role', '==', 'parish')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserData));
 };
 
 export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {

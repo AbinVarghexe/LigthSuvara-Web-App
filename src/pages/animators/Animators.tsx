@@ -68,8 +68,9 @@ import {
   AnimatorAssignment,
   updateAnimator,
 } from "../../features/animators/services/animatorService";
-import { Questions } from "../questions/Questions";
 import { Marks } from "../marks/Marks";
+import { Questions } from "../questions/Questions";
+import { getParishes, UserData } from "../../features/users/services/userService";
 import {
   Tabs,
   TabsContent,
@@ -88,6 +89,7 @@ interface SchoolData {
 export function AnimatorsList() {
   const [animators, setAnimators] = useState<AnimatorWithUser[]>([]);
   const [unassignedSchools, setUnassignedSchools] = useState<SchoolData[]>([]);
+  const [parishes, setParishes] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -106,18 +108,20 @@ export function AnimatorsList() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    fullName: "",
+    name: "",
     phoneNumber: "",
     address: "",
-    parish: "",
+    parishId: "",
+    parishName: "",
   });
 
   // Form state for editing animator
   const [editFormData, setEditFormData] = useState<Partial<AnimatorWithUser>>({
-    fullName: "",
+    name: "",
     phoneNumber: "",
     address: "",
-    parish: "",
+    parishId: "",
+    parishName: "",
   });
 
   // Assignment form state
@@ -126,14 +130,16 @@ export function AnimatorsList() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [animatorsData, schoolsData, statsData] = await Promise.all([
+      const [animatorsData, schoolsData, statsData, parishesData] = await Promise.all([
         getAnimators(),
         getUnassignedSchools(),
         getAnimatorStats(),
+        getParishes(),
       ]);
       setAnimators(animatorsData);
       setUnassignedSchools(schoolsData as SchoolData[]);
       setStats(statsData);
+      setParishes(parishesData);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load animators");
@@ -147,7 +153,7 @@ export function AnimatorsList() {
   }, []);
 
   const handleCreateAnimator = async () => {
-    if (!formData.email || !formData.password || !formData.fullName) {
+    if (!formData.email || !formData.password || !formData.name) {
       toast.error("Please fill all required fields");
       return;
     }
@@ -161,9 +167,10 @@ export function AnimatorsList() {
       await createAnimator(
         formData.email,
         formData.password,
-        formData.fullName,
+        formData.name,
+        formData.parishId,
+        formData.parishName,
         formData.phoneNumber,
-        formData.parish,
         formData.address,
       );
       toast.success("Animator created successfully");
@@ -171,10 +178,11 @@ export function AnimatorsList() {
       setFormData({
         email: "",
         password: "",
-        fullName: "",
+        name: "",
         phoneNumber: "",
         address: "",
-        parish: "",
+        parishId: "",
+        parishName: "",
       });
       fetchData();
     } catch (error: any) {
@@ -186,18 +194,19 @@ export function AnimatorsList() {
   const openEditDialog = (animator: AnimatorWithUser) => {
     setSelectedAnimator(animator);
     setEditFormData({
-      fullName: animator.fullName,
+      name: animator.name,
       phoneNumber: animator.phoneNumber || "",
       address: animator.address || "",
-      parish: animator.parish || "",
+      parishId: animator.parishId || "",
+      parishName: animator.parishName || animator.parish || "",
     });
     setIsEditDialogOpen(true);
   };
 
   const handleUpdateAnimator = async () => {
     if (!selectedAnimator) return;
-    if (!editFormData.fullName) {
-      toast.error("Full Name cannot be empty");
+    if (!editFormData.name) {
+      toast.error("Name cannot be empty");
       return;
     }
 
@@ -222,6 +231,20 @@ export function AnimatorsList() {
     const school = unassignedSchools.find((s) => s.id === selectedSchoolId);
     if (!school) {
       toast.error("School not found");
+      return;
+    }
+
+    // Validation: Animator cannot be assigned to their own home parish
+    const homeParish = selectedAnimator.parishName?.toLowerCase().trim() || "";
+    const schoolName = (school.schoolname || school.schoolName || "").toLowerCase().trim();
+    const schoolParish = (school.parish || "").toLowerCase().trim();
+
+    if (homeParish && (
+      schoolName.includes(homeParish) ||
+      homeParish.includes(schoolName) ||
+      (schoolParish && homeParish.includes(schoolParish))
+    )) {
+      toast.error(`Animators cannot be assigned to their home parish (${selectedAnimator.parishName})`);
       return;
     }
 
@@ -279,7 +302,7 @@ export function AnimatorsList() {
 
   const filteredAnimators = animators.filter(
     (animator) =>
-      animator.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      animator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       animator.email.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
@@ -313,14 +336,14 @@ export function AnimatorsList() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name *</Label>
+                <Label htmlFor="name">Name *</Label>
                 <Input
-                  id="fullName"
-                  value={formData.fullName}
+                  id="name"
+                  value={formData.name}
                   onChange={(e) =>
-                    setFormData({ ...formData, fullName: e.target.value })
+                    setFormData({ ...formData, name: e.target.value })
                   }
-                  placeholder="Enter full name"
+                  placeholder="Enter name"
                 />
               </div>
               <div className="space-y-2">
@@ -370,15 +393,29 @@ export function AnimatorsList() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="parish">Parish</Label>
-                <Input
-                  id="parish"
-                  value={formData.parish}
-                  onChange={(e) =>
-                    setFormData({ ...formData, parish: e.target.value })
-                  }
-                  placeholder="Enter parish"
-                />
+                <Label htmlFor="parish">Parish *</Label>
+                <Select
+                  value={formData.parishId}
+                  onValueChange={(value) => {
+                    const selectedParish = parishes.find((p) => p.id === value);
+                    setFormData({
+                      ...formData,
+                      parishId: value,
+                      parishName: selectedParish ? (selectedParish.name || selectedParish.fullName || "") : "",
+                    });
+                  }}
+                >
+                  <SelectTrigger id="parish">
+                    <SelectValue placeholder="Select parish" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parishes.map((parish) => (
+                      <SelectItem key={parish.id} value={parish.id}>
+                        {parish.name || parish.fullName || parish.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
@@ -423,7 +460,7 @@ export function AnimatorsList() {
             <div className="text-2xl font-bold text-blue-600">
               {stats.fullyAssigned}
             </div>
-            <p className="text-sm text-gray-500">Fully Assigned (2/2)</p>
+            <p className="text-sm text-gray-500">Fully Assigned (7/7)</p>
           </CardContent>
         </Card>
       </div>
@@ -462,31 +499,31 @@ export function AnimatorsList() {
                     <Avatar className="h-12 w-12">
                       <AvatarImage src={animator.profileImageUrl} />
                       <AvatarFallback>
-                        {animator.fullName.charAt(0).toUpperCase()}
+                        {animator.name.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <CardTitle className="text-lg">
-                        {animator.fullName}
+                        {animator.name}
                       </CardTitle>
                       <p className="text-sm text-gray-500">{animator.email}</p>
-                      {animator.parish && (
+                      {(animator.parishName || animator.parish) && (
                         <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-0.5">
-                          {animator.parish}
+                          {animator.parishName || animator.parish}
                         </p>
                       )}
                     </div>
                   </div>
                   <Badge
                     variant={
-                      animator.assignments.length === 2
+                      animator.assignments.length === 7
                         ? "default"
                         : animator.assignments.length === 0
                           ? "secondary"
                           : "outline"
                     }
                   >
-                    {animator.assignments.length}/2
+                    {animator.assignments.length}/7
                   </Badge>
                 </div>
               </CardHeader>
@@ -531,7 +568,7 @@ export function AnimatorsList() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {animator.assignments.length < 2 && (
+                  {animator.assignments.length < 7 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -560,7 +597,7 @@ export function AnimatorsList() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Animator</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to delete {animator.fullName}?
+                          Are you sure you want to delete {animator.name}?
                           This will also remove all their assignments.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
@@ -587,10 +624,10 @@ export function AnimatorsList() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Assign School to {selectedAnimator?.fullName}
+              Assign School to {selectedAnimator?.name}
             </DialogTitle>
             <DialogDescription>
-              Select a school to assign to this animator. Maximum 2 schools per
+              Select a school to assign to this animator. Maximum 7 schools per
               animator.
             </DialogDescription>
           </DialogHeader>
@@ -605,18 +642,38 @@ export function AnimatorsList() {
                   <SelectValue placeholder="Choose a school..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {unassignedSchools.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No unassigned schools available
-                    </SelectItem>
-                  ) : (
-                    unassignedSchools.map((school) => (
+                  {(() => {
+                    const filtered = unassignedSchools.filter(school => {
+                      if (!selectedAnimator) return true;
+                      const homeParish = selectedAnimator.parishName?.toLowerCase().trim() || "";
+                      const schoolName = (school.schoolname || school.schoolName || "").toLowerCase().trim();
+                      const schoolParish = (school.parish || "").toLowerCase().trim();
+
+                      if (homeParish && (
+                        schoolName.includes(homeParish) ||
+                        homeParish.includes(schoolName) ||
+                        (schoolParish && homeParish.includes(schoolParish))
+                      )) {
+                        return false;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <SelectItem value="none" disabled>
+                          No eligible schools available
+                        </SelectItem>
+                      );
+                    }
+
+                    return filtered.map((school) => (
                       <SelectItem key={school.id} value={school.id}>
                         {school.schoolname || school.schoolName} -{" "}
                         {school.parish}
                       </SelectItem>
-                    ))
-                  )}
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -649,14 +706,14 @@ export function AnimatorsList() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-fullName">Full Name *</Label>
+              <Label htmlFor="edit-name">Name *</Label>
               <Input
-                id="edit-fullName"
-                value={editFormData.fullName || ""}
+                id="edit-name"
+                value={editFormData.name || ""}
                 onChange={(e) =>
-                  setEditFormData({ ...editFormData, fullName: e.target.value })
+                  setEditFormData({ ...editFormData, name: e.target.value })
                 }
-                placeholder="Enter full name"
+                placeholder="Enter name"
               />
             </div>
             <div className="space-y-2">
@@ -685,15 +742,29 @@ export function AnimatorsList() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-parish">Parish</Label>
-              <Input
-                id="edit-parish"
-                value={editFormData.parish || ""}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, parish: e.target.value })
-                }
-                placeholder="Enter parish"
-              />
+              <Label htmlFor="edit-parish">Parish *</Label>
+              <Select
+                value={editFormData.parishId}
+                onValueChange={(value) => {
+                  const selectedParish = parishes.find((p) => p.id === value);
+                  setEditFormData({
+                    ...editFormData,
+                    parishId: value,
+                    parishName: selectedParish ? (selectedParish.name || selectedParish.fullName || "") : "",
+                  });
+                }}
+              >
+                <SelectTrigger id="edit-parish">
+                  <SelectValue placeholder="Select parish" />
+                </SelectTrigger>
+                <SelectContent>
+                  {parishes.map((parish) => (
+                    <SelectItem key={parish.id} value={parish.id}>
+                      {parish.name || parish.fullName || parish.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

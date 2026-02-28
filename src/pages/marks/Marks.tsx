@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Loader2,
@@ -66,7 +66,10 @@ import {
 } from "../../components/ui/tooltip";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
+// @ts-ignore
+import html2pdf from "html2pdf.js";
+import { renderToString } from "react-dom/server";
+import { MarksPdfTemplate } from "./MarksPdfTemplate";
 import {
   getMarks,
   getMarksWithDetails,
@@ -77,6 +80,7 @@ import {
   updateMarksRemark,
   updateQuestionRemark,
   updateQuestionMark,
+  updateQuestionTextValue,
   MarksData,
   MarksWithDetails,
 } from "../../features/marks/services/marksService";
@@ -208,36 +212,53 @@ export function Marks() {
     if (!selectedMarks) return;
     try {
       setSavingQuestionRemark(true);
-      await updateQuestionRemark(
-        selectedMarks.id!,
-        questionId,
-        editingQuestionRemark,
-      );
-      toast.success("Question remark updated successfully");
 
-      const currentQuestionRemarks = selectedMarks.questionRemarks || {};
-      const updatedQuestionRemarks = {
-        ...currentQuestionRemarks,
-        [questionId]: editingQuestionRemark,
-      };
+      const isSubField = questionId.includes("_sub_");
 
-      const updatedMarks = {
-        ...selectedMarks,
-        questionRemarks: updatedQuestionRemarks,
-      };
-      setSelectedMarks(updatedMarks);
-      setMarks(
-        marks.map((m) =>
-          m.id === selectedMarks.id
-            ? { ...m, questionRemarks: updatedQuestionRemarks }
-            : m,
-        ),
-      );
+      if (isSubField) {
+        await updateQuestionTextValue(selectedMarks.id!, questionId, editingQuestionRemark);
+        toast.success("Sub-field detail updated");
+
+        const updatedTextValues = {
+          ...(selectedMarks.textValues || {}),
+          [questionId]: editingQuestionRemark,
+        };
+
+        const updatedMarks = { ...selectedMarks, textValues: updatedTextValues };
+        setSelectedMarks(updatedMarks);
+        setMarks(marks.map(m => m.id === selectedMarks.id ? { ...m, textValues: updatedTextValues } : m));
+      } else {
+        await updateQuestionRemark(
+          selectedMarks.id!,
+          questionId,
+          editingQuestionRemark,
+        );
+        toast.success("Question remark updated successfully");
+
+        const currentQuestionRemarks = selectedMarks.questionRemarks || {};
+        const updatedQuestionRemarks = {
+          ...currentQuestionRemarks,
+          [questionId]: editingQuestionRemark,
+        };
+
+        const updatedMarks = {
+          ...selectedMarks,
+          questionRemarks: updatedQuestionRemarks,
+        };
+        setSelectedMarks(updatedMarks);
+        setMarks(
+          marks.map((m) =>
+            m.id === selectedMarks.id
+              ? { ...m, questionRemarks: updatedQuestionRemarks }
+              : m,
+          ),
+        );
+      }
 
       setEditingQuestionId(null);
     } catch (error) {
-      console.error("Error saving question remark:", error);
-      toast.error("Failed to save question remark");
+      console.error("Error saving question remark/text:", error);
+      toast.error("Failed to save changes");
     } finally {
       setSavingQuestionRemark(false);
     }
@@ -329,88 +350,59 @@ export function Marks() {
     }
   };
 
-  const generatePDF = (marksData: MarksWithDetails) => {
-    const doc = new jsPDF();
 
-    // Header
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("Faith Formation Assessment Report", 105, 20, { align: "center" });
+  const generatePDF = async (marksData: MarksWithDetails) => {
+    toast.loading("Preparing professional report...", { id: "pdf-gen" });
+    try {
+      // 1. Render React component to static HTML string
+      const htmlString = renderToString(<MarksPdfTemplate marksData={marksData} />);
 
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Parish Level Evaluation - ${marksData.year}`, 105, 30, {
-      align: "center",
-    });
+      // 2. Wrap in a full HTML document (with required styles/fonts)
+      const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;700&display=swap');
+              body { margin: 0; padding: 0; }
+              * { box-sizing: border-box; }
+            </style>
+          </head>
+          <body>
+            ${htmlString}
+          </body>
+        </html>
+      `;
 
-    // Details
-    doc.setFontSize(11);
-    let yPos = 50;
+      // 3. Create a temporary container for html2pdf
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = fullHtml;
 
-    doc.text(`Parish: ${marksData.parish}`, 20, yPos);
-    yPos += 8;
-    doc.text(`Sunday School: ${marksData.sundaySchool}`, 20, yPos);
-    yPos += 8;
-    doc.text(`Animator: ${marksData.animatorName}`, 20, yPos);
-    yPos += 8;
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, yPos);
-    yPos += 15;
+      // 4. Configure html2pdf options
+      const opt = {
+        margin: 0, // Margins are already in the template's padding
+        filename: `Marks_${marksData.parish.replace(/\s+/g, '_')}_${marksData.year}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: {
+          scale: 2.5, // High resolution for Malayalam text
+          useCORS: true,
+          letterRendering: true,
+          scrollY: 0,
+          windowWidth: 800
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } // Professional page breaks
+      };
 
-    // Table Header
-    doc.setFont("helvetica", "bold");
-    doc.text("#", 20, yPos);
-    doc.text("Question", 35, yPos);
-    doc.text("Marks", 160, yPos);
-    doc.text("Max", 180, yPos);
-    yPos += 5;
-    doc.line(20, yPos, 190, yPos);
-    yPos += 8;
+      // 5. Generate and save PDF
+      await html2pdf().from(tempDiv).set(opt).save();
 
-    // Table Body
-    doc.setFont("helvetica", "normal");
-    marksData.questions.forEach((question, index) => {
-      const marks = question.id ? marksData.marks[question.id] : 0;
-      const questionText =
-        question.text.length > 60
-          ? question.text.substring(0, 60) + "..."
-          : question.text;
-
-      doc.text(`${index + 1}`, 20, yPos);
-      doc.text(questionText, 35, yPos);
-      doc.text(`${marks || 0}`, 160, yPos);
-      doc.text(`${question.maxMarks}`, 180, yPos);
-      yPos += 8;
-
-      if (yPos > 270) {
-        doc.addPage();
-        yPos = 20;
-      }
-    });
-
-    // Total
-    yPos += 5;
-    doc.line(20, yPos, 190, yPos);
-    yPos += 8;
-    doc.setFont("helvetica", "bold");
-    doc.text("Total", 35, yPos);
-    doc.text(`${marksData.totalMarks}`, 160, yPos);
-    doc.text(`${marksData.maxTotalMarks}`, 180, yPos);
-    yPos += 8;
-    doc.text(`Percentage: ${marksData.percentage.toFixed(1)}%`, 35, yPos);
-
-    // Remarks
-    if (marksData.remarks) {
-      yPos += 15;
-      doc.setFont("helvetica", "bold");
-      doc.text("Remarks:", 20, yPos);
-      yPos += 8;
-      doc.setFont("helvetica", "normal");
-      doc.text(marksData.remarks, 20, yPos, { maxWidth: 170 });
+      toast.success("Professional report generated", { id: "pdf-gen" });
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      toast.error("Failed to generate PDF", { id: "pdf-gen" });
     }
-
-    // Save
-    doc.save(`marks_${marksData.sundaySchool}_${marksData.year}.pdf`);
-    toast.success("PDF downloaded successfully");
   };
 
   const formatDate = (date: Timestamp | undefined) => {
@@ -880,7 +872,7 @@ export function Marks() {
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Assigned Sunday School
+                        Sunday School
                       </span>
                       <p className="font-semibold text-sm text-blue-700 dark:text-blue-400">
                         {selectedMarks.sundaySchool}
@@ -914,9 +906,6 @@ export function Marks() {
                         <div className="flex items-baseline gap-2">
                           <span className="text-4xl font-bold text-gray-900 dark:text-gray-50">
                             {selectedMarks.totalMarks}
-                          </span>
-                          <span className="text-lg text-muted-foreground">
-                            / {selectedMarks.maxTotalMarks}
                           </span>
                         </div>
                       </div>
@@ -963,187 +952,200 @@ export function Marks() {
                           {selectedMarks.questions
                             .slice(0, showAllQuestions ? undefined : 6)
                             .map((question, index) => {
-                              const questionMarks = question.id
-                                ? selectedMarks.marks[question.id]
-                                : 0;
-                              return (
-                                <TableRow key={question.id}>
-                                  <TableCell className="font-medium text-muted-foreground align-top pt-4">
-                                    {index + 1}
-                                  </TableCell>
-                                  <TableCell className="text-sm py-3">
-                                    <div className="flex flex-col gap-2">
-                                      <div className="max-w-[140px] md:max-w-none md:whitespace-normal">
-                                        {question.text}
-                                      </div>
+                              const subFields = question.subFields || [];
+                              const answeredSubkeys = subFields.map((_, i) => `${question.id}_sub_${i}`).filter(subKey => {
+                                const mark = selectedMarks.marks[subKey];
+                                const text = selectedMarks.textValues?.[subKey]?.trim();
+                                return (mark !== undefined && mark > 0) || (text !== undefined && text !== '');
+                              });
 
-                                      {/* Question Remark Section */}
-                                      <div className="mt-2 text-xs">
-                                        {editingQuestionId === question.id ? (
-                                          <div className="space-y-2 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-md border">
-                                            <Textarea
-                                              value={editingQuestionRemark}
-                                              onChange={(e) =>
-                                                setEditingQuestionRemark(
-                                                  e.target.value,
-                                                )
-                                              }
-                                              placeholder="Enter remark for this question..."
-                                              className="min-h-[60px] text-xs"
-                                            />
-                                            <div className="flex items-center gap-2 justify-end">
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 text-xs px-2"
-                                                onClick={() =>
-                                                  setEditingQuestionId(null)
-                                                }
-                                                disabled={savingQuestionRemark}
-                                              >
-                                                Cancel
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                className="h-7 text-xs px-2"
-                                                onClick={() =>
-                                                  handleSaveQuestionRemark(
-                                                    question.id!,
-                                                  )
-                                                }
-                                                disabled={savingQuestionRemark}
-                                              >
-                                                {savingQuestionRemark && (
-                                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                                )}
-                                                Save
-                                              </Button>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="flex items-start gap-2 group/remark">
-                                            {selectedMarks.questionRemarks &&
-                                            selectedMarks.questionRemarks[
-                                              question.id!
-                                            ] ? (
-                                              <div className="flex-1 bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-dashed text-muted-foreground italic break-words">
-                                                <span className="font-semibold not-italic mr-1">
-                                                  Remark:
-                                                </span>
-                                                {
-                                                  selectedMarks.questionRemarks[
-                                                    question.id!
-                                                  ]
-                                                }
+                              const hasSubFields = answeredSubkeys.length > 0;
+                              const questionMarks = hasSubFields
+                                ? answeredSubkeys.reduce((sum, key) => sum + (selectedMarks.marks[key] || 0), 0)
+                                : (selectedMarks.marks[question.id!] || 0);
+
+                              const questionMaxMark = hasSubFields
+                                ? subFields.reduce((sum, sf) => sum + (sf.maxMark || 0), 0)
+                                : (question.maxMark || 0);
+
+                              return (
+                                <React.Fragment key={question.id}>
+                                  <TableRow className={hasSubFields ? "bg-slate-50/50" : ""}>
+                                    <TableCell className="font-medium text-muted-foreground align-top pt-4">
+                                      {index + 1}
+                                    </TableCell>
+                                    <TableCell className="text-sm py-3">
+                                      <div className="flex flex-col gap-2">
+                                        <div className={`max-w-[140px] md:max-w-none md:whitespace-normal ${hasSubFields ? "font-bold" : ""}`}>
+                                          {question.text}
+                                        </div>
+
+                                        {!hasSubFields && (
+                                          <div className="mt-2 text-xs">
+                                            {editingQuestionId === question.id ? (
+                                              <div className="space-y-2 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-md border">
+                                                <Textarea
+                                                  value={editingQuestionRemark}
+                                                  onChange={(e) => setEditingQuestionRemark(e.target.value)}
+                                                  placeholder="Enter remark..."
+                                                  className="min-h-[60px] text-xs"
+                                                />
+                                                <div className="flex items-center gap-2 justify-end">
+                                                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setEditingQuestionId(null)} disabled={savingQuestionRemark}>Cancel</Button>
+                                                  <Button size="sm" className="h-7 text-xs px-2" onClick={() => handleSaveQuestionRemark(question.id!)} disabled={savingQuestionRemark}>
+                                                    {savingQuestionRemark && (
+                                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                                    )}
+                                                    Save
+                                                  </Button>
+                                                </div>
                                               </div>
                                             ) : (
-                                              <div className="flex-1 text-muted-foreground/50 italic py-1">
-                                                No specific remark
+                                              <div className="flex items-start gap-2 group/remark">
+                                                {selectedMarks.questionRemarks?.[question.id!] ? (
+                                                  <div className="flex-1 bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-dashed text-muted-foreground italic break-words text-[10px]">
+                                                    <span className="font-semibold not-italic mr-1">Remark:</span>
+                                                    {selectedMarks.questionRemarks[question.id!]}
+                                                  </div>
+                                                ) : (
+                                                  <div className="flex-1 text-muted-foreground/50 italic py-1 text-[10px]">No remark</div>
+                                                )}
+                                                {!selectedMarks.locked && (
+                                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover/remark:opacity-100" onClick={() => {
+                                                    setEditingQuestionRemark(selectedMarks.questionRemarks?.[question.id!] || "");
+                                                    setEditingQuestionId(question.id!);
+                                                  }}>
+                                                    <Pencil className="h-3 w-3" />
+                                                  </Button>
+                                                )}
                                               </div>
                                             )}
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-6 px-2 text-[10px] shrink-0"
-                                              onClick={() => {
-                                                const currentRemark =
-                                                  selectedMarks
-                                                    .questionRemarks?.[
-                                                    question.id!
-                                                  ] || "";
-                                                setEditingQuestionRemark(
-                                                  currentRemark,
-                                                );
-                                                setEditingQuestionId(
-                                                  question.id!,
-                                                );
-                                              }}
-                                            >
-                                              <Pencil className="h-3 w-3 mr-1" />
-                                              Edit
-                                            </Button>
                                           </div>
                                         )}
                                       </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-right font-medium align-top pt-4">
-                                    {editingMarkId === question.id ? (
-                                      <div className="flex items-center justify-end gap-1">
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          max={question.maxMarks}
-                                          value={editingMarkValue}
-                                          onChange={(e) =>
-                                            setEditingMarkValue(e.target.value)
-                                          }
-                                          className="h-7 w-16 text-right px-1 text-sm font-medium"
-                                          autoFocus
-                                          disabled={savingMark}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter")
-                                              handleSaveQuestionMark(
-                                                question.id!,
-                                                question.maxMarks,
-                                              );
-                                            if (e.key === "Escape")
-                                              setEditingMarkId(null);
-                                          }}
-                                        />
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                          onClick={() =>
-                                            handleSaveQuestionMark(
-                                              question.id!,
-                                              question.maxMarks,
-                                            )
-                                          }
-                                          disabled={savingMark}
-                                        >
-                                          {savingMark ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                          ) : (
-                                            <Check className="h-4 w-4" />
-                                          )}
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                          onClick={() => setEditingMarkId(null)}
-                                          disabled={savingMark}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-end gap-1 group/mark">
-                                        <span>{questionMarks || 0}</span>
-                                        {!selectedMarks.locked && (
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium align-top pt-4">
+                                      {hasSubFields ? (
+                                        <span className="font-bold">{questionMarks}</span>
+                                      ) : editingMarkId === question.id ? (
+                                        <div className="flex items-center justify-end gap-1">
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            max={question.maxMark ?? 0}
+                                            value={editingMarkValue}
+                                            onChange={(e) => setEditingMarkValue(e.target.value)}
+                                            className="h-7 w-16 text-right px-1 text-sm font-medium"
+                                            autoFocus
+                                            disabled={savingMark}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter")
+                                                handleSaveQuestionMark(
+                                                  question.id!,
+                                                  question.maxMark ?? 0,
+                                                );
+                                              if (e.key === "Escape")
+                                                setEditingMarkId(null);
+                                            }}
+                                          />
+                                          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleSaveQuestionMark(question.id!, question.maxMark || 0)} disabled={savingMark}>
+                                            {savingMark ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <Check className="h-4 w-4" />
+                                            )}
+                                          </Button>
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-6 w-6 opacity-0 group-hover/mark:opacity-100 transition-opacity"
-                                            onClick={() => {
-                                              setEditingMarkId(question.id!);
-                                              setEditingMarkValue(
-                                                (questionMarks || 0).toString(),
-                                              );
-                                            }}
+                                            className="h-7 w-7 shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                            onClick={() => setEditingMarkId(null)}
+                                            disabled={savingMark}
                                           >
-                                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                                            <X className="h-4 w-4" />
                                           </Button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-right text-muted-foreground align-top pt-4">
-                                    {question.maxMarks}
-                                  </TableCell>
-                                </TableRow>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-end gap-1 group/mark">
+                                          <span>{questionMarks || "-"}</span>
+                                          {!selectedMarks.locked && (
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/mark:opacity-100 transition-opacity" onClick={() => {
+                                              setEditingMarkId(question.id!);
+                                              setEditingMarkValue(questionMarks.toString());
+                                            }}>
+                                              <Pencil className="h-3 w-3 text-muted-foreground" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground align-top pt-4 font-semibold">
+                                      {questionMaxMark}
+                                    </TableCell>
+                                  </TableRow>
+
+                                  {hasSubFields && answeredSubkeys.map((subKey, sfIndex) => {
+                                    const subIdx = parseInt(subKey.split('_sub_')[1]);
+                                    const sf = subFields[subIdx];
+                                    const sfMark = selectedMarks.marks[subKey] || 0;
+                                    const labelText = selectedMarks.labelsMap?.[subKey] || (sf?.text) || `Sub ${sfIndex + 1}`;
+
+                                    return (
+                                      <TableRow key={subKey} className="bg-slate-50/30">
+                                        <TableCell />
+                                        <TableCell className="text-[12px] py-2 pl-8 border-l-2 border-blue-100">
+                                          <div className="flex flex-col gap-2">
+                                            <span className="text-slate-700 font-medium">{labelText}</span>
+
+                                            <div className="text-xs">
+                                              {editingQuestionId === subKey ? (
+                                                <div className="space-y-2 mt-1 bg-white dark:bg-slate-800 p-2 rounded-md border shadow-sm">
+                                                  <Textarea
+                                                    value={editingQuestionRemark}
+                                                    onChange={(e) => setEditingQuestionRemark(e.target.value)}
+                                                    placeholder="Enter sub-field detail..."
+                                                    className="min-h-[50px] text-xs"
+                                                  />
+                                                  <div className="flex items-center gap-2 justify-end">
+                                                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setEditingQuestionId(null)} disabled={savingQuestionRemark}>Cancel</Button>
+                                                    <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => handleSaveQuestionRemark(subKey)} disabled={savingQuestionRemark}>
+                                                      {savingQuestionRemark && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                                      Save
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="flex items-start gap-2 group/subremark">
+                                                  {selectedMarks.textValues?.[subKey] ? (
+                                                    <div className="flex-1 bg-blue-50/50 dark:bg-blue-900/10 p-2 rounded border border-blue-100 dark:border-blue-800 text-blue-800 dark:text-blue-300 italic text-[10px]">
+                                                      {selectedMarks.textValues[subKey]}
+                                                    </div>
+                                                  ) : (
+                                                    <div className="flex-1 text-muted-foreground/50 italic py-1 text-[10px]">No specific detail</div>
+                                                  )}
+                                                  {!selectedMarks.locked && (
+                                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover/subremark:opacity-100" onClick={() => {
+                                                      setEditingQuestionRemark(selectedMarks.textValues?.[subKey] || "");
+                                                      setEditingQuestionId(subKey);
+                                                    }}>
+                                                      <Pencil className="h-3 w-3" />
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-right text-[12px] text-blue-700 font-medium">
+                                          {sfMark || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-right text-[11px] text-muted-foreground">
+                                          {sf.maxMark}
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </React.Fragment>
                               );
                             })}
                           <TableRow className="bg-slate-50 dark:bg-slate-900/50 font-semibold border-t-2">
@@ -1291,6 +1293,7 @@ export function Marks() {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

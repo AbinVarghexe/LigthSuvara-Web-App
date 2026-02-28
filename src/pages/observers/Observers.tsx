@@ -13,6 +13,12 @@ import {
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Card,
   CardContent,
   CardHeader,
@@ -42,6 +48,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   cn,
 } from "@/lib/utils";
+import { PremiumAnimatorObserverPdfService } from "../../features/reports/services/animatorObserverPdfServices";
+import { IndividualObserverPdfService } from "../../features/reports/services/individualObserverPdfService";
 
 import { Teacher } from "@/features/teachers/types";
 import { TeacherService } from "@/features/teachers/services/teacherService";
@@ -395,8 +403,14 @@ export function Observers() {
     }
     setGeneratingAssignReport(true);
     try {
-      // TODO: wire to PdfService.generateAssignmentReport(filtered)
-      await new Promise((r) => setTimeout(r, 800));
+      await PremiumAnimatorObserverPdfService.generateObserverAssignmentReport(
+        filtered,
+        allTeachers,
+        sourceParishes as any,
+        rptAssignForane,
+        rptAssignParishId,
+        rptAssignYear
+      );
       toast.success(
         `Assignment report generated for ${filtered.length} record(s).`,
       );
@@ -426,8 +440,13 @@ export function Observers() {
     }
     setGeneratingDirReport(true);
     try {
-      // TODO: wire to PdfService.generateObserverDirectoryReport(filtered)
-      await new Promise((r) => setTimeout(r, 800));
+      await PremiumAnimatorObserverPdfService.generateObserverDirectoryReport(
+        filtered,
+        sourceParishes as any,
+        rptDirForane,
+        rptDirParishId,
+        rptDirYear
+      );
       toast.success(
         `Observer directory report generated for ${filtered.length} observer(s).`,
       );
@@ -604,6 +623,27 @@ export function Observers() {
                                 {school.assignment.accessCode}
                               </Badge>
                               <div className="flex gap-1">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:bg-indigo-50 focus-visible:ring-0 focus-visible:ring-offset-0">
+                                      <FileDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-56 font-medium">
+                                    <DropdownMenuItem onClick={() => {
+                                      toast.info("Generating Duty Order PDF...");
+                                      IndividualObserverPdfService.generateDutyOrderPdf(school.assignment, expirationDate ? expirationDate.toISOString() : null).catch(() => toast.error("Failed to generate PDF"));
+                                    }}>
+                                      Duty Order (Observer)
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      toast.info("Generating Admin Report PDF...");
+                                      IndividualObserverPdfService.generateAdminReportPdf(school.assignment, expirationDate ? expirationDate.toISOString() : null).catch(() => toast.error("Failed to generate PDF"));
+                                    }}>
+                                      Assignment Record (Admin)
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                                 <Button
                                   variant="ghost"
                                   size="icon"
