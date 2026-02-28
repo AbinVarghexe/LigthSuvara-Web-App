@@ -6,10 +6,16 @@ import { UserData } from '../../../features/users/services/userService';
 const getParishInfo = (schoolId: string, users: UserData[]) => {
     const schoolUser = users.find(u => (u.uid === schoolId || u.id === schoolId) && u.role === "school");
     if (!schoolUser) return { forane: 'Other', name: 'Other' };
-    return {
-        forane: schoolUser.forane || 'Other',
-        name: schoolUser.schoolName || schoolUser.schoolname || 'Other'
-    };
+
+    // Some school users might have forane in their name if not explicitly set
+    let forane = schoolUser.forane || 'Other';
+    const name = schoolUser.schoolName || schoolUser.schoolname || 'Other';
+
+    if (forane === 'Other' && name.includes('-')) {
+        forane = name.split('-')[0].trim();
+    }
+
+    return { forane, name };
 };
 
 /* -------------------------------------------------------------------------- */
@@ -30,7 +36,10 @@ export const ObserverDirPdfTemplate = ({
 
     // Group by Home Forane -> Home Parish
     const grouped = observers.reduce((acc, obs) => {
-        const { forane: foraneName, name: parishName } = getParishInfo(obs.parishId || obs.schoolId || '', users);
+        const { forane: lookupForane, name: lookupName } = getParishInfo(obs.parishId || obs.schoolId || '', users);
+
+        const parishName = obs.parishName || (obs as any).schoolName || lookupName;
+        const foraneName = lookupForane === 'Other' && parishName.includes('-') ? parishName.split('-')[0].trim() : lookupForane;
 
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
@@ -141,7 +150,16 @@ export const ObserverAssignPdfTemplate = ({
     // Group by Home Forane -> Home Parish
     const grouped = assignments.reduce((acc, a) => {
         const t = teachers.find(teach => teach.id === a.teacherId);
-        const { forane: foraneName, name: parishName } = getParishInfo(t?.parishId || '', users);
+
+        // Try all possible source IDs
+        const sourceId = a.sourceSchoolId || t?.parishId || (t as any)?.schoolId || '';
+        const { forane: lookupForane, name: lookupName } = getParishInfo(sourceId, users);
+
+        const parishName = a.sourceSchoolName || t?.parishName || (t as any)?.schoolName || lookupName;
+        // If forane is still other, try to extract it from any available name
+        const foraneName = lookupForane === 'Other'
+            ? (parishName.includes('-') ? parishName.split('-')[0].trim() : lookupForane)
+            : lookupForane;
 
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
