@@ -21,31 +21,33 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   };
 
   try {
-    // 1. Try direct fetch first
+    // Attempt 1: Standard CORS fetch which works locally but fails on Vercel sometimes
     const response = await fetch(url, { mode: 'cors' });
     if (!response.ok) throw new Error(`Direct fetch failed: ${response.statusText}`);
     const blob = await response.blob();
     return await blobToBase64(blob);
   } catch (error) {
-    console.warn("Direct fetch failed, attempting primary CORS proxy...", url);
+    console.warn("Direct CORS fetch failed. Attempting URL rewrite for Firebase...", url);
     try {
-      // 2. Fallback to Primary Proxy (AllOrigins)
-      const proxyUrl1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const proxyResponse1 = await fetch(proxyUrl1);
-      if (!proxyResponse1.ok) throw new Error(`Primary proxy failed: ${proxyResponse1.statusText}`);
-      const proxyBlob1 = await proxyResponse1.blob();
-      return await blobToBase64(proxyBlob1);
-    } catch (proxyError1) {
-      console.warn("Primary proxy failed, attempting secondary proxy...", url);
+      // Attempt 2: Firebase Storage URLs can sometimes be fetched without strict CORS 
+      // by appending a random token or bypassing the proxy if it's public.
+      // Alternatively, try a different reliable proxy just for production.
+      const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=jpg`;
+      const proxyResponse = await fetch(proxyUrl);
+      if (!proxyResponse.ok) throw new Error(`Proxy fallback failed: ${proxyResponse.statusText}`);
+      const proxyBlob = await proxyResponse.blob();
+      return await blobToBase64(proxyBlob);
+    } catch (proxyError) {
+      console.error("Failed to fetch image for PDF via weserv proxy:", url, proxyError);
+
+      // Final attempt: cross-origin fallback proxy
       try {
-        // 3. Fallback to Secondary Proxy (corsproxy.io)
         const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-        const proxyResponse2 = await fetch(proxyUrl2);
-        if (!proxyResponse2.ok) throw new Error(`Secondary proxy failed: ${proxyResponse2.statusText}`);
-        const proxyBlob2 = await proxyResponse2.blob();
+        const proxyRes = await fetch(proxyUrl2);
+        const proxyBlob2 = await proxyRes.blob();
         return await blobToBase64(proxyBlob2);
-      } catch (proxyError2) {
-        console.error("Failed to fetch image for PDF even with multiple proxies:", url, proxyError2);
+      } catch (e) {
+        console.error("All image fetch attempts failed.");
         return "";
       }
     }
