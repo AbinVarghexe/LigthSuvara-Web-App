@@ -389,13 +389,12 @@ export function Observers() {
       );
       if (!teacher || !assignedParish) return false;
 
-      const homeParish = sourceParishes.find((p: any) =>
+      sourceParishes.find((p: any) =>
         p.ids ? p.ids.includes(teacher.parishId || teacher.schoolId) : p.id === (teacher.parishId || teacher.schoolId)
       );
-      if (!homeParish) return false;
 
       const matchesForane =
-        rptAssignForane === "All" || assignedParish.forane === rptAssignForane;
+        rptAssignForane === "All" || (assignedParish.forane === rptAssignForane);
 
       const selectedSource = schools.find(p => p.id === rptAssignParishId);
       const matchesParish =
@@ -429,14 +428,12 @@ export function Observers() {
 
   const handleGenerateDirectoryReport = async () => {
     const filtered = allTeachers.filter((t: any) => {
-      if (!t.parishId && !t.schoolId) return false;
       const homeParish = sourceParishes.find((p: any) =>
         p.ids ? p.ids.includes(t.parishId || t.schoolId) : p.id === (t.parishId || t.schoolId)
       );
-      if (!homeParish) return false;
 
       const matchesForane =
-        rptDirForane === "All" || homeParish.forane === rptDirForane;
+        rptDirForane === "All" || (homeParish?.forane === rptDirForane);
 
       const selectedSource = sourceParishes.find(p => p.id === rptDirParishId);
       const matchesParish =

@@ -17,20 +17,11 @@ export const TeacherClassPdfTemplate = ({
 
     // Group teachers by Forane -> Parish
     const grouped = teachers.reduce((acc, t) => {
-        if (!t.parishId) return acc;
+        const pId = t.parishId || (t as any).schoolId;
+        const p = pId ? parishes.find(p => p.id === pId) : null;
 
-        const p = parishes.find(p => p.id === t.parishId);
-        if (!p || !p.forane || !p.name) return acc;
-
-        const foraneName = p.forane;
-        const parishName = p.name;
-
-        // Skip explicitly unassigned/unknown strings from DB
-        const fLower = foraneName.toLowerCase();
-        const pLower = parishName.toLowerCase();
-        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
-            return acc;
-        }
+        const foraneName = p?.forane || 'Other';
+        const parishName = p?.name || t.parishName || (t as any).schoolName || 'Other';
 
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
@@ -107,7 +98,7 @@ export const TeacherClassPdfTemplate = ({
                                         {/* Forane Header Row */}
                                         <tr style={{ backgroundColor: '#eff6ff', borderBottom: '2px solid #bfdbfe' }}>
                                             <td colSpan={5} style={{ padding: '14px 16px', color: '#1e40af', fontWeight: 800, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                                {fName} Forane
+                                                {fName === 'Other' ? 'Other / Unassigned Records' : `${fName} Forane`}
                                             </td>
                                         </tr>
 

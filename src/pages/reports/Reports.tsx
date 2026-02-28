@@ -644,25 +644,22 @@ export function Reports() {
 
   const obsAssignCount = assignments.filter((a) => {
     const t = teachers.find((t) => t.id === a.teacherId);
-    if (!t || !t.parishId) return false;
-    const hp = dynamicParishes.find((p) => p.id === t.parishId);
-    if (!hp) return false;
+    if (!t) return false;
+    const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
     return (
-      (obsAssignForane === "All" || hp.forane === obsAssignForane) &&
-      (obsAssignParish === "All" || t.parishId === obsAssignParish) &&
+      (obsAssignForane === "All" || hp?.forane === obsAssignForane) &&
+      (obsAssignParish === "All" || (t.parishId || (t as any).schoolId) === obsAssignParish) &&
       (obsAssignYear === "All" || t.academicYear === obsAssignYear)
     );
   }).length;
 
   const obsDirCount = teachers.filter((t) => {
-    if (!t.parishId) return false;
-    const hp = dynamicParishes.find((p) => p.id === t.parishId);
-    if (!hp) return false;
+    const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
     return (
-      (obsDirForane === "All" || hp.forane === obsDirForane) &&
-      (obsDirParish === "All" || t.parishId === obsDirParish) &&
+      (obsDirForane === "All" || hp?.forane === obsDirForane) &&
+      (obsDirParish === "All" || (t.parishId || (t as any).schoolId) === obsDirParish) &&
       (obsDirYear === "All" || t.academicYear === obsDirYear)
     );
   }).length;
@@ -684,13 +681,11 @@ export function Reports() {
 
   // Class-wise teacher count & breakdown
   const tmClassFiltered = teachers.filter((t) => {
-    if (!t.parishId) return false;
-    const hp = dynamicParishes.find((p) => p.id === t.parishId);
-    if (!hp) return false;
+    const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
     return (
-      (tmClassForane === "All" || hp.forane === tmClassForane) &&
-      (tmClassParish === "All" || t.parishId === tmClassParish) &&
+      (tmClassForane === "All" || hp?.forane === tmClassForane) &&
+      (tmClassParish === "All" || (t.parishId || (t as any).schoolId) === tmClassParish) &&
       (tmClassYear === "All" || t.academicYear === tmClassYear) &&
       (tmClassFilter === "All" ||
         (t.classes && t.classes.includes(tmClassFilter)))
@@ -703,13 +698,11 @@ export function Reports() {
     .map((cls) => ({
       cls,
       count: teachers.filter((t) => {
-        if (!t.parishId) return false;
-        const hp = dynamicParishes.find((p) => p.id === t.parishId);
-        if (!hp) return false;
+        const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
         return (
-          (tmClassForane === "All" || hp.forane === tmClassForane) &&
-          (tmClassParish === "All" || t.parishId === tmClassParish) &&
+          (tmClassForane === "All" || hp?.forane === tmClassForane) &&
+          (tmClassParish === "All" || (t.parishId || (t as any).schoolId) === tmClassParish) &&
           (tmClassYear === "All" || t.academicYear === tmClassYear) &&
           t.classes?.includes(cls)
         );
@@ -778,13 +771,11 @@ export function Reports() {
       const allAnimators = await getAnimators();
 
       const filteredAnimators: AnimatorWithUser[] = allAnimators.filter((a) => {
-        if (!a.parishId) return false;
         const pInfo = dynamicParishes.find(p => p.id === a.parishId);
-        if (!pInfo) return false;
 
         const matchForane = amForane === "All" ||
           (a.parishName && a.parishName.toLowerCase().includes(amForane.toLowerCase())) ||
-          (pInfo.forane?.trim().toLowerCase() === amForane.trim().toLowerCase());
+          (pInfo?.forane?.trim().toLowerCase() === amForane.trim().toLowerCase());
 
         const selectedParish = dynamicParishes.find(p => p.id === amParish);
         const matchParish = amParish === "All" ||
@@ -813,13 +804,12 @@ export function Reports() {
   const handleGenerateObsAssignReport = async () => {
     const filtered = assignments.filter((a) => {
       const t = teachers.find((t) => t.id === a.teacherId);
-      if (!t || !t.parishId) return false;
-      const hp = dynamicParishes.find((p) => p.id === t.parishId);
-      if (!hp) return false;
+      if (!t) return false;
+      const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
       return (
-        (obsAssignForane === "All" || hp.forane === obsAssignForane) &&
-        (obsAssignParish === "All" || t.parishId === obsAssignParish) &&
+        (obsAssignForane === "All" || hp?.forane === obsAssignForane) &&
+        (obsAssignParish === "All" || (t.parishId || (t as any).schoolId) === obsAssignParish) &&
         (obsAssignYear === "All" || t.academicYear === obsAssignYear)
       );
     });
@@ -848,13 +838,11 @@ export function Reports() {
 
   const handleGenerateObsDirReport = async () => {
     const filtered = teachers.filter((t) => {
-      if (!t.parishId) return false;
-      const hp = dynamicParishes.find((p) => p.id === t.parishId);
-      if (!hp) return false;
+      const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
       return (
-        (obsDirForane === "All" || hp.forane === obsDirForane) &&
-        (obsDirParish === "All" || t.parishId === obsDirParish) &&
+        (obsDirForane === "All" || hp?.forane === obsDirForane) &&
+        (obsDirParish === "All" || (t.parishId || (t as any).schoolId) === obsDirParish) &&
         (obsDirYear === "All" || t.academicYear === obsDirYear)
       );
     });

@@ -16,15 +16,8 @@ export const AnimatorPdfTemplate = ({
     // Group animators by Forane -> Parish (Home Parish)
     const grouped = animators.reduce((acc, a) => {
         const pInfo = parishes.find(p => p.id === a.parishId);
-        const foraneName = pInfo?.forane || (a.parishName?.split('-')[0]?.trim()) || 'Unknown Forane';
-        const parishName = pInfo?.name || a.parishName || 'Unknown Parish';
-
-        // Skip explicitly unassigned/unknown strings from DB
-        const fLower = foraneName.toLowerCase();
-        const pLower = parishName.toLowerCase();
-        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
-            return acc;
-        }
+        const foraneName = pInfo?.forane || (a.parishName?.split('-')[0]?.trim()) || 'Other';
+        const parishName = pInfo?.name || a.parishName || 'Other';
 
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
@@ -99,7 +92,7 @@ export const AnimatorPdfTemplate = ({
                                         {/* Forane Header Row */}
                                         <tr style={{ backgroundColor: '#eff6ff', borderBottom: '2px solid #bfdbfe' }}>
                                             <td colSpan={5} style={{ padding: '14px 16px', color: '#1e40af', fontWeight: 800, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                                {fName} Forane
+                                                {fName === 'Other' ? 'Other / Unassigned Records' : `${fName} Forane`}
                                             </td>
                                         </tr>
 

@@ -5,10 +5,10 @@ import { UserData } from '../../../features/users/services/userService';
 // Helper to get school metadata from the user list
 const getParishInfo = (schoolId: string, users: UserData[]) => {
     const schoolUser = users.find(u => (u.uid === schoolId || u.id === schoolId) && u.role === "school");
-    if (!schoolUser) return { forane: 'Unknown Forane', name: 'Unknown Parish' };
+    if (!schoolUser) return { forane: 'Other', name: 'Other' };
     return {
-        forane: schoolUser.forane || 'Unknown Forane',
-        name: schoolUser.schoolName || schoolUser.schoolname || 'Unknown Parish'
+        forane: schoolUser.forane || 'Other',
+        name: schoolUser.schoolName || schoolUser.schoolname || 'Other'
     };
 };
 
@@ -31,13 +31,6 @@ export const ObserverDirPdfTemplate = ({
     // Group by Home Forane -> Home Parish
     const grouped = observers.reduce((acc, obs) => {
         const { forane: foraneName, name: parishName } = getParishInfo(obs.parishId || obs.schoolId || '', users);
-
-        // Skip explicitly unassigned/unknown strings from DB
-        const fLower = foraneName.toLowerCase();
-        const pLower = parishName.toLowerCase();
-        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
-            return acc;
-        }
 
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
@@ -91,7 +84,9 @@ export const ObserverDirPdfTemplate = ({
                                 return (
                                     <React.Fragment key={fName}>
                                         <tr style={{ backgroundColor: '#eff6ff', borderBottom: '2px solid #bfdbfe' }}>
-                                            <td colSpan={4} style={{ padding: '14px 16px', color: '#1e40af', fontWeight: 800, fontSize: '15px', textTransform: 'uppercase' }}>{fName} Forane</td>
+                                            <td colSpan={4} style={{ padding: '14px 16px', color: '#1e40af', fontWeight: 800, fontSize: '15px', textTransform: 'uppercase' }}>
+                                                {fName === 'Other' ? 'Other / Unassigned Records' : `${fName} Forane`}
+                                            </td>
                                         </tr>
                                         {parishesInForane.map((pName) => (
                                             <React.Fragment key={pName}>
@@ -148,13 +143,6 @@ export const ObserverAssignPdfTemplate = ({
         const t = teachers.find(teach => teach.id === a.teacherId);
         const { forane: foraneName, name: parishName } = getParishInfo(t?.parishId || '', users);
 
-        // Skip explicitly unassigned/unknown strings from DB
-        const fLower = foraneName.toLowerCase();
-        const pLower = parishName.toLowerCase();
-        if (fLower.includes('unknown') || fLower.includes('unassigned') || pLower.includes('unknown') || pLower.includes('unassigned')) {
-            return acc;
-        }
-
         if (!acc[foraneName]) acc[foraneName] = {};
         if (!acc[foraneName][parishName]) acc[foraneName][parishName] = [];
 
@@ -208,7 +196,9 @@ export const ObserverAssignPdfTemplate = ({
                                 return (
                                     <React.Fragment key={fName}>
                                         <tr style={{ backgroundColor: '#eff6ff', borderBottom: '2px solid #bfdbfe' }}>
-                                            <td colSpan={5} style={{ padding: '14px 16px', color: '#1e40af', fontWeight: 800, fontSize: '15px', textTransform: 'uppercase' }}>{fName} Forane</td>
+                                            <td colSpan={5} style={{ padding: '14px 16px', color: '#1e40af', fontWeight: 800, fontSize: '15px', textTransform: 'uppercase' }}>
+                                                {fName === 'Other' ? 'Other / Unassigned Records' : `${fName} Forane`}
+                                            </td>
                                         </tr>
                                         {parishesInForane.map((pName) => (
                                             <React.Fragment key={pName}>
