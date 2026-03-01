@@ -13,6 +13,7 @@ import {
   School,
   Clock,
   FileText,
+  Download,
 } from "lucide-react";
 import {
   Card,
@@ -21,6 +22,12 @@ import {
   CardTitle,
   CardDescription,
 } from "../../components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -67,6 +74,8 @@ import {
   ProgramRegistration,
 } from "../../features/programs/services/programService";
 import { Timestamp } from "firebase/firestore";
+import { PremiumProgramPdfService } from "../../features/reports/services/programPdfService";
+import { getUsers } from "../../features/users/services/userService";
 
 // Mobile Card Component
 interface ProgramCardProps {
@@ -420,6 +429,63 @@ export function Programs() {
     return { label: "Active", variant: "default" as const };
   };
 
+  const handleExportRegistrations = async (format: "csv" | "pdf") => {
+    if (!selectedProgram || detailRegistrations.length === 0) return;
+
+    if (format === "csv") {
+      const headers = [
+        "Student Name",
+        "Phone",
+        "School",
+        "Status",
+        "Submitted At",
+      ];
+
+      const sortedRegistrations = [...detailRegistrations].sort((a, b) =>
+        (a.schoolName || "").localeCompare(b.schoolName || ""),
+      );
+
+      const csv = [
+        headers.join(","),
+        ...sortedRegistrations.map((reg) =>
+          [
+            `"${reg.studentName}"`,
+            `"${reg.studentPhone}"`,
+            `"${reg.schoolName}"`,
+            getStatusLabel(reg.status),
+            reg.submittedAt
+              ? reg.submittedAt.toDate().toLocaleDateString()
+              : "N/A",
+          ].join(","),
+        ),
+      ].join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${selectedProgram.name.replace(/\s+/g, "_")}_registrations_${new Date().toISOString().split("T")[0]}.csv`;
+      link.click();
+      toast.success("CSV Exported successfully");
+    } else if (format === "pdf") {
+      try {
+        toast.info("Generating PDF, please wait...");
+        // Fetch users to try and lookup forane/parish metadata if needed by report
+        const users = await getUsers();
+        await PremiumProgramPdfService.generateReport(
+          detailRegistrations,
+          selectedProgram.name,
+          "All", // Using "All" forane context from within program detail
+          "All", // Using "All" parish context
+          users,
+        );
+        toast.success("PDF Exported successfully");
+      } catch (err) {
+        console.error("PDF generation failed", err);
+        toast.error("Failed to generate PDF");
+      }
+    }
+  };
+
   const filteredPrograms = programs.filter((program) =>
     program.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
@@ -609,7 +675,16 @@ export function Programs() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                onClick={() => openDetailDialog(program)}
+                                title="View Details & Registrations"
+                              >
+                                <Eye className="h-4 w-4 text-blue-500" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => openEditDialog(program)}
+                                title="Edit Program"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
@@ -788,6 +863,35 @@ export function Programs() {
             </div>
 
             {/* Registration Stats */}
+            <div className="flex justify-between items-center mt-2">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Registered Members ({detailStats?.total || 0})
+              </h3>
+              {detailRegistrations.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => handleExportRegistrations("csv")}
+                    >
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleExportRegistrations("pdf")}
+                    >
+                      Export as PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+
             {detailLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -837,100 +941,114 @@ export function Programs() {
 
                 {/* Registrations Table */}
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Registered Members ({detailStats.total})
-                  </h3>
-
                   {detailRegistrations.length === 0 ? (
                     <div className="text-center py-8 text-gray-400">
                       <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
                       <p>No registrations yet</p>
                     </div>
                   ) : (
-                    <>
-                      {/* Desktop table */}
-                      <div className="hidden sm:block rounded-lg border overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>#</TableHead>
-                              <TableHead>Student Name</TableHead>
-                              <TableHead>Phone</TableHead>
-                              <TableHead>School</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Submitted</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {detailRegistrations.map((reg, idx) => (
-                              <TableRow key={reg.id}>
-                                <TableCell className="text-gray-500">
-                                  {idx + 1}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                  {reg.studentName}
-                                </TableCell>
-                                <TableCell>{reg.studentPhone}</TableCell>
-                                <TableCell>{reg.schoolName}</TableCell>
-                                <TableCell>
-                                  <Badge
-                                    className={getStatusColor(reg.status)}
-                                    variant="secondary"
-                                  >
-                                    {getStatusLabel(reg.status)}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-gray-500 text-xs">
-                                  {reg.submittedAt
-                                    ? reg.submittedAt
-                                        .toDate()
-                                        .toLocaleDateString()
-                                    : "N/A"}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-
-                      {/* Mobile cards */}
-                      <div className="sm:hidden space-y-3">
-                        {detailRegistrations.map((reg, idx) => (
-                          <Card key={reg.id}>
-                            <CardContent className="p-3 space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sm">
-                                  {idx + 1}. {reg.studentName}
-                                </span>
-                                <Badge
-                                  className={getStatusColor(reg.status)}
-                                  variant="secondary"
-                                >
-                                  {getStatusLabel(reg.status)}
+                    <div className="space-y-6">
+                      {Array.from(
+                        new Set(
+                          detailRegistrations.map((reg) => reg.schoolName),
+                        ),
+                      )
+                        .sort()
+                        .map((schoolName) => {
+                          const schoolRegs = detailRegistrations.filter(
+                            (reg) => reg.schoolName === schoolName,
+                          );
+                          return (
+                            <div key={schoolName} className="space-y-3">
+                              <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
+                                <span>{schoolName}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {schoolRegs.length} students
                                 </Badge>
+                              </h4>
+                              {/* Desktop table */}
+                              <div className="hidden sm:block rounded-lg border overflow-hidden">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>#</TableHead>
+                                      <TableHead>Student Name</TableHead>
+                                      <TableHead>Phone</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead>Submitted</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {schoolRegs.map((reg, idx) => (
+                                      <TableRow key={reg.id}>
+                                        <TableCell className="text-gray-500">
+                                          {idx + 1}
+                                        </TableCell>
+                                        <TableCell className="font-medium">
+                                          {reg.studentName}
+                                        </TableCell>
+                                        <TableCell>
+                                          {reg.studentPhone}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge
+                                            className={getStatusColor(
+                                              reg.status,
+                                            )}
+                                            variant="secondary"
+                                          >
+                                            {getStatusLabel(reg.status)}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-gray-500 text-xs">
+                                          {reg.submittedAt
+                                            ? reg.submittedAt
+                                                .toDate()
+                                                .toLocaleDateString()
+                                            : "N/A"}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
                               </div>
-                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                <Phone className="h-3 w-3" />
-                                {reg.studentPhone}
+
+                              {/* Mobile cards */}
+                              <div className="sm:hidden space-y-3">
+                                {schoolRegs.map((reg, idx) => (
+                                  <Card key={reg.id}>
+                                    <CardContent className="p-3 space-y-1.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-medium text-sm">
+                                          {idx + 1}. {reg.studentName}
+                                        </span>
+                                        <Badge
+                                          className={getStatusColor(reg.status)}
+                                          variant="secondary"
+                                        >
+                                          {getStatusLabel(reg.status)}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                        <Phone className="h-3 w-3" />
+                                        {reg.studentPhone}
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                        <Clock className="h-3 w-3" />
+                                        {reg.submittedAt
+                                          ? reg.submittedAt
+                                              .toDate()
+                                              .toLocaleDateString()
+                                          : "N/A"}
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                ))}
                               </div>
-                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                <School className="h-3 w-3" />
-                                {reg.schoolName}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                <Clock className="h-3 w-3" />
-                                {reg.submittedAt
-                                  ? reg.submittedAt
-                                      .toDate()
-                                      .toLocaleDateString()
-                                  : "N/A"}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </>
+                            </div>
+                          );
+                        })}
+                    </div>
                   )}
                 </div>
               </>
