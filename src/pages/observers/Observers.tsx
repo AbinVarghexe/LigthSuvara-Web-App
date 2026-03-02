@@ -45,16 +45,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  cn,
-} from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { PremiumAnimatorObserverPdfService } from "../../features/reports/services/animatorObserverPdfServices";
 import { IndividualObserverPdfService } from "../../features/reports/services/individualObserverPdfService";
 
 import { Teacher } from "@/features/teachers/types";
 import { TeacherService } from "@/features/teachers/services/teacherService";
 import { AssignmentService } from "@/features/teachers/services/assignmentService";
-import { RemarkService, ObserverRemark } from "@/features/teachers/services/remarkService";
+import {
+  RemarkService,
+  ObserverRemark,
+} from "@/features/teachers/services/remarkService";
 import { TeacherList } from "@/features/teachers/components/TeacherList";
 import { useAuth } from "@/context/AuthContext";
 import { getUsers, UserData } from "@/features/users/services/userService";
@@ -74,7 +75,9 @@ function ReportFilterBar({
   generating = false,
 }: any) {
   const filteredSchools =
-    forane === "All" ? schools : schools.filter((s: any) => s.forane === forane);
+    forane === "All"
+      ? schools
+      : schools.filter((s: any) => s.forane === forane);
 
   return (
     <div className="flex flex-wrap gap-3 items-end p-4 bg-muted/40 rounded-lg border">
@@ -160,18 +163,28 @@ export function Observers() {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [selectedAcademicYear] = useState("2025-26");
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState("2025-26");
+
+  // No-op for now
+
+  // No-op for now
   const [expirationDate, setExpirationDate] = useState<Date | null>(null);
 
   // --- Assignments Tab State ---
-  const [assignmentSubTab, setAssignmentSubTab] = useState<"unassigned" | "assigned">("unassigned");
+  const [assignmentSubTab, setAssignmentSubTab] = useState<
+    "unassigned" | "assigned"
+  >("unassigned");
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [selectedTargetSchool, setSelectedTargetSchool] = useState<any | null>(null);
+  const [selectedTargetSchool, setSelectedTargetSchool] = useState<any | null>(
+    null,
+  );
   const [assignSearchQuery, setAssignSearchQuery] = useState("");
   const [assignFilterForane, setAssignFilterForane] = useState<string>("All");
-  const [assignFilterParishId, setAssignFilterParishId] = useState<string>("All");
+  const [assignFilterParishId, setAssignFilterParishId] =
+    useState<string>("All");
   const [assignFilterClass, setAssignFilterClass] = useState<string>("All");
-  const [assignFilterSchoolForane, setAssignFilterSchoolForane] = useState<string>("All");
+  const [assignFilterSchoolForane, setAssignFilterSchoolForane] =
+    useState<string>("All");
 
   // --- All Observers Tab State ---
   const [dirFilterForane, setDirFilterForane] = useState<string>("All");
@@ -180,7 +193,9 @@ export function Observers() {
   const [dirFilteredTeachers, setDirFilteredTeachers] = useState<Teacher[]>([]);
 
   // --- Submission View State ---
-  const [viewSubmissionAssignment, setViewSubmissionAssignment] = useState<any | null>(null);
+  const [viewSubmissionAssignment, setViewSubmissionAssignment] = useState<
+    any | null
+  >(null);
 
   // --- Remark Dialog State ---
   const [remarkAssignment, setRemarkAssignment] = useState<any | null>(null);
@@ -206,18 +221,20 @@ export function Observers() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [usersData, teachersData, assignmentsData] = await Promise.all(
-          [
-            getUsers(),
-            TeacherService.getTeachers(),
-            AssignmentService.getAssignments(),
-          ],
-        );
+        const [usersData, teachersData, assignmentsData] = await Promise.all([
+          getUsers(),
+          TeacherService.getTeachers(),
+          AssignmentService.getAssignments(),
+        ]);
         const allUsersRaw = usersData as UserData[];
         const groupByName = (users: any[]) => {
           const map = new Map<string, any>();
-          users.forEach(u => {
-            const name = (u as any).schoolname || (u as any).name || (u as any).displayName || u.email;
+          users.forEach((u) => {
+            const name =
+              (u as any).schoolname ||
+              (u as any).name ||
+              (u as any).displayName ||
+              u.email;
             const id = u.uid || u.id;
             if (map.has(name)) {
               const existing = map.get(name);
@@ -229,15 +246,19 @@ export function Observers() {
                 ...u,
                 id, // primary id for selected state
                 ids: [id],
-                name
+                name,
               });
             }
           });
           return Array.from(map.values());
         };
 
-        const sourceParishesList = groupByName(allUsersRaw.filter(u => u.role === 'parish' || u.role === 'school'));
-        const schoolsList = groupByName(allUsersRaw.filter(u => u.role === 'school'));
+        const sourceParishesList = groupByName(
+          allUsersRaw.filter((u) => u.role === "parish" || u.role === "school"),
+        );
+        const schoolsList = groupByName(
+          allUsersRaw.filter((u) => u.role === "school"),
+        );
 
         setAllUsers(usersData);
         setAllTeachers(teachersData);
@@ -246,7 +267,8 @@ export function Observers() {
         setAssignments(assignmentsData);
 
         // Fetch expiration date
-        const expDoc = await AssignmentService.getExpirationDate(selectedAcademicYear);
+        const expDoc =
+          await AssignmentService.getExpirationDate(selectedAcademicYear);
         if (expDoc) setExpirationDate(expDoc);
       } catch (error) {
         toast.error("Failed to load data");
@@ -261,16 +283,25 @@ export function Observers() {
   const [schoolSearchQuery, setSchoolSearchQuery] = useState("");
 
   // Filtered Schools for Assignments tab
-  const schoolsWithStatus = schools.map(s => {
-    const assignment = assignments.find(a => a.targetSchoolId === s.id && a.academicYear === selectedAcademicYear);
+  const schoolsWithStatus = schools.map((s) => {
+    const assignment = assignments.find(
+      (a) =>
+        a.targetSchoolId === s.id && a.academicYear === selectedAcademicYear,
+    );
     return { ...s, assignment };
   });
 
-  const filteredSchools = schoolsWithStatus.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
-      (s as any).schoolname?.toLowerCase().includes(schoolSearchQuery.toLowerCase());
-    const matchesTab = assignmentSubTab === "assigned" ? !!s.assignment : !s.assignment;
-    const matchesForane = assignFilterSchoolForane === "All" || (s as any).forane === assignFilterSchoolForane;
+  const filteredSchools = schoolsWithStatus.filter((s) => {
+    const matchesSearch =
+      s.name.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
+      (s as any).schoolname
+        ?.toLowerCase()
+        .includes(schoolSearchQuery.toLowerCase());
+    const matchesTab =
+      assignmentSubTab === "assigned" ? !!s.assignment : !s.assignment;
+    const matchesForane =
+      assignFilterSchoolForane === "All" ||
+      (s as any).forane === assignFilterSchoolForane;
     return matchesSearch && matchesTab && matchesForane;
   });
 
@@ -282,17 +313,23 @@ export function Observers() {
     if (dirFilterForane && dirFilterForane !== "All") {
       result = result.filter((t: any) => {
         const p = sourceParishes.find((s: any) =>
-          s.ids ? s.ids.includes(t.parishId || t.schoolId) : s.id === (t.parishId || t.schoolId)
+          s.ids
+            ? s.ids.includes(t.parishId || t.schoolId)
+            : s.id === (t.parishId || t.schoolId),
         );
         return p?.forane === dirFilterForane;
       });
     }
     if (dirFilterParishId && dirFilterParishId !== "All") {
-      const selected = sourceParishes.find(p => p.id === dirFilterParishId);
+      const selected = sourceParishes.find((p) => p.id === dirFilterParishId);
       if (selected && selected.ids) {
-        result = result.filter((t: any) => selected.ids.includes(t.parishId || t.schoolId));
+        result = result.filter((t: any) =>
+          selected.ids.includes(t.parishId || t.schoolId),
+        );
       } else {
-        result = result.filter((t: any) => (t.parishId || t.schoolId) === dirFilterParishId);
+        result = result.filter(
+          (t: any) => (t.parishId || t.schoolId) === dirFilterParishId,
+        );
       }
     }
     if (dirFilterClass && dirFilterClass !== "All") {
@@ -320,7 +357,7 @@ export function Observers() {
         teacher,
         selectedTargetSchool,
         selectedAcademicYear,
-        "Observer"
+        "Observer",
       );
       toast.success(`Assigned ${teacher.name} successfully`);
       setIsAssignDialogOpen(false);
@@ -332,9 +369,9 @@ export function Observers() {
     }
   };
 
-
   const handleDelete = async (assignmentId: string, teacherId: string) => {
-    if (!window.confirm("Are you sure you want to remove this assignment?")) return;
+    if (!window.confirm("Are you sure you want to remove this assignment?"))
+      return;
     try {
       await AssignmentService.deleteAssignment(assignmentId, teacherId);
       toast.success("Assignment removed");
@@ -362,7 +399,9 @@ export function Observers() {
       return;
     }
     setIsSavingRemark(true);
-    const teacher = allTeachers.find((t: any) => t.id === remarkAssignment.teacherId);
+    const teacher = allTeachers.find(
+      (t: any) => t.id === remarkAssignment.teacherId,
+    );
     try {
       await RemarkService.addRemark({
         teacherId: remarkAssignment.teacherId,
@@ -385,20 +424,25 @@ export function Observers() {
     const filtered = assignments.filter((a) => {
       const teacher = allTeachers.find((t: any) => t.id === a.teacherId);
       const assignedParish = schools.find((p: any) =>
-        p.ids ? p.ids.includes(a.targetSchoolId) : p.id === a.targetSchoolId
+        p.ids ? p.ids.includes(a.targetSchoolId) : p.id === a.targetSchoolId,
       );
       if (!teacher || !assignedParish) return false;
 
       sourceParishes.find((p: any) =>
-        p.ids ? p.ids.includes(teacher.parishId || teacher.schoolId) : p.id === (teacher.parishId || teacher.schoolId)
+        p.ids
+          ? p.ids.includes(teacher.parishId || teacher.schoolId)
+          : p.id === (teacher.parishId || teacher.schoolId),
       );
 
       const matchesForane =
-        rptAssignForane === "All" || (assignedParish.forane === rptAssignForane);
+        rptAssignForane === "All" || assignedParish.forane === rptAssignForane;
 
-      const selectedSource = schools.find(p => p.id === rptAssignParishId);
+      const selectedSource = schools.find((p) => p.id === rptAssignParishId);
       const matchesParish =
-        rptAssignParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(a.targetSchoolId) : a.targetSchoolId === rptAssignParishId);
+        rptAssignParishId === "All" ||
+        (selectedSource?.ids
+          ? selectedSource.ids.includes(a.targetSchoolId)
+          : a.targetSchoolId === rptAssignParishId);
 
       const matchesYear =
         rptAssignYear === "All" || a.academicYear === rptAssignYear;
@@ -416,7 +460,7 @@ export function Observers() {
         allUsers as any,
         rptAssignForane,
         rptAssignParishId,
-        rptAssignYear
+        rptAssignYear,
       );
       toast.success(
         `Assignment report generated for ${filtered.length} record(s).`,
@@ -429,15 +473,22 @@ export function Observers() {
   const handleGenerateDirectoryReport = async () => {
     const filtered = allTeachers.filter((t: any) => {
       const homeParish = sourceParishes.find((p: any) =>
-        p.ids ? p.ids.includes(t.parishId || t.schoolId) : p.id === (t.parishId || t.schoolId)
+        p.ids
+          ? p.ids.includes(t.parishId || t.schoolId)
+          : p.id === (t.parishId || t.schoolId),
       );
 
       const matchesForane =
-        rptDirForane === "All" || (homeParish?.forane === rptDirForane);
+        rptDirForane === "All" || homeParish?.forane === rptDirForane;
 
-      const selectedSource = sourceParishes.find(p => p.id === rptDirParishId);
+      const selectedSource = sourceParishes.find(
+        (p) => p.id === rptDirParishId,
+      );
       const matchesParish =
-        rptDirParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(t.parishId || t.schoolId) : (t.parishId || t.schoolId) === rptDirParishId);
+        rptDirParishId === "All" ||
+        (selectedSource?.ids
+          ? selectedSource.ids.includes(t.parishId || t.schoolId)
+          : (t.parishId || t.schoolId) === rptDirParishId);
 
       const matchesYear = rptDirYear === "All" || t.academicYear === rptDirYear;
       return matchesForane && matchesParish && matchesYear;
@@ -453,7 +504,7 @@ export function Observers() {
         allUsers as any,
         rptDirForane,
         rptDirParishId,
-        rptDirYear
+        rptDirYear,
       );
       toast.success(
         `Observer directory report generated for ${filtered.length} observer(s).`,
@@ -486,10 +537,9 @@ export function Observers() {
       ? sourceParishes
       : sourceParishes.filter((p: any) => p.forane === dirFilterForane);
 
-
   // Unique foranes from schools for assignment dialog filter
   const uniqueAssignForanes = Array.from(
-    new Set(schools.map((s: any) => s.forane).filter(Boolean))
+    new Set(schools.map((s: any) => s.forane).filter(Boolean)),
   ).sort() as string[];
 
   // No-op for now
@@ -511,13 +561,16 @@ export function Observers() {
             size="sm"
             className="gap-2"
             onClick={() => {
-              const dateInput = document.createElement('input');
-              dateInput.type = 'date';
+              const dateInput = document.createElement("input");
+              dateInput.type = "date";
               dateInput.onchange = async (e) => {
                 const newDate = (e.target as HTMLInputElement).value;
                 if (newDate) {
                   try {
-                    await AssignmentService.setExpirationDate(selectedAcademicYear, new Date(newDate));
+                    await AssignmentService.setExpirationDate(
+                      selectedAcademicYear,
+                      new Date(newDate),
+                    );
                     setExpirationDate(new Date(newDate));
                     toast.success("Expiration date updated");
                   } catch (err) {
@@ -529,12 +582,28 @@ export function Observers() {
             }}
           >
             <Calendar className="h-4 w-4" />
-            {expirationDate ? new Date(expirationDate).toLocaleDateString() : "Set Expiration"}
+            {expirationDate
+              ? new Date(expirationDate).toLocaleDateString()
+              : "Set Expiration"}
           </Button>
-          <div className="bg-indigo-900 text-white px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-semibold shadow-sm">
-            <History className="h-4 w-4 opacity-70" />
-            {selectedAcademicYear}
-          </div>
+          <Select
+            value={selectedAcademicYear}
+            onValueChange={setSelectedAcademicYear}
+          >
+            <SelectTrigger className="w-[120px] bg-indigo-900 text-white border-none shadow-sm focus:ring-0">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <History className="h-4 w-4 opacity-70" />
+                <SelectValue placeholder="Year" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {uniqueAcademicYears.map((year) => (
+                <SelectItem key={year} value={year}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -550,22 +619,30 @@ export function Observers() {
             <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm">
               <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
                 <Button
-                  variant={assignmentSubTab === "unassigned" ? "secondary" : "ghost"}
+                  variant={
+                    assignmentSubTab === "unassigned" ? "secondary" : "ghost"
+                  }
                   size="sm"
                   className={cn(
                     "rounded-md px-6 font-semibold",
-                    assignmentSubTab === "unassigned" ? "bg-white shadow-sm text-indigo-900" : "text-gray-500"
+                    assignmentSubTab === "unassigned"
+                      ? "bg-white shadow-sm text-indigo-900"
+                      : "text-gray-500",
                   )}
                   onClick={() => setAssignmentSubTab("unassigned")}
                 >
                   Unassigned
                 </Button>
                 <Button
-                  variant={assignmentSubTab === "assigned" ? "secondary" : "ghost"}
+                  variant={
+                    assignmentSubTab === "assigned" ? "secondary" : "ghost"
+                  }
                   size="sm"
                   className={cn(
                     "rounded-md px-6 font-semibold",
-                    assignmentSubTab === "assigned" ? "bg-white shadow-sm text-indigo-900" : "text-gray-500"
+                    assignmentSubTab === "assigned"
+                      ? "bg-white shadow-sm text-indigo-900"
+                      : "text-gray-500",
                   )}
                   onClick={() => setAssignmentSubTab("assigned")}
                 >
@@ -605,13 +682,20 @@ export function Observers() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredSchools.map((school) => (
-                <Card key={school.id} className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow">
+                <Card
+                  key={school.id}
+                  className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow"
+                >
                   <CardContent className="p-0">
                     <div className="p-4 flex gap-4 items-start">
-                      <div className={cn(
-                        "p-3 rounded-xl",
-                        school.assignment ? "bg-indigo-50 text-indigo-700" : "bg-orange-50 text-orange-700"
-                      )}>
+                      <div
+                        className={cn(
+                          "p-3 rounded-xl",
+                          school.assignment
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "bg-orange-50 text-orange-700",
+                        )}
+                      >
                         <ArrowRight className="h-6 w-6" />
                       </div>
                       <div className="flex-1 space-y-1">
@@ -627,27 +711,59 @@ export function Observers() {
                               From: {school.assignment.sourceSchoolName}
                             </p>
                             <div className="flex justify-between items-center mt-3">
-                              <Badge variant="outline" className="text-[10px] bg-indigo-50/50 border-indigo-100 uppercase tracking-wider font-bold text-indigo-700 px-2">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-indigo-50/50 border-indigo-100 uppercase tracking-wider font-bold text-indigo-700 px-2"
+                              >
                                 {school.assignment.accessCode}
                               </Badge>
                               <div className="flex gap-1">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:bg-indigo-50 focus-visible:ring-0 focus-visible:ring-offset-0">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-indigo-500 hover:bg-indigo-50 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    >
                                       <FileDown className="h-4 w-4" />
                                     </Button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-56 font-medium">
-                                    <DropdownMenuItem onClick={() => {
-                                      toast.info("Generating Duty Order PDF...");
-                                      IndividualObserverPdfService.generateDutyOrderPdf(school.assignment, expirationDate ? expirationDate.toISOString() : null).catch(() => toast.error("Failed to generate PDF"));
-                                    }}>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    className="w-56 font-medium"
+                                  >
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        toast.info(
+                                          "Generating Duty Order PDF...",
+                                        );
+                                        IndividualObserverPdfService.generateDutyOrderPdf(
+                                          school.assignment,
+                                          expirationDate
+                                            ? expirationDate.toISOString()
+                                            : null,
+                                        ).catch(() =>
+                                          toast.error("Failed to generate PDF"),
+                                        );
+                                      }}
+                                    >
                                       Duty Order (Observer)
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => {
-                                      toast.info("Generating Admin Report PDF...");
-                                      IndividualObserverPdfService.generateAdminReportPdf(school.assignment, expirationDate ? expirationDate.toISOString() : null).catch(() => toast.error("Failed to generate PDF"));
-                                    }}>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        toast.info(
+                                          "Generating Admin Report PDF...",
+                                        );
+                                        IndividualObserverPdfService.generateAdminReportPdf(
+                                          school.assignment,
+                                          expirationDate
+                                            ? expirationDate.toISOString()
+                                            : null,
+                                        ).catch(() =>
+                                          toast.error("Failed to generate PDF"),
+                                        );
+                                      }}
+                                    >
                                       Assignment Record (Admin)
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -656,7 +772,11 @@ export function Observers() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-indigo-500 hover:bg-indigo-50"
-                                  onClick={() => setViewSubmissionAssignment(school.assignment)}
+                                  onClick={() =>
+                                    setViewSubmissionAssignment(
+                                      school.assignment,
+                                    )
+                                  }
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
@@ -675,7 +795,12 @@ export function Observers() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-red-500 hover:bg-red-50"
-                                  onClick={() => handleDelete(school.assignment.id, school.assignment.teacherId)}
+                                  onClick={() =>
+                                    handleDelete(
+                                      school.assignment.id,
+                                      school.assignment.teacherId,
+                                    )
+                                  }
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -684,7 +809,9 @@ export function Observers() {
                           </>
                         ) : (
                           <>
-                            <p className="text-sm text-gray-500 italic">No observer assigned</p>
+                            <p className="text-sm text-gray-500 italic">
+                              No observer assigned
+                            </p>
                             <Button
                               className="w-full mt-4 bg-indigo-900 hover:bg-indigo-800 text-white font-bold"
                               onClick={() => {
@@ -710,7 +837,9 @@ export function Observers() {
                   <div className="bg-gray-100 h-20 w-20 rounded-full flex items-center justify-center mx-auto">
                     <History className="h-10 w-10 text-gray-300" />
                   </div>
-                  <p className="text-gray-500 font-medium">No {assignmentSubTab} schools found.</p>
+                  <p className="text-gray-500 font-medium">
+                    No {assignmentSubTab} schools found.
+                  </p>
                 </div>
               )}
             </div>
@@ -840,12 +969,20 @@ export function Observers() {
                         (t) => t.id === a.teacherId,
                       );
                       const ap = schools.find((p: any) =>
-                        p.ids ? p.ids.includes(a.targetSchoolId) : p.id === a.targetSchoolId
+                        p.ids
+                          ? p.ids.includes(a.targetSchoolId)
+                          : p.id === a.targetSchoolId,
                       );
                       if (!teacher || !ap) return false;
 
-                      const selectedSource = schools.find(p => p.id === rptAssignParishId);
-                      const matchesParish = rptAssignParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(a.targetSchoolId) : a.targetSchoolId === rptAssignParishId);
+                      const selectedSource = schools.find(
+                        (p) => p.id === rptAssignParishId,
+                      );
+                      const matchesParish =
+                        rptAssignParishId === "All" ||
+                        (selectedSource?.ids
+                          ? selectedSource.ids.includes(a.targetSchoolId)
+                          : a.targetSchoolId === rptAssignParishId);
 
                       return (
                         (rptAssignForane === "All" ||
@@ -893,10 +1030,20 @@ export function Observers() {
                   {(() => {
                     const filtered = allTeachers.filter((t: any) => {
                       const hp = sourceParishes.find((p: any) =>
-                        p.ids ? p.ids.includes(t.parishId || t.schoolId) : p.id === (t.parishId || t.schoolId)
+                        p.ids
+                          ? p.ids.includes(t.parishId || t.schoolId)
+                          : p.id === (t.parishId || t.schoolId),
                       );
-                      const selectedSource = sourceParishes.find(p => p.id === rptDirParishId);
-                      const matchesParish = rptDirParishId === "All" || (selectedSource?.ids ? selectedSource.ids.includes(t.parishId || t.schoolId) : (t.parishId || t.schoolId) === rptDirParishId);
+                      const selectedSource = sourceParishes.find(
+                        (p) => p.id === rptDirParishId,
+                      );
+                      const matchesParish =
+                        rptDirParishId === "All" ||
+                        (selectedSource?.ids
+                          ? selectedSource.ids.includes(
+                              t.parishId || t.schoolId,
+                            )
+                          : (t.parishId || t.schoolId) === rptDirParishId);
 
                       return (
                         (rptDirForane === "All" ||
@@ -925,12 +1072,19 @@ export function Observers() {
           <DialogHeader className="p-6 bg-indigo-950 text-white rounded-t-none">
             <div className="flex justify-between items-center">
               <div>
-                <DialogTitle className="text-xl font-bold">Assign Observer</DialogTitle>
+                <DialogTitle className="text-xl font-bold">
+                  Assign Observer
+                </DialogTitle>
                 <p className="text-indigo-300 text-xs mt-1 uppercase font-bold tracking-wider">
-                  Target: {selectedTargetSchool?.schoolname || selectedTargetSchool?.name}
+                  Target:{" "}
+                  {selectedTargetSchool?.schoolname ||
+                    selectedTargetSchool?.name}
                 </p>
               </div>
-              <Badge variant="outline" className="border-indigo-400 text-indigo-200">
+              <Badge
+                variant="outline"
+                className="border-indigo-400 text-indigo-200"
+              >
                 {selectedAcademicYear}
               </Badge>
             </div>
@@ -940,55 +1094,82 @@ export function Observers() {
             {/* Filters Section */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Forane</Label>
-                <Select value={assignFilterForane} onValueChange={(val) => {
-                  setAssignFilterForane(val);
-                  setAssignFilterParishId("All"); // reset school when forane changes
-                }}>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">
+                  Forane
+                </Label>
+                <Select
+                  value={assignFilterForane}
+                  onValueChange={(val) => {
+                    setAssignFilterForane(val);
+                    setAssignFilterParishId("All"); // reset school when forane changes
+                  }}
+                >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="All Foranes" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Foranes</SelectItem>
-                    {uniqueAssignForanes.map(f => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    {uniqueAssignForanes.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">School</Label>
-                <Select value={assignFilterParishId} onValueChange={setAssignFilterParishId}>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">
+                  School
+                </Label>
+                <Select
+                  value={assignFilterParishId}
+                  onValueChange={setAssignFilterParishId}
+                >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="All Schools" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Schools</SelectItem>
                     {schools
-                      .filter(s => s.id !== selectedTargetSchool?.id && (assignFilterForane === "All" || s.forane === assignFilterForane))
-                      .map(s => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))
-                    }
+                      .filter(
+                        (s) =>
+                          s.id !== selectedTargetSchool?.id &&
+                          (assignFilterForane === "All" ||
+                            s.forane === assignFilterForane),
+                      )
+                      .map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Class</Label>
-                <Select value={assignFilterClass} onValueChange={setAssignFilterClass}>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">
+                  Class
+                </Label>
+                <Select
+                  value={assignFilterClass}
+                  onValueChange={setAssignFilterClass}
+                >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="All Classes" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Classes</SelectItem>
-                    {uniqueClasses.map(cls => (
-                      <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+                    {uniqueClasses.map((cls) => (
+                      <SelectItem key={cls} value={cls}>
+                        {cls}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Search Name</Label>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">
+                  Search Name
+                </Label>
                 <div className="relative">
                   <Input
                     placeholder="Search..."
@@ -1004,39 +1185,103 @@ export function Observers() {
             {/* Selection Area */}
             <div className="border rounded-xl bg-slate-50/50 overflow-hidden">
               <div className="p-3 border-b bg-white flex justify-between items-center">
-                <h3 className="text-xs font-bold text-slate-600 uppercase">Available Observers</h3>
+                <h3 className="text-xs font-bold text-slate-600 uppercase">
+                  Available Observers
+                </h3>
                 <span className="text-[10px] font-bold text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-full">
-                  {allTeachers.filter(t => {
-                    const teacherSchool = schools.find(s => s.id === t.schoolId);
-                    const matchesForane = assignFilterForane === "All" || teacherSchool?.forane === assignFilterForane;
-                    const matchesSchool = assignFilterParishId === "All" || t.schoolId === assignFilterParishId;
-                    const matchesClass = assignFilterClass === "All" || (t.classes && (Array.isArray(t.classes) ? t.classes.includes(assignFilterClass) : String(t.classes) === assignFilterClass));
-                    const matchesSearch = t.name.toLowerCase().includes(assignSearchQuery.toLowerCase());
-                    const isEligible = t.schoolId !== selectedTargetSchool?.id && !assignments.some(a => a.teacherId === t.id && a.academicYear === selectedAcademicYear);
-                    return matchesForane && matchesSchool && matchesClass && matchesSearch && isEligible;
-                  }).length} found
+                  {
+                    allTeachers.filter((t) => {
+                      const teacherSchool = schools.find(
+                        (s) => s.id === t.schoolId,
+                      );
+                      const matchesForane =
+                        assignFilterForane === "All" ||
+                        teacherSchool?.forane === assignFilterForane;
+                      const matchesSchool =
+                        assignFilterParishId === "All" ||
+                        t.schoolId === assignFilterParishId;
+                      const matchesClass =
+                        assignFilterClass === "All" ||
+                        (t.classes &&
+                          (Array.isArray(t.classes)
+                            ? t.classes.includes(assignFilterClass)
+                            : String(t.classes) === assignFilterClass));
+                      const matchesSearch = t.name
+                        .toLowerCase()
+                        .includes(assignSearchQuery.toLowerCase());
+                      const isEligible =
+                        t.schoolId !== selectedTargetSchool?.id &&
+                        !assignments.some(
+                          (a) =>
+                            a.teacherId === t.id &&
+                            a.academicYear === selectedAcademicYear,
+                        );
+                      return (
+                        matchesForane &&
+                        matchesSchool &&
+                        matchesClass &&
+                        matchesSearch &&
+                        isEligible
+                      );
+                    }).length
+                  }{" "}
+                  found
                 </span>
               </div>
               <div className="h-[300px] overflow-y-auto p-2 space-y-1">
                 {allTeachers
-                  .filter(t => {
-                    const teacherSchool = schools.find(s => s.id === t.schoolId);
-                    const matchesForane = assignFilterForane === "All" || teacherSchool?.forane === assignFilterForane;
-                    const matchesSchool = assignFilterParishId === "All" || t.schoolId === assignFilterParishId;
-                    const matchesClass = assignFilterClass === "All" || (t.classes && (Array.isArray(t.classes) ? t.classes.includes(assignFilterClass) : String(t.classes) === assignFilterClass));
-                    const matchesSearch = t.name.toLowerCase().includes(assignSearchQuery.toLowerCase());
-                    const isEligible = t.schoolId !== selectedTargetSchool?.id && !assignments.some(a => a.teacherId === t.id && a.academicYear === selectedAcademicYear);
-                    return matchesForane && matchesSchool && matchesClass && matchesSearch && isEligible;
+                  .filter((t) => {
+                    const teacherSchool = schools.find(
+                      (s) => s.id === t.schoolId,
+                    );
+                    const matchesForane =
+                      assignFilterForane === "All" ||
+                      teacherSchool?.forane === assignFilterForane;
+                    const matchesSchool =
+                      assignFilterParishId === "All" ||
+                      t.schoolId === assignFilterParishId;
+                    const matchesClass =
+                      assignFilterClass === "All" ||
+                      (t.classes &&
+                        (Array.isArray(t.classes)
+                          ? t.classes.includes(assignFilterClass)
+                          : String(t.classes) === assignFilterClass));
+                    const matchesSearch = t.name
+                      .toLowerCase()
+                      .includes(assignSearchQuery.toLowerCase());
+                    const isEligible =
+                      t.schoolId !== selectedTargetSchool?.id &&
+                      !assignments.some(
+                        (a) =>
+                          a.teacherId === t.id &&
+                          a.academicYear === selectedAcademicYear,
+                      );
+                    return (
+                      matchesForane &&
+                      matchesSchool &&
+                      matchesClass &&
+                      matchesSearch &&
+                      isEligible
+                    );
                   })
-                  .map(teacher => (
+                  .map((teacher) => (
                     <div
                       key={teacher.id}
                       className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 hover:border-indigo-300 hover:shadow-sm transition-all group"
                     >
                       <div>
-                        <p className="font-bold text-slate-900 leading-tight">{teacher.name}</p>
+                        <p className="font-bold text-slate-900 leading-tight">
+                          {teacher.name}
+                        </p>
                         <p className="text-[10px] text-slate-500 mt-0.5">
-                          {(teacher as any).schoolName || schools.find(s => s.id === (teacher as any).schoolId)?.name} • Class {Array.isArray(teacher.classes) ? teacher.classes.join(", ") : (teacher.classes || "N/A")}
+                          {(teacher as any).schoolName ||
+                            schools.find(
+                              (s) => s.id === (teacher as any).schoolId,
+                            )?.name}{" "}
+                          • Class{" "}
+                          {Array.isArray(teacher.classes)
+                            ? teacher.classes.join(", ")
+                            : teacher.classes || "N/A"}
                         </p>
                       </div>
                       <Button
@@ -1046,32 +1291,66 @@ export function Observers() {
                         onClick={() => handleAssign(teacher)}
                         disabled={!!assigning}
                       >
-                        {assigning === teacher.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Assign"}
+                        {assigning === teacher.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Assign"
+                        )}
                       </Button>
                     </div>
                   ))}
-                {allTeachers.filter(t => {
-                  const teacherSchool = schools.find(s => s.id === t.schoolId);
-                  const matchesForane = assignFilterForane === "All" || teacherSchool?.forane === assignFilterForane;
-                  const matchesSchool = assignFilterParishId === "All" || t.schoolId === assignFilterParishId;
-                  const matchesClass = assignFilterClass === "All" || (t.classes && (Array.isArray(t.classes) ? t.classes.includes(assignFilterClass) : String(t.classes) === assignFilterClass));
-                  const matchesSearch = t.name.toLowerCase().includes(assignSearchQuery.toLowerCase());
-                  const isEligible = t.schoolId !== selectedTargetSchool?.id && !assignments.some(a => a.teacherId === t.id && a.academicYear === selectedAcademicYear);
-                  return matchesForane && matchesSchool && matchesClass && matchesSearch && isEligible;
+                {allTeachers.filter((t) => {
+                  const teacherSchool = schools.find(
+                    (s) => s.id === t.schoolId,
+                  );
+                  const matchesForane =
+                    assignFilterForane === "All" ||
+                    teacherSchool?.forane === assignFilterForane;
+                  const matchesSchool =
+                    assignFilterParishId === "All" ||
+                    t.schoolId === assignFilterParishId;
+                  const matchesClass =
+                    assignFilterClass === "All" ||
+                    (t.classes &&
+                      (Array.isArray(t.classes)
+                        ? t.classes.includes(assignFilterClass)
+                        : String(t.classes) === assignFilterClass));
+                  const matchesSearch = t.name
+                    .toLowerCase()
+                    .includes(assignSearchQuery.toLowerCase());
+                  const isEligible =
+                    t.schoolId !== selectedTargetSchool?.id &&
+                    !assignments.some(
+                      (a) =>
+                        a.teacherId === t.id &&
+                        a.academicYear === selectedAcademicYear,
+                    );
+                  return (
+                    matchesForane &&
+                    matchesSchool &&
+                    matchesClass &&
+                    matchesSearch &&
+                    isEligible
+                  );
                 }).length === 0 && (
-                    <div className="py-20 text-center text-slate-400 italic text-sm">
-                      No eligible observers found matching your filters.
-                    </div>
-                  )}
+                  <div className="py-20 text-center text-slate-400 italic text-sm">
+                    No eligible observers found matching your filters.
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           <DialogFooter className="p-4 bg-slate-50 border-t items-center gap-2">
             <p className="text-[10px] text-slate-400 mr-auto ml-2">
-              Note: Teachers already assigned for {selectedAcademicYear} are hidden.
+              Note: Teachers already assigned for {selectedAcademicYear} are
+              hidden.
             </p>
-            <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="text-slate-500">
+            <Button
+              variant="ghost"
+              onClick={() => setIsAssignDialogOpen(false)}
+              className="text-slate-500"
+            >
               Cancel
             </Button>
           </DialogFooter>
@@ -1081,20 +1360,24 @@ export function Observers() {
       {/* ─── SUBMISSION VIEW DIALOG ─── */}
       <Dialog
         open={!!viewSubmissionAssignment}
-        onOpenChange={(open) => { if (!open) setViewSubmissionAssignment(null); }}
+        onOpenChange={(open) => {
+          if (!open) setViewSubmissionAssignment(null);
+        }}
       >
         <DialogContent className="max-w-lg bg-white border-none shadow-2xl p-0 overflow-hidden">
           {/* Header */}
           <div className="bg-gradient-to-br from-indigo-950 to-indigo-700 p-6 text-white">
             <div className="flex justify-between items-start mb-1">
-              <DialogTitle className="text-lg font-bold text-white">Observer Submission</DialogTitle>
+              <DialogTitle className="text-lg font-bold text-white">
+                Observer Submission
+              </DialogTitle>
               <Badge
                 variant="outline"
                 className={cn(
                   "text-[10px] font-bold uppercase border px-2",
                   viewSubmissionAssignment?.remarks
                     ? "border-green-400 text-green-300 bg-green-900/30"
-                    : "border-yellow-400 text-yellow-300 bg-yellow-900/30"
+                    : "border-yellow-400 text-yellow-300 bg-yellow-900/30",
                 )}
               >
                 {viewSubmissionAssignment?.remarks ? "Submitted" : "Pending"}
@@ -1116,23 +1399,38 @@ export function Observers() {
                 </div>
                 <div>
                   <p className="font-bold text-indigo-950 text-base leading-tight">
-                    {viewSubmissionAssignment?.teacherName ?? "Unknown Observer"}
+                    {viewSubmissionAssignment?.teacherName ??
+                      "Unknown Observer"}
                   </p>
-                  <p className="text-[11px] text-indigo-500 font-semibold uppercase tracking-wide">Observer</p>
+                  <p className="text-[11px] text-indigo-500 font-semibold uppercase tracking-wide">
+                    Observer
+                  </p>
                 </div>
               </div>
               <div className="border-t border-indigo-100 pt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Target School</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">
+                    Target School
+                  </p>
                   <p className="text-sm font-bold text-indigo-950 mt-0.5">
                     {viewSubmissionAssignment?.targetSchoolName ?? "—"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Submitted</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">
+                    Submitted
+                  </p>
                   <p className="text-sm font-bold text-indigo-950 mt-0.5">
                     {viewSubmissionAssignment?.remarksSubmittedAt
-                      ? new Date((viewSubmissionAssignment.remarksSubmittedAt as any).seconds * 1000).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+                      ? new Date(
+                          (viewSubmissionAssignment.remarksSubmittedAt as any)
+                            .seconds * 1000,
+                        ).toLocaleString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                       : "Pending"}
                   </p>
                 </div>
@@ -1145,18 +1443,28 @@ export function Observers() {
                 <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
                   <span className="text-blue-600 text-xs font-bold">#</span>
                 </div>
-                <p className="font-bold text-slate-800 text-sm">Attendance Metrics</p>
+                <p className="font-bold text-slate-800 text-sm">
+                  Attendance Metrics
+                </p>
               </div>
               <div className="flex justify-between items-center">
-                <p className="text-sm text-slate-500 font-medium">Total Attendance</p>
+                <p className="text-sm text-slate-500 font-medium">
+                  Total Attendance
+                </p>
                 <p className="text-lg font-bold text-indigo-900">
-                  {viewSubmissionAssignment?.totalAttendance ?? <span className="text-slate-400 text-sm italic">N/A</span>}
+                  {viewSubmissionAssignment?.totalAttendance ?? (
+                    <span className="text-slate-400 text-sm italic">N/A</span>
+                  )}
                 </p>
               </div>
               <div className="border-t pt-3">
-                <p className="text-[10px] text-slate-400 uppercase font-bold mb-2">Absentees</p>
+                <p className="text-[10px] text-slate-400 uppercase font-bold mb-2">
+                  Absentees
+                </p>
                 <p className="text-sm text-indigo-900 font-medium leading-relaxed whitespace-pre-line">
-                  {viewSubmissionAssignment?.absentees || <span className="italic text-slate-400">None reported</span>}
+                  {viewSubmissionAssignment?.absentees || (
+                    <span className="italic text-slate-400">None reported</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -1167,16 +1475,26 @@ export function Observers() {
                 <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
                   <Eye className="h-3.5 w-3.5 text-indigo-600" />
                 </div>
-                <p className="font-bold text-slate-800 text-sm">Observer Remarks</p>
+                <p className="font-bold text-slate-800 text-sm">
+                  Observer Remarks
+                </p>
               </div>
               <p className="text-sm text-indigo-900 leading-relaxed whitespace-pre-line">
-                {viewSubmissionAssignment?.remarks || <span className="italic text-slate-400">No remarks submitted yet.</span>}
+                {viewSubmissionAssignment?.remarks || (
+                  <span className="italic text-slate-400">
+                    No remarks submitted yet.
+                  </span>
+                )}
               </p>
             </div>
           </div>
 
           <DialogFooter className="px-6 pb-5">
-            <Button variant="outline" onClick={() => setViewSubmissionAssignment(null)} className="w-full">
+            <Button
+              variant="outline"
+              onClick={() => setViewSubmissionAssignment(null)}
+              className="w-full"
+            >
               Close
             </Button>
           </DialogFooter>
@@ -1187,7 +1505,10 @@ export function Observers() {
       <Dialog
         open={!!remarkAssignment}
         onOpenChange={(open) => {
-          if (!open) { setRemarkAssignment(null); setRemarkText(""); }
+          if (!open) {
+            setRemarkAssignment(null);
+            setRemarkText("");
+          }
         }}
       >
         <DialogContent className="max-w-lg">
@@ -1204,10 +1525,17 @@ export function Observers() {
                 {existingRemarks.length > 0 && (
                   <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
                     {existingRemarks.map((r) => (
-                      <div key={r.id} className="text-sm border-b last:border-0 pb-2">
+                      <div
+                        key={r.id}
+                        className="text-sm border-b last:border-0 pb-2"
+                      >
                         <p className="text-foreground">{r.remark}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {r.createdAt ? new Date((r.createdAt as any).seconds * 1000).toLocaleString() : ""}
+                          {r.createdAt
+                            ? new Date(
+                                (r.createdAt as any).seconds * 1000,
+                              ).toLocaleString()
+                            : ""}
                         </p>
                       </div>
                     ))}
@@ -1226,12 +1554,23 @@ export function Observers() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRemarkAssignment(null); setRemarkText(""); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRemarkAssignment(null);
+                setRemarkText("");
+              }}
+            >
               Close
             </Button>
-            <Button onClick={handleSaveRemark} disabled={isSavingRemark || !remarkText.trim()}>
+            <Button
+              onClick={handleSaveRemark}
+              disabled={isSavingRemark || !remarkText.trim()}
+            >
               {isSavingRemark ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                </>
               ) : (
                 "Save Remark"
               )}

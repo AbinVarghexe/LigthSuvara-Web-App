@@ -985,10 +985,14 @@ export function Programs() {
                                           {idx + 1}
                                         </TableCell>
                                         <TableCell className="font-medium">
-                                          {reg.studentName}
+                                          {reg.isCountOnly
+                                            ? `${reg.studentCount} Students (Bulk)`
+                                            : reg.studentName}
                                         </TableCell>
                                         <TableCell>
-                                          {reg.studentPhone}
+                                          {reg.isCountOnly
+                                            ? "-"
+                                            : reg.studentPhone}
                                         </TableCell>
                                         <TableCell>
                                           <Badge
@@ -1020,7 +1024,10 @@ export function Programs() {
                                     <CardContent className="p-3 space-y-1.5">
                                       <div className="flex items-center justify-between">
                                         <span className="font-medium text-sm">
-                                          {idx + 1}. {reg.studentName}
+                                          {idx + 1}.{" "}
+                                          {reg.isCountOnly
+                                            ? `${reg.studentCount} Students (Bulk)`
+                                            : reg.studentName}
                                         </span>
                                         <Badge
                                           className={getStatusColor(reg.status)}
@@ -1031,7 +1038,9 @@ export function Programs() {
                                       </div>
                                       <div className="flex items-center gap-1.5 text-xs text-gray-500">
                                         <Phone className="h-3 w-3" />
-                                        {reg.studentPhone}
+                                        {reg.isCountOnly
+                                          ? "-"
+                                          : reg.studentPhone}
                                       </div>
                                       <div className="flex items-center gap-1.5 text-xs text-gray-500">
                                         <Clock className="h-3 w-3" />

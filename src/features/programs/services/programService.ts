@@ -140,12 +140,17 @@ export const updateRegistrationStatus = async (
 
 export const getRegistrationStats = async (programId?: string) => {
     const registrations = await getProgramRegistrations(programId);
+    
+    const countStudents = (regs: ProgramRegistration[]) => {
+        return regs.reduce((sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
+    };
+
     const stats = {
-        total: registrations.length,
-        pending: registrations.filter(r => r.status === 'pending_parish').length,
-        approved: registrations.filter(r => r.status === 'approved_parish').length,
-        locked: registrations.filter(r => r.status === 'locked').length,
-        rejected: registrations.filter(r => r.status === 'rejected').length
+        total: countStudents(registrations),
+        pending: countStudents(registrations.filter(r => r.status === 'pending_parish')),
+        approved: countStudents(registrations.filter(r => r.status === 'approved_parish')),
+        locked: countStudents(registrations.filter(r => r.status === 'locked')),
+        rejected: countStudents(registrations.filter(r => r.status === 'rejected'))
     };
     return stats;
 };
