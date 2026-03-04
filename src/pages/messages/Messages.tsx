@@ -63,6 +63,7 @@ export function Messages() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [schools, setSchools] = useState<UserData[]>([]);
+  const [parishes, setParishes] = useState<UserData[]>([]);
 
   // Image attachment state
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -119,6 +120,7 @@ export function Messages() {
       try {
         const users = await getUsers();
         setSchools(users.filter((u) => u.role === "school"));
+        setParishes(users.filter((u) => u.role === "parish"));
       } catch (error) {
         console.error("Error fetching users:", error);
       }
@@ -950,13 +952,17 @@ export function Messages() {
           <div className="max-h-[400px] overflow-y-auto space-y-2 py-2">
             {selectedNotification?.readBy?.map((uid) => {
               const school = schools.find((s) => s.id === uid);
-              const schoolName =
-                school?.schoolname ||
-                school?.schoolName ||
-                school?.fullName ||
-                school?.email ||
+              const parish = !school ? parishes.find((p) => p.id === uid) : undefined;
+              const user = school || parish;
+              const displayName =
+                user?.schoolname ||
+                user?.schoolName ||
+                user?.fullName ||
+                user?.name ||
+                user?.email ||
                 "Unknown User";
-              const location = school?.forane || "";
+              const name = parish ? `${displayName} (Parish)` : displayName;
+              const location = user?.forane || "";
 
               return (
                 <div
@@ -967,7 +973,7 @@ export function Messages() {
                     <School className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{schoolName}</p>
+                    <p className="text-sm font-medium truncate">{name}</p>
                     {location && (
                       <p className="text-xs text-muted-foreground truncate">
                         {location}
