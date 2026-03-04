@@ -986,7 +986,7 @@ export function Programs() {
                                         </TableCell>
                                         <TableCell className="font-medium">
                                           {reg.isCountOnly
-                                            ? `${reg.studentCount} Students (Bulk)`
+                                            ? `${reg.studentCount} Students`
                                             : reg.studentName}
                                         </TableCell>
                                         <TableCell>
