@@ -63,7 +63,6 @@ export function Messages() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [schools, setSchools] = useState<UserData[]>([]);
-  const [parishes, setParishes] = useState<UserData[]>([]);
 
   // Image attachment state
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -120,7 +119,6 @@ export function Messages() {
       try {
         const users = await getUsers();
         setSchools(users.filter((u) => u.role === "school"));
-        setParishes(users.filter((u) => u.role === "parish"));
       } catch (error) {
         console.error("Error fetching users:", error);
       }
@@ -236,14 +234,14 @@ export function Messages() {
         toast.success("Message sent to all users");
       } else if (audience === "specific") {
         if (selectedSchools.length === 0) {
-          toast.error("Please select at least one unit");
+          toast.error("Please select at least one school");
           setIsLoading(false);
           return;
         }
         const unitNames = selectedSchools.map((id) => {
-          const s = schools.find((sc) => sc.id === id) || parishes.find((p) => p.id === id);
+          const s = schools.find((sc) => sc.id === id);
           return (
-            s?.fullName || s?.schoolname || s?.schoolName || s?.email || id
+            s?.schoolname || s?.schoolName || s?.fullName || s?.email || id
           );
         });
         await sendToSpecific(
@@ -253,7 +251,7 @@ export function Messages() {
           unitNames,
           imageUrl,
         );
-        toast.success(`Message sent to ${selectedSchools.length} observer(s)`);
+        toast.success(`Message sent to ${selectedSchools.length} school(s)`);
       }
 
       // Update Rate Limit Timestamp
@@ -274,11 +272,15 @@ export function Messages() {
     }
   };
 
-  const handleDelete = async (id: string, audience?: string) => {
+  const handleDelete = async (id: string, audience?: string, groupId?: string) => {
     setDeletingId(id);
     try {
-      await deleteNotification(id, audience);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      await deleteNotification(id, audience, groupId);
+      if (audience === 'specific' && groupId) {
+        setNotifications((prev) => prev.filter((n) => n.groupId !== groupId));
+      } else {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+      }
       toast.success("Message deleted");
     } catch (error) {
       console.error("Error deleting notification:", error);
@@ -529,10 +531,10 @@ export function Messages() {
                           htmlFor="specific"
                           className="font-semibold cursor-pointer"
                         >
-                          Specific Parish
+                          Specific School
                         </Label>
                         <p className="text-sm text-muted-foreground">
-                          Select specific parishes (observers) to receive this.
+                          Select specific Sunday schools to receive this.
                         </p>
                       </div>
                       <School
@@ -542,40 +544,40 @@ export function Messages() {
                   </RadioGroup>
                 </div>
 
-                {/* Parish Picker */}
+                {/* School Picker */}
                 {audience === "specific" && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-top-4">
-                    <Label>Select Parishes (Observers)</Label>
+                    <Label>Select Schools</Label>
                     <div className="border border-border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2 bg-muted/50">
-                      {parishes.map((parish) => (
+                      {schools.map((school) => (
                         <div
-                          key={parish.id}
+                          key={school.id}
                           className="flex items-center space-x-2 bg-background p-3 rounded-md border border-border"
                         >
                           <Checkbox
-                            id={parish.id}
-                            checked={selectedSchools.includes(parish.id)}
-                            onCheckedChange={() => toggleSchool(parish.id)}
+                            id={school.id}
+                            checked={selectedSchools.includes(school.id)}
+                            onCheckedChange={() => toggleSchool(school.id)}
                           />
                           <Label
-                            htmlFor={parish.id}
+                            htmlFor={school.id}
                             className="flex-1 cursor-pointer font-normal"
                           >
-                            {parish.fullName ||
-                              parish.schoolname ||
-                              parish.schoolName ||
-                              parish.email}
+                            {school.schoolname ||
+                              school.schoolName ||
+                              school.fullName ||
+                              school.email}
                           </Label>
                         </div>
                       ))}
-                      {parishes.length === 0 && (
+                      {schools.length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-2">
-                          No parishes found.
+                          No schools found.
                         </p>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground text-right">
-                      {selectedSchools.length} parishes selected
+                      {selectedSchools.length} school(s) selected
                     </p>
                   </div>
                 )}
@@ -850,7 +852,7 @@ export function Messages() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDelete(n.id, n.audience)}
+                            onClick={() => handleDelete(n.id, n.audience, n.groupId)}
                             disabled={deletingId === n.id}
                             title="Delete"
                           >

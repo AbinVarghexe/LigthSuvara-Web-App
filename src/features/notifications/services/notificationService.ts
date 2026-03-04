@@ -7,6 +7,7 @@ import {
     getDocs,
     query,
     orderBy,
+    where,
     deleteDoc,
     updateDoc,
     Timestamp,
@@ -30,6 +31,7 @@ export interface NotificationData {
     isRead: boolean;
     audience: 'public' | 'all' | 'specific';
     readBy?: string[];
+    groupId?: string;
 }
 
 export const uploadMessageImage = async (file: File): Promise<string> => {
@@ -69,6 +71,8 @@ export const sendToAll = async (title: string, body: string, imageUrl?: string) 
 
 export const sendToSpecific = async (title: string, body: string, schoolIds: string[], schoolNames?: string[], imageUrl?: string) => {
     const batch = writeBatch(db);
+    // Generate a unique groupId locally (no network call) to link all batch documents
+    const groupId = doc(collection(db, NOTIFICATIONS_COLLECTION)).id;
     schoolIds.forEach((schoolId) => {
         const docRef = doc(collection(db, NOTIFICATIONS_COLLECTION));
         batch.set(docRef, {
@@ -82,6 +86,7 @@ export const sendToSpecific = async (title: string, body: string, schoolIds: str
             isRead: false,
             audience: 'specific',
             readBy: [],
+            groupId,
         });
     });
     await batch.commit();
@@ -143,10 +148,22 @@ export const getUserNotifications = async (): Promise<NotificationData[]> => {
 
 /**
  * Deletes a notification from the correct collection based on its audience type.
+ * For 'specific' audience, deletes all documents sharing the same groupId.
  */
-export const deleteNotification = async (notificationId: string, audience?: string) => {
-    const collectionName = audience === 'public' ? BROADCASTS_COLLECTION : NOTIFICATIONS_COLLECTION;
-    await deleteDoc(doc(db, collectionName, notificationId));
+export const deleteNotification = async (notificationId: string, audience?: string, groupId?: string) => {
+    if (audience === 'specific' && groupId) {
+        const q = query(
+            collection(db, NOTIFICATIONS_COLLECTION),
+            where('groupId', '==', groupId)
+        );
+        const snapshot = await getDocs(q);
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+    } else {
+        const collectionName = audience === 'public' ? BROADCASTS_COLLECTION : NOTIFICATIONS_COLLECTION;
+        await deleteDoc(doc(db, collectionName, notificationId));
+    }
 };
 
 /**
