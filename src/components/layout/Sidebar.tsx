@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  Info
+  Info,
+  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -73,6 +74,12 @@ const navigation: NavItem[] = [
     icon: Info,
     adminOnly: true,
   },
+  {
+    name: "Logs",
+    href: "/logs",
+    icon: Activity,
+    adminOnly: true,
+  },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -116,10 +123,11 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
         className={`
                 w-64 bg-card border-r border-border h-screen flex flex-col 
                 fixed left-0 top-0 overflow-y-auto z-50 transition-transform duration-300
-                ${isOpen
-            ? "translate-x-0"
-            : "-translate-x-full lg:translate-x-0"
-          }
+                ${
+                  isOpen
+                    ? "translate-x-0"
+                    : "-translate-x-full lg:translate-x-0"
+                }
             `}
       >
         {/* Mobile Close Button */}
@@ -178,10 +186,11 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
                     <div className="space-y-1">
                       <button
                         onClick={() => toggleExpand(item.name)}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${isChildActive
-                          ? "text-primary bg-primary/10"
-                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                          }`}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                          isChildActive
+                            ? "text-primary bg-primary/10"
+                            : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                        }`}
                       >
                         <div className="flex items-center gap-3">
                           <item.icon className="w-5 h-5" />
@@ -211,10 +220,11 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
                                     }
                                     onClose();
                                   }}
-                                  className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${isChildActive
-                                    ? "bg-primary text-primary-foreground"
-                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                    }`}
+                                  className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm ${
+                                    isChildActive
+                                      ? "bg-primary text-primary-foreground"
+                                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                  }`}
                                 >
                                   <child.icon className="w-4 h-4" />
                                   <span className="font-medium">
@@ -231,15 +241,19 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
                     <Link
                       to={item.href}
                       onClick={() => {
-                        if (location.pathname === item.href || location.pathname.startsWith(item.href + "/")) {
+                        if (
+                          location.pathname === item.href ||
+                          location.pathname.startsWith(item.href + "/")
+                        ) {
                           onRefresh?.();
                         }
                         onClose();
                       }}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                        }`}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                      }`}
                     >
                       <item.icon className="w-5 h-5" />
                       <span className="font-medium">{item.name}</span>

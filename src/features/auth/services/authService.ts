@@ -31,3 +31,15 @@ export const isAdmin = async (user: User | null): Promise<boolean> => {
         return false;
     }
 };
+
+export const getUserRole = async (user: User | null): Promise<string | null> => {
+    if (!user) return null;
+
+    try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        return userDoc.exists() ? userDoc.data()?.role : null;
+    } catch (error) {
+        console.error("Error getting user role:", error);
+        return null;
+    }
+};
