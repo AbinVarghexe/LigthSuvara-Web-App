@@ -963,7 +963,15 @@ export function Programs() {
                               <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
                                 <span>{schoolName}</span>
                                 <Badge variant="outline" className="text-xs">
-                                  {schoolRegs.length} students
+                                  {schoolRegs.reduce(
+                                    (sum, reg) =>
+                                      sum +
+                                      (reg.isCountOnly
+                                        ? reg.studentCount || 1
+                                        : 1),
+                                    0,
+                                  )}{" "}
+                                  students
                                 </Badge>
                               </h4>
                               {/* Desktop table */}
@@ -1007,8 +1015,8 @@ export function Programs() {
                                         <TableCell className="text-gray-500 text-xs">
                                           {reg.submittedAt
                                             ? reg.submittedAt
-                                                .toDate()
-                                                .toLocaleDateString()
+                                              .toDate()
+                                              .toLocaleDateString()
                                             : "N/A"}
                                         </TableCell>
                                       </TableRow>
@@ -1046,8 +1054,8 @@ export function Programs() {
                                         <Clock className="h-3 w-3" />
                                         {reg.submittedAt
                                           ? reg.submittedAt
-                                              .toDate()
-                                              .toLocaleDateString()
+                                            .toDate()
+                                            .toLocaleDateString()
                                           : "N/A"}
                                       </div>
                                     </CardContent>

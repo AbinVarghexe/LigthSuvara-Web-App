@@ -5,8 +5,8 @@ import { Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import {
   login,
-  isAdmin,
   getUserRole,
+  logout,
 } from "../../features/auth/services/authService";
 import { logUserAccess } from "../../features/logs/services/logService";
 import { Input } from "../../components/ui/input";
@@ -39,16 +39,22 @@ export function Login() {
     setIsLoading(true);
     try {
       const userCredential = await login(data.email, data.password);
-      const adminStatus = await isAdmin(userCredential.user);
-      const fetchedRole = await getUserRole(userCredential.user);
 
-      const role = fetchedRole || (adminStatus ? "admin" : "user");
-      await logUserAccess(userCredential.user, role);
+      // Fetch role once instead of twice (isAdmin and getUserRole both fetched the same doc)
+      const fetchedRole = await getUserRole(userCredential.user);
+      const adminStatus = fetchedRole === "admin";
+      const role = fetchedRole || "user";
+
+      // Fire and forget logging so it doesn't block the UI navigation
+      logUserAccess(userCredential.user, role).catch(console.error);
 
       if (adminStatus) {
         toast.success("Welcome back!");
         navigate("/");
       } else {
+        // Essential: Sign out from Firebase if they don't have admin permissions
+        // so that they don't stay silently authenticated and trapped in redirect loops.
+        await logout();
         toast.error("Access denied. Admin privileges required.");
       }
     } catch (error: any) {

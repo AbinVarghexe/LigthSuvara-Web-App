@@ -115,7 +115,7 @@ export function Settings() {
 
             toast.success("Profile updated successfully");
             // Force reload to see changes
-            window.location.reload(); 
+            window.location.reload();
         } catch (error) {
             console.error("Error updating profile:", error);
             toast.error("Failed to update profile");
@@ -127,7 +127,7 @@ export function Settings() {
     return (
         <div className="max-w-4xl mx-auto space-y-8">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+                <h1 className="text-2xl font-bold text-foreground">Settings</h1>
                 <p className="text-gray-500 mt-1">Manage your account and application preferences</p>
             </div>
 
@@ -180,7 +180,7 @@ export function Settings() {
                                         </label>
                                     </div>
                                     <div className="flex-1 text-center sm:text-left">
-                                        <h3 className="font-medium text-gray-900">Profile Picture</h3>
+                                        <h3 className="font-medium text-foreground">Profile Picture</h3>
                                         <p className="text-sm text-gray-500 mt-1">
                                             Upload a new profile picture. Recommended size: 400x400px.
                                             <br />
@@ -284,7 +284,7 @@ export function Settings() {
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h2 className="text-lg font-semibold text-gray-900">Sign Out</h2>
+                                    <h2 className="text-lg font-semibold text-foreground">Sign Out</h2>
                                     <p className="text-sm text-muted-foreground">Sign out of your admin account</p>
                                 </div>
                                 <Button

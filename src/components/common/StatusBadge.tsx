@@ -20,8 +20,8 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
         Admin: 'Admin',
         School: 'School',
         pending: 'Pending',
-        approved: 'Approved',
-        rejected: 'Rejected'
+        approved: 'Public',
+        rejected: 'Private'
     };
 
     return (

@@ -78,15 +78,23 @@ export function Events() {
   const [approvedLoading, setApprovedLoading] = useState(true);
   const [approvedForaneFilter, setApprovedForaneFilter] = useState("All");
   const [approvedSearchTerm, setApprovedSearchTerm] = useState("");
+
+  // Private events state
+  const [privateEvents, setPrivateEvents] = useState<EventData[]>([]);
+  const [privateLoading, setPrivateLoading] = useState(true);
+  const [privateForaneFilter, setPrivateForaneFilter] = useState("All");
+  const [privateSearchTerm, setPrivateSearchTerm] = useState("");
   const [downloadingEventId, setDownloadingEventId] = useState<string | null>(null);
 
   // Determine active tab from URL
   const activeTab =
     location.pathname === "/events/approvals"
-      ? "approvals"
+      ? "pending-review"
       : location.pathname === "/events/approved"
-        ? "approved"
-        : "events";
+        ? "public"
+        : location.pathname === "/events/private"
+          ? "private"
+          : "events";
 
   // Hardcoded forane names
   const foraneNames = [
@@ -160,7 +168,9 @@ export function Events() {
       approvalForaneFilter !== "All" ? approvalForaneFilter : undefined;
     const unsubscribe = subscribeToEvents(
       (allEvents) => {
-        const draftEvents = allEvents.filter((event) => !event.isPublic);
+        const draftEvents = allEvents.filter(
+          (event) => event.status === "pending" || (!event.status && !event.isPublic)
+        );
         setApprovalEvents(draftEvents);
         setApprovalLoading(false);
       },
@@ -190,6 +200,27 @@ export function Events() {
 
     return () => unsubscribe();
   }, [approvedForaneFilter]);
+
+  // Subscribe to private events (real-time)
+  useEffect(() => {
+    if (!isAdminUser) return;
+    setPrivateLoading(true);
+    const foraneToQuery =
+      privateForaneFilter !== "All" ? privateForaneFilter : undefined;
+    const unsubscribe = subscribeToEvents(
+      (allEvents) => {
+        const privates = allEvents.filter(
+          (event) => event.status === "rejected",
+        );
+        setPrivateEvents(privates);
+        setPrivateLoading(false);
+      },
+      "rejected",
+      foraneToQuery,
+    );
+
+    return () => unsubscribe();
+  }, [privateForaneFilter, isAdminUser]);
 
   const handleApprovalAction = async (
     eventId: string,
@@ -559,6 +590,13 @@ export function Events() {
     return matchesSearch;
   });
 
+  const filteredPrivateEvents = privateEvents.filter((event) => {
+    const matchesSearch = event.title
+      .toLowerCase()
+      .includes(privateSearchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
   const formatDate = (date: any) => {
     if (!date) return "N/A";
     try {
@@ -586,7 +624,7 @@ export function Events() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900">Events</h1>
+        <h1 className="text-2xl font-bold text-foreground">Events</h1>
         <Link to="/events/new" className="w-full sm:w-auto">
           <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2" />
@@ -598,17 +636,19 @@ export function Events() {
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
-          if (value === "approvals")
+          if (value === "pending-review")
             navigate("/events/approvals", { replace: true });
-          else if (value === "approved")
+          else if (value === "public")
             navigate("/events/approved", { replace: true });
+          else if (value === "private")
+            navigate("/events/private", { replace: true });
           else navigate("/events", { replace: true });
         }}
       >
         <TabsList>
           {isAdminUser && (
-            <TabsTrigger value="approvals">
-              Approvals
+            <TabsTrigger value="pending-review">
+              Pending Review
               {approvalEvents.length > 0 && (
                 <Badge
                   variant="destructive"
@@ -620,8 +660,8 @@ export function Events() {
             </TabsTrigger>
           )}
           <TabsTrigger value="events">All Events</TabsTrigger>
-          <TabsTrigger value="approved">
-            Approved
+          <TabsTrigger value="public">
+            Public Events
             {approvedEvents.length > 0 && (
               <Badge
                 variant="secondary"
@@ -631,6 +671,19 @@ export function Events() {
               </Badge>
             )}
           </TabsTrigger>
+          {isAdminUser && (
+            <TabsTrigger value="private">
+              Private Events
+              {privateEvents.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-2 h-5 px-1.5 text-[10px] bg-red-100 text-red-700"
+                >
+                  {privateEvents.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Events Tab */}
@@ -639,7 +692,7 @@ export function Events() {
             <CardContent className="p-4 space-y-4">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     type="text"
                     placeholder="Search events..."
@@ -650,7 +703,7 @@ export function Events() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
                   <div className="relative">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <select
                       className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       value={categoryFilter}
@@ -662,20 +715,20 @@ export function Events() {
                     </select>
                   </div>
                   <div className="relative">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <select
                       className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
                     >
                       <option value="All">All Status</option>
-                      <option value="pending">Pending</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
+                      <option value="pending">Draft / Pending</option>
+                      <option value="approved">Public</option>
+                      <option value="rejected">Private</option>
                     </select>
                   </div>
                   <div className="relative">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <select
                       className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       value={foraneFilter}
@@ -746,10 +799,10 @@ export function Events() {
                 {filteredEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
+                    className="p-4 border-b last:border-0 hover:bg-muted/50 transition-colors"
                   >
                     <Link to={`/events/${event.id}`} className="flex gap-4">
-                      <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                      <div className="w-20 h-20 rounded-lg bg-muted shrink-0 overflow-hidden">
                         {event.imageUrl ? (
                           <ImageWithFallback
                             src={event.imageUrl}
@@ -766,7 +819,7 @@ export function Events() {
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-medium text-gray-900 truncate pr-2">
+                          <h3 className="font-medium text-foreground truncate pr-2">
                             {event.title}
                           </h3>
                           <StatusBadge
@@ -776,10 +829,10 @@ export function Events() {
                             }
                           />
                         </div>
-                        <p className="text-sm text-gray-500 truncate">
+                        <p className="text-sm text-muted-foreground truncate">
                           {event.place}
                         </p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                           <Badge
                             variant="secondary"
                             className="text-[10px] h-5 px-1.5 uppercase"
@@ -845,7 +898,7 @@ export function Events() {
                         <TableRow key={event.id}>
                           <TableCell>
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                              <div className="w-12 h-12 rounded-lg bg-muted shrink-0 overflow-hidden">
                                 {event.imageUrl ? (
                                   <ImageWithFallback
                                     src={event.imageUrl}
@@ -861,10 +914,10 @@ export function Events() {
                                 )}
                               </div>
                               <div>
-                                <h3 className="font-medium text-gray-900">
+                                <h3 className="font-medium text-foreground">
                                   {event.title}
                                 </h3>
-                                <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                                <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                                   {event.place}
                                 </p>
                               </div>
@@ -875,14 +928,14 @@ export function Events() {
                               {event.category}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-gray-600">
+                          <TableCell className="text-muted-foreground">
                             {schoolName}
                           </TableCell>
-                          <TableCell className="text-gray-600">
+                          <TableCell className="text-muted-foreground">
                             <div className="flex flex-col">
                               <span>{formatDate(event.timestamp)}</span>
                               {event.updatedAt && (
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-muted-foreground">
                                   Updated: {formatDate(event.updatedAt)}
                                 </span>
                               )}
@@ -927,7 +980,7 @@ export function Events() {
               </div>
 
               {filteredEvents.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
+                <div className="p-8 text-center text-muted-foreground">
                   No events found matching your filters.
                 </div>
               )}
@@ -936,7 +989,7 @@ export function Events() {
         </TabsContent>
 
         {/* Approved Events Tab */}
-        <TabsContent value="approved" className="space-y-6 mt-4">
+        <TabsContent value="public" className="space-y-6 mt-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -948,7 +1001,7 @@ export function Events() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     type="text"
                     placeholder="Search approved..."
@@ -988,7 +1041,7 @@ export function Events() {
                         className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
                       >
                         <Link to={`/events/${event.id}`} className="flex gap-4">
-                          <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                          <div className="w-20 h-20 rounded-lg bg-muted shrink-0 overflow-hidden">
                             {event.imageUrl ? (
                               <ImageWithFallback
                                 src={event.imageUrl}
@@ -1005,17 +1058,17 @@ export function Events() {
                           </div>
                           <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-start justify-between gap-2">
-                              <h3 className="font-medium text-gray-900 truncate pr-2">
+                              <h3 className="font-medium text-foreground truncate pr-2">
                                 {event.title}
                               </h3>
                               <Badge className="bg-green-100 text-green-700 shrink-0">
                                 Approved
                               </Badge>
                             </div>
-                            <p className="text-sm text-gray-500 truncate">
+                            <p className="text-sm text-muted-foreground truncate">
                               {event.place}
                             </p>
-                            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                               <Badge
                                 variant="secondary"
                                 className="text-[10px] h-5 px-1.5 uppercase"
@@ -1070,7 +1123,7 @@ export function Events() {
                             <TableRow key={event.id}>
                               <TableCell>
                                 <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                                  <div className="w-12 h-12 rounded-lg bg-muted shrink-0 overflow-hidden">
                                     {event.imageUrl ? (
                                       <ImageWithFallback
                                         src={event.imageUrl}
@@ -1086,10 +1139,10 @@ export function Events() {
                                     )}
                                   </div>
                                   <div>
-                                    <h3 className="font-medium text-gray-900">
+                                    <h3 className="font-medium text-foreground">
                                       {event.title}
                                     </h3>
-                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                                    <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                                       {event.place}
                                     </p>
                                   </div>
@@ -1103,17 +1156,17 @@ export function Events() {
                                   {event.category}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-gray-600">
+                              <TableCell className="text-muted-foreground">
                                 {schoolName}
                               </TableCell>
-                              <TableCell className="text-gray-600">
-                                {event.creatorForane || "—"}
+                              <TableCell className="text-muted-foreground">
+                                {event.creatorForane || creator?.forane || "—"}
                               </TableCell>
-                              <TableCell className="text-gray-600">
+                              <TableCell className="text-muted-foreground">
                                 <div className="flex flex-col">
                                   <span>{formatDate(event.timestamp)}</span>
                                   {event.updatedAt && (
-                                    <span className="text-xs text-gray-400">
+                                    <span className="text-xs text-muted-foreground">
                                       Updated: {formatDate(event.updatedAt)}
                                     </span>
                                   )}
@@ -1149,7 +1202,7 @@ export function Events() {
                           <TableRow>
                             <TableCell
                               colSpan={6}
-                              className="h-24 text-center text-gray-500"
+                              className="h-24 text-center text-muted-foreground"
                             >
                               No approved events found.
                             </TableCell>
@@ -1166,7 +1219,7 @@ export function Events() {
 
         {/* Approvals Tab */}
         {isAdminUser && (
-          <TabsContent value="approvals" className="space-y-6 mt-4">
+          <TabsContent value="pending-review" className="space-y-6 mt-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -1207,7 +1260,7 @@ export function Events() {
                           className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
                         >
                           <div className="flex gap-4">
-                            <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                            <div className="w-20 h-20 rounded-lg bg-muted shrink-0 overflow-hidden">
                               {event.imageUrl ? (
                                 <ImageWithFallback
                                   src={event.imageUrl}
@@ -1215,16 +1268,16 @@ export function Events() {
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
                                   No Img
                                 </div>
                               )}
                             </div>
                             <div className="flex-1 min-w-0 space-y-2">
-                              <h3 className="font-medium text-gray-900 truncate">
+                              <h3 className="font-medium text-foreground truncate">
                                 {event.title}
                               </h3>
-                              <p className="text-sm text-gray-500 truncate">
+                              <p className="text-sm text-muted-foreground truncate">
                                 {event.place}
                               </p>
                               <div className="flex items-center gap-2">
@@ -1263,7 +1316,7 @@ export function Events() {
                                   ) : (
                                     <XCircle className="w-4 h-4 mr-1" />
                                   )}
-                                  Reject
+                                  Private
                                 </Button>
                               </div>
                             </div>
@@ -1282,6 +1335,7 @@ export function Events() {
                             </TableHead>
                             <TableHead>Category</TableHead>
                             <TableHead>Created By</TableHead>
+                            <TableHead>Forane</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead className="text-right">
                               Actions
@@ -1289,113 +1343,356 @@ export function Events() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {approvalEvents.map((event) => (
-                            <TableRow key={event.id}>
-                              <TableCell>
-                                <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden">
-                                    {event.imageUrl ? (
-                                      <ImageWithFallback
-                                        src={event.imageUrl}
-                                        alt={event.title}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                                        No Img
-                                      </div>
-                                    )}
+                          {approvalEvents.map((event) => {
+                            const creator = users.find(
+                              (u) => u.id === event.creatorId,
+                            );
+                            const schoolName =
+                              event.creatorSchoolName &&
+                                event.creatorSchoolName !== "Admin"
+                                ? event.creatorSchoolName
+                                : creator?.schoolName ||
+                                creator?.schoolname ||
+                                creator?.fullName ||
+                                "Unknown";
+                            const foraneName = event.creatorForane || creator?.forane || "—";
+
+                            return (
+                              <TableRow key={event.id}>
+                                <TableCell>
+                                  <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
+                                      {event.imageUrl ? (
+                                        <ImageWithFallback
+                                          src={event.imageUrl}
+                                          alt={event.title}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
+                                          No Img
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <h3 className="font-medium text-foreground">
+                                        {event.title}
+                                      </h3>
+                                      <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                                        {event.place}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <h3 className="font-medium text-gray-900">
-                                      {event.title}
-                                    </h3>
-                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">
-                                      {event.place}
-                                    </p>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant="secondary"
-                                  className="uppercase"
-                                >
-                                  {event.category}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-gray-600">
-                                {event.creatorSchoolName}
-                              </TableCell>
-                              <TableCell className="text-gray-600">
-                                {event.date
-                                  ? new Date(
-                                    (event.date as any).seconds
-                                      ? (event.date as any).seconds * 1000
-                                      : event.date,
-                                  ).toLocaleDateString()
-                                  : "N/A"}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Link to={`/events/${event.id}`}>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="secondary"
+                                    className="uppercase"
+                                  >
+                                    {event.category}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {schoolName}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {foraneName}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {formatDate(event.timestamp)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Link to={`/events/${event.id}`}>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        title="View Details"
+                                      >
+                                        <Eye className="w-4 h-4 text-muted-foreground" />
+                                      </Button>
+                                    </Link>
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      title="View Details"
+                                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      onClick={() =>
+                                        handleApprovalAction(
+                                          event.id!,
+                                          "approved",
+                                        )
+                                      }
+                                      disabled={actionLoading === event.id}
+                                      title="Publish"
                                     >
-                                      <Eye className="w-4 h-4 text-gray-500" />
+                                      {actionLoading === event.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <CheckCircle className="w-4 h-4" />
+                                      )}
                                     </Button>
-                                  </Link>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    onClick={() =>
-                                      handleApprovalAction(
-                                        event.id!,
-                                        "approved",
-                                      )
-                                    }
-                                    disabled={actionLoading === event.id}
-                                    title="Approve"
-                                  >
-                                    {actionLoading === event.id ? (
-                                      <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                      <CheckCircle className="w-4 h-4" />
-                                    )}
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() =>
-                                      handleApprovalAction(
-                                        event.id!,
-                                        "rejected",
-                                      )
-                                    }
-                                    disabled={actionLoading === event.id}
-                                    title="Reject"
-                                  >
-                                    {actionLoading === event.id ? (
-                                      <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                      <XCircle className="w-4 h-4" />
-                                    )}
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() =>
+                                        handleApprovalAction(
+                                          event.id!,
+                                          "rejected",
+                                        )
+                                      }
+                                      disabled={actionLoading === event.id}
+                                      title="Make Private"
+                                    >
+                                      {actionLoading === event.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <XCircle className="w-4 h-4" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                           {approvalEvents.length === 0 && (
                             <TableRow>
                               <TableCell
                                 colSpan={5}
-                                className="h-24 text-center text-gray-500"
+                                className="h-24 text-center text-muted-foreground"
                               >
                                 No pending events found.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Private Events Tab */}
+        {isAdminUser && (
+          <TabsContent value="private" className="space-y-6 mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Private Events</CardTitle>
+                  <CardDescription>
+                    {filteredPrivateEvents.length} of {privateEvents.length}{" "}
+                    private event{privateEvents.length !== 1 ? "s" : ""}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search private..."
+                      className="pl-9"
+                      value={privateSearchTerm}
+                      onChange={(e) => setPrivateSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="relative min-w-[160px]">
+                    <select
+                      className="w-full pl-3 pr-4 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={privateForaneFilter}
+                      onChange={(e) => setPrivateForaneFilter(e.target.value)}
+                    >
+                      <option value="All">All Foranes</option>
+                      {foraneNames.map((forane) => (
+                        <option key={forane} value={forane}>
+                          {forane}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {privateLoading ? (
+                  <div className="h-40 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  </div>
+                ) : (
+                  <>
+                    {/* Mobile View */}
+                    <div className="md:hidden">
+                      {filteredPrivateEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
+                        >
+                          <Link to={`/events/${event.id}`} className="flex gap-4">
+                            <div className="w-20 h-20 rounded-lg bg-muted shrink-0 overflow-hidden">
+                              {event.imageUrl ? (
+                                <ImageWithFallback
+                                  src={event.imageUrl}
+                                  alt={event.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <img
+                                  src="/assets/Logo-Bg-Light.svg"
+                                  alt="Placeholder"
+                                  className="w-full h-full object-cover opacity-80"
+                                />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="font-medium text-foreground truncate pr-2">
+                                  {event.title}
+                                </h3>
+                                <Badge className="bg-red-100 text-red-700 shrink-0">
+                                  Private
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground truncate">
+                                {event.place}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] h-5 px-1.5 uppercase"
+                                >
+                                  {event.category}
+                                </Badge>
+                                <span>•</span>
+                                <span>{formatDate(event.timestamp)}</span>
+                                {event.creatorForane && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{event.creatorForane}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[300px]">
+                              Event Details
+                            </TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Created By</TableHead>
+                            <TableHead>Forane</TableHead>
+                            <TableHead>Created</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredPrivateEvents.map((event) => {
+                            const creator = users.find(
+                              (u) => u.id === event.creatorId,
+                            );
+                            const schoolName =
+                              event.creatorSchoolName &&
+                                event.creatorSchoolName !== "Admin"
+                                ? event.creatorSchoolName
+                                : creator?.schoolName ||
+                                creator?.schoolname ||
+                                creator?.fullName ||
+                                "Unknown";
+
+                            return (
+                              <TableRow key={event.id}>
+                                <TableCell>
+                                  <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-lg bg-muted shrink-0 overflow-hidden">
+                                      {event.imageUrl ? (
+                                        <ImageWithFallback
+                                          src={event.imageUrl}
+                                          alt={event.title}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      ) : (
+                                        <img
+                                          src="/assets/Logo-Bg-Light.svg"
+                                          alt="Placeholder"
+                                          className="w-full h-full object-cover opacity-80"
+                                        />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <h3 className="font-medium text-foreground">
+                                        {event.title}
+                                      </h3>
+                                      <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                                        {event.place}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="secondary"
+                                    className="uppercase"
+                                  >
+                                    {event.category}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {schoolName}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {event.creatorForane || creator?.forane || "—"}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  <div className="flex flex-col">
+                                    <span>{formatDate(event.timestamp)}</span>
+                                    {event.updatedAt && (
+                                      <span className="text-xs text-muted-foreground">
+                                        Updated: {formatDate(event.updatedAt)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <Link
+                                      to={`/events/${event.id}`}
+                                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                                    >
+                                      View
+                                    </Link>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                                      onClick={() => handleDownloadEvent(event)}
+                                      disabled={downloadingEventId === event.id}
+                                    >
+                                      {downloadingEventId === event.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Download className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {filteredPrivateEvents.length === 0 && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={6}
+                                className="h-24 text-center text-muted-foreground"
+                              >
+                                No private events found.
                               </TableCell>
                             </TableRow>
                           )}

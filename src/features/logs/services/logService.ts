@@ -8,10 +8,11 @@ export interface UserLog {
     userEmail: string | null;
     role?: string;
     action: 'LOGIN';
+    device?: string;
     timestamp: any; // Using any for Timestamp as the exact type from firestore depends on usage, typically we map to Date in the UI
 }
 
-export const logUserAccess = async (user: User, role?: string) => {
+export const logUserAccess = async (user: User, role?: string, device: string = 'web') => {
     try {
         const logsRef = collection(db, 'logs');
         await addDoc(logsRef, {
@@ -19,6 +20,7 @@ export const logUserAccess = async (user: User, role?: string) => {
             userEmail: user.email,
             role: role || 'user',
             action: 'LOGIN',
+            device,
             timestamp: serverTimestamp()
         });
         console.log("User login logged successfully.");
@@ -33,7 +35,7 @@ export const getUserLogs = async (): Promise<UserLog[]> => {
         const q = query(logsRef, orderBy('timestamp', 'desc'));
         const snapshot = await getDocs(q);
 
-        
+
         return snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()

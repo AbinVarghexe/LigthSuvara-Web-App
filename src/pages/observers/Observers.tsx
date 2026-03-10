@@ -616,8 +616,8 @@ export function Observers() {
 
         <TabsContent value="assignments">
           <div className="space-y-4">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm">
-              <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-card text-card-foreground p-4 rounded-lg shadow-sm border">
+              <div className="bg-muted p-1 rounded-lg flex gap-1">
                 <Button
                   variant={
                     assignmentSubTab === "unassigned" ? "secondary" : "ghost"
@@ -626,8 +626,8 @@ export function Observers() {
                   className={cn(
                     "rounded-md px-6 font-semibold",
                     assignmentSubTab === "unassigned"
-                      ? "bg-white shadow-sm text-indigo-900"
-                      : "text-gray-500",
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground",
                   )}
                   onClick={() => setAssignmentSubTab("unassigned")}
                 >
@@ -641,8 +641,8 @@ export function Observers() {
                   className={cn(
                     "rounded-md px-6 font-semibold",
                     assignmentSubTab === "assigned"
-                      ? "bg-white shadow-sm text-indigo-900"
-                      : "text-gray-500",
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground",
                   )}
                   onClick={() => setAssignmentSubTab("assigned")}
                 >
@@ -692,28 +692,28 @@ export function Observers() {
                         className={cn(
                           "p-3 rounded-xl",
                           school.assignment
-                            ? "bg-indigo-50 text-indigo-700"
-                            : "bg-orange-50 text-orange-700",
+                            ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                            : "bg-orange-50 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
                         )}
                       >
                         <ArrowRight className="h-6 w-6" />
                       </div>
                       <div className="flex-1 space-y-1">
-                        <h3 className="font-bold text-indigo-950 truncate max-w-[200px]">
+                        <h3 className="font-bold text-indigo-950 dark:text-indigo-100 truncate max-w-[200px]">
                           {school.schoolname || school.name}
                         </h3>
                         {school.assignment ? (
                           <>
-                            <p className="text-sm font-semibold text-indigo-800">
+                            <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">
                               Observer: {school.assignment.teacherName}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-muted-foreground">
                               From: {school.assignment.sourceSchoolName}
                             </p>
                             <div className="flex justify-between items-center mt-3">
                               <Badge
                                 variant="outline"
-                                className="text-[10px] bg-indigo-50/50 border-indigo-100 uppercase tracking-wider font-bold text-indigo-700 px-2"
+                                className="text-[10px] bg-indigo-50/50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800 uppercase tracking-wider font-bold text-indigo-700 dark:text-indigo-300 px-2"
                               >
                                 {school.assignment.accessCode}
                               </Badge>
@@ -809,7 +809,7 @@ export function Observers() {
                           </>
                         ) : (
                           <>
-                            <p className="text-sm text-gray-500 italic">
+                            <p className="text-sm text-muted-foreground italic">
                               No observer assigned
                             </p>
                             <Button
@@ -834,10 +834,10 @@ export function Observers() {
               ))}
               {filteredSchools.length === 0 && (
                 <div className="col-span-full py-20 text-center space-y-3">
-                  <div className="bg-gray-100 h-20 w-20 rounded-full flex items-center justify-center mx-auto">
-                    <History className="h-10 w-10 text-gray-300" />
+                  <div className="bg-muted h-20 w-20 rounded-full flex items-center justify-center mx-auto">
+                    <History className="h-10 w-10 text-muted-foreground" />
                   </div>
-                  <p className="text-gray-500 font-medium">
+                  <p className="text-muted-foreground font-medium">
                     No {assignmentSubTab} schools found.
                   </p>
                 </div>
@@ -1041,8 +1041,8 @@ export function Observers() {
                         rptDirParishId === "All" ||
                         (selectedSource?.ids
                           ? selectedSource.ids.includes(
-                              t.parishId || t.schoolId,
-                            )
+                            t.parishId || t.schoolId,
+                          )
                           : (t.parishId || t.schoolId) === rptDirParishId);
 
                       return (
@@ -1333,10 +1333,10 @@ export function Observers() {
                     isEligible
                   );
                 }).length === 0 && (
-                  <div className="py-20 text-center text-slate-400 italic text-sm">
-                    No eligible observers found matching your filters.
-                  </div>
-                )}
+                    <div className="py-20 text-center text-slate-400 italic text-sm">
+                      No eligible observers found matching your filters.
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -1423,14 +1423,14 @@ export function Observers() {
                   <p className="text-sm font-bold text-indigo-950 mt-0.5">
                     {viewSubmissionAssignment?.remarksSubmittedAt
                       ? new Date(
-                          (viewSubmissionAssignment.remarksSubmittedAt as any)
-                            .seconds * 1000,
-                        ).toLocaleString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
+                        (viewSubmissionAssignment.remarksSubmittedAt as any)
+                          .seconds * 1000,
+                      ).toLocaleString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
                       : "Pending"}
                   </p>
                 </div>
@@ -1533,8 +1533,8 @@ export function Observers() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {r.createdAt
                             ? new Date(
-                                (r.createdAt as any).seconds * 1000,
-                              ).toLocaleString()
+                              (r.createdAt as any).seconds * 1000,
+                            ).toLocaleString()
                             : ""}
                         </p>
                       </div>

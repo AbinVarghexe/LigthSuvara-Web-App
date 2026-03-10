@@ -45,7 +45,7 @@ const navigation: NavItem[] = [
     icon: GraduationCap,
     adminOnly: true,
     children: [
-      { name: "Manage List", href: "/programs", icon: GraduationCap },
+      { name: "Manage Programs", href: "/programs", icon: GraduationCap },
       {
         name: "Registrations",
         href: "/program-registrations",

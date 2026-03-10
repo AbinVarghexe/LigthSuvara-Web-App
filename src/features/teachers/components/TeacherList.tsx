@@ -37,7 +37,7 @@ export function TeacherList({
 }: TeacherListProps) {
   if (teachers.length === 0) {
     return (
-      <div className="text-center py-12 bg-white rounded-lg border border-dashed">
+      <div className="text-center py-12 bg-card text-card-foreground rounded-lg border border-dashed">
         <User className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
         <h3 className="text-lg font-medium">No teachers found</h3>
         <p className="text-muted-foreground">
@@ -52,7 +52,7 @@ export function TeacherList({
       {teachers.map((teacher) => (
         <Card
           key={teacher.id}
-          className={`hover:shadow-md transition-shadow ${showStatus && teacher.assigned ? "bg-muted/40 opacity-50 grayscale" : "bg-white"}`}
+          className={`hover:shadow-md transition-shadow ${showStatus && teacher.assigned ? "bg-muted/40 opacity-50 grayscale" : "bg-card"}`}
         >
           <CardContent className="p-6">
             <div className="flex justify-between items-start mb-4">
@@ -85,7 +85,7 @@ export function TeacherList({
                     ) : (
                       <Badge
                         variant="outline"
-                        className="bg-green-50 text-green-700 border-green-200"
+                        className="bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20"
                       >
                         Available
                       </Badge>

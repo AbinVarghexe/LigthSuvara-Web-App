@@ -467,89 +467,99 @@ export function Users() {
 
       {/* Users List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUsers.map((user) => (
-          <Card key={user.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage
-                      src={user.profileImageUrl}
-                      alt={user.fullName || "User"}
-                      loading="lazy"
-                    />
-                    <AvatarFallback>
-                      {(user.fullName || user.email || "U")
-                        .charAt(0)
-                        .toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="font-medium text-foreground">
-                      {user.schoolname ||
-                        user.schoolName ||
-                        user.fullName ||
-                        "Unnamed User"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground truncate max-w-[150px]">
-                      {user.email}
-                    </p>
+        {filteredUsers.map((user) => {
+          // Check if user was active in the last 5 mins (300000 ms)
+          const lastActiveDate = user.lastActiveAt?.seconds ? new Date(user.lastActiveAt.seconds * 1000) : null;
+          const isOnline = lastActiveDate && (new Date().getTime() - lastActiveDate.getTime()) < 300000;
+
+          return (
+            <Card key={user.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage
+                          src={user.profileImageUrl}
+                          alt={user.fullName || "User"}
+                          loading="lazy"
+                        />
+                        <AvatarFallback>
+                          {(user.fullName || user.email || "U")
+                            .charAt(0)
+                            .toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      {isOnline && (
+                        <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-zinc-950 rounded-full shadow-sm"></span>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-foreground">
+                        {user.schoolname ||
+                          user.schoolName ||
+                          user.fullName ||
+                          "Unnamed User"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground truncate max-w-[150px]">
+                        {user.email}
+                      </p>
+                    </div>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link to={`/users/${user.id}`}>View Details</Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild>
-                      <Link to={`/users/${user.id}`}>View Details</Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
 
-              <div className="flex items-center gap-2 mb-4">
-                <Badge
-                  variant={user.role === "admin" ? "default" : "secondary"}
-                  className={`gap-1.5 ${
-                    user.role === "admin"
-                      ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge
+                    variant={user.role === "admin" ? "default" : "secondary"}
+                    className={`gap-1.5 ${user.role === "admin"
+                        ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
+                        : user.role === "animator"
+                          ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                      }`}
+                  >
+                    {user.role === "admin" ? (
+                      <Shield className="w-3 h-3" />
+                    ) : user.role === "animator" ? (
+                      <Sparkles className="w-3 h-3" />
+                    ) : (
+                      <School className="w-3 h-3" />
+                    )}
+                    {user.role === "admin"
+                      ? "Administrator"
                       : user.role === "animator"
-                      ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
-                      : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
-                  }`}
-                >
-                  {user.role === "admin" ? (
-                    <Shield className="w-3 h-3" />
-                  ) : user.role === "animator" ? (
-                    <Sparkles className="w-3 h-3" />
-                  ) : (
-                    <School className="w-3 h-3" />
-                  )}
-                  {user.role === "admin"
-                    ? "Administrator"
-                    : user.role === "animator"
-                    ? "Animator"
-                    : "Sunday School"}
-                </Badge>
-              </div>
+                        ? "Animator"
+                        : "Sunday School"}
+                  </Badge>
+                </div>
 
-              <div className="pt-4 border-t border-border flex items-center justify-between text-sm text-muted-foreground">
-                <span className="truncate max-w-[100px]">
-                  ID: {user.uid?.substring(0, 8)}...
-                </span>
-                <Link
-                  to={`/users/${user.id}`}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  View Profile
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="pt-4 border-t border-border flex items-center justify-between text-sm text-muted-foreground">
+                  <span className="truncate max-w-[100px]">
+                    ID: {user.uid?.substring(0, 8)}...
+                  </span>
+                  <Link
+                    to={`/users/${user.id}`}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    View Profile
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
         {filteredUsers.length === 0 && (
           <div className="col-span-full py-12 text-center text-muted-foreground bg-card rounded-xl border border-border">
             No users found matching your search.

@@ -25,6 +25,7 @@ export interface UserData {
     phoneNumber?: string;
     profileImageUrl?: string;
     forane?: string;
+    lastActiveAt?: any; // Firestore Timestamp
 }
 
 export const getUsers = async () => {
@@ -48,6 +49,16 @@ export const updateUserRole = async (userId: string, newRole: 'admin' | 'school'
 
 export const deleteUser = async (userId: string) => {
     return await deleteDoc(doc(db, 'users', userId));
+};
+
+export const updateUserActivity = async (userId: string) => {
+    try {
+        await updateDoc(doc(db, 'users', userId), {
+            lastActiveAt: new Date(),
+        });
+    } catch (error) {
+        console.error('Error updating user activity:', error);
+    }
 };
 
 export const getEventsByUser = async (userId: string) => {

@@ -57,6 +57,7 @@ export const router = createBrowserRouter([
           { path: "events", Component: Events },
           { path: "events/approvals", Component: Events },
           { path: "events/approved", Component: Events },
+          { path: "events/private", Component: Events },
           { path: "events/new", Component: EventForm },
           { path: "events/:id", Component: EventDetail },
           { path: "events/:id/edit", Component: EventForm },

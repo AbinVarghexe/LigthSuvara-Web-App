@@ -319,7 +319,7 @@ export function CreateTeacherForm({
                   </FormControl>
                   <SelectContent>
                     {/* Search box inside dropdown */}
-                    <div className="px-2 py-2 sticky top-0 bg-white border-b">
+                    <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
                       <input
                         autoFocus
                         placeholder="Search school..."

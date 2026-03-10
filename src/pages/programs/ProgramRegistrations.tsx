@@ -261,7 +261,7 @@ export function ProgramRegistrations() {
   if (loading) {
     return (
       <div className="h-full w-full flex items-center justify-center p-20">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -281,7 +281,7 @@ export function ProgramRegistrations() {
           </Button>
         )}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          <h1 className="text-2xl font-bold text-foreground">
             {level === "programs" && "Program Registrations"}
             {level === "schools" && selectedProgramName}
             {level === "students" && getSchoolName(selectedSchoolId || "")}
@@ -302,7 +302,7 @@ export function ProgramRegistrations() {
           <Card>
             <CardContent className="p-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search Programs..."
                   className="pl-9"
@@ -315,7 +315,7 @@ export function ProgramRegistrations() {
 
           {programGroups.length === 0 ? (
             <Card className="border-dashed">
-              <CardContent className="py-20 text-center text-gray-500">
+              <CardContent className="py-20 text-center text-muted-foreground">
                 <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <p>No active registrations found matching your criteria.</p>
               </CardContent>
@@ -330,22 +330,22 @@ export function ProgramRegistrations() {
                 >
                   <CardContent className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center">
-                        <Calendar className="h-6 w-6 text-blue-600" />
+                      <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Calendar className="h-6 w-6 text-primary" />
                       </div>
                       <div>
-                        <h3 className="font-bold text-lg text-gray-900 leading-tight">
+                        <h3 className="font-bold text-lg text-foreground leading-tight">
                           {p.name}
                         </h3>
                         <div className="flex items-center gap-1.5 mt-1">
-                          <Users className="h-3.5 w-3.5 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-600">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-sm font-medium text-muted-foreground">
                             {p.count} Students
                           </span>
                         </div>
                       </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   </CardContent>
                 </Card>
               ))}
@@ -355,192 +355,196 @@ export function ProgramRegistrations() {
       )}
 
       {/* Level 2: School distribution */}
-      {level === "schools" && (
-        <div className="space-y-6">
-          {/* Schools Level Filter Bar */}
-          <Card className="shadow-sm border-none bg-white/60 backdrop-blur-md dark:bg-card/60 z-10">
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                {/* Search */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5 ml-1">
-                    <Search className="h-3 w-3" /> Search
-                  </Label>
-                  <Input
-                    placeholder="Search school name..."
-                    value={searchSchoolsQuery}
-                    onChange={(e) => setSearchSchoolsQuery(e.target.value)}
-                    className="h-9 bg-white dark:bg-gray-800 border-gray-200"
-                  />
-                </div>
+      {
+        level === "schools" && (
+          <div className="space-y-6">
+            {/* Schools Level Filter Bar */}
+            <Card className="shadow-sm border-none bg-background/60 backdrop-blur-md z-10">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                  {/* Search */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5 ml-1">
+                      <Search className="h-3 w-3" /> Search
+                    </Label>
+                    <Input
+                      placeholder="Search school name..."
+                      value={searchSchoolsQuery}
+                      onChange={(e) => setSearchSchoolsQuery(e.target.value)}
+                      className="h-9 bg-background border-input"
+                    />
+                  </div>
 
-                {/* Forane */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5 ml-1">
-                    <MapPin className="h-3 w-3" /> Forane
-                  </Label>
-                  <Select
-                    value={selectedForane}
-                    onValueChange={(v) => {
-                      setSelectedForane(v);
-                      setSelectedParishId("All");
-                    }}
-                  >
-                    <SelectTrigger className="h-9 bg-white dark:bg-gray-800 border-gray-200">
-                      <SelectValue placeholder="All Foranes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All Foranes</SelectItem>
-                      {uniqueForanes.map((f) => (
-                        <SelectItem key={f} value={f}>
-                          {f}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  {/* Forane */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5 ml-1">
+                      <MapPin className="h-3 w-3" /> Forane
+                    </Label>
+                    <Select
+                      value={selectedForane}
+                      onValueChange={(v) => {
+                        setSelectedForane(v);
+                        setSelectedParishId("All");
+                      }}
+                    >
+                      <SelectTrigger className="h-9 bg-background border-input">
+                        <SelectValue placeholder="All Foranes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All">All Foranes</SelectItem>
+                        {uniqueForanes.map((f) => (
+                          <SelectItem key={f} value={f}>
+                            {f}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                {/* Parish */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5 ml-1">
-                    <Church className="h-3 w-3" /> Parish/School
-                  </Label>
-                  <Select
-                    value={selectedParishId}
-                    onValueChange={setSelectedParishId}
-                  >
-                    <SelectTrigger className="h-9 bg-white dark:bg-gray-800 border-gray-200">
-                      <SelectValue placeholder="All Parishes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All Parishes</SelectItem>
-                      {dynamicParishesForFilter.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {schoolGroups.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="py-20 text-center text-gray-400 italic">
-                No schools found matching the current filters.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {schoolGroups.map((s) => (
-                <Card
-                  key={s.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow group"
-                  onClick={() => handleSchoolClick(s.id)}
-                >
-                  <CardContent className="p-6 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-xl bg-orange-50 flex items-center justify-center">
-                        <School className="h-6 w-6 text-orange-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-gray-900 leading-tight">
-                          {s.name}
-                        </h3>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <Users className="h-3.5 w-3.5 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-600">
-                            {s.count} Students
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-orange-500 transition-colors" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Level 3: Student list */}
-      {level === "students" && (
-        <div className="space-y-4">
-          {studentList.map((st, idx) => (
-            <Card key={st.id || idx}>
-              <CardContent className="p-5 flex items-center gap-5">
-                <div className="h-12 w-12 rounded-full bg-blue-50 border-2 border-blue-100 flex items-center justify-center flex-shrink-0">
-                  {st.isCountOnly ? (
-                    <span className="font-bold text-blue-700">
-                      +{st.studentCount}
-                    </span>
-                  ) : (
-                    <User className="h-6 w-6 text-blue-600" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-gray-900 truncate">
-                    {st.isCountOnly
-                      ? `${st.studentCount} Students (Consolidated)`
-                      : st.studentName}
-                  </h3>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                    <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                      {st.isCountOnly ? (
-                        <School className="h-3.5 w-3.5" />
-                      ) : (
-                        <Phone className="h-3.5 w-3.5" />
-                      )}
-                      <span>
-                        {st.isCountOnly
-                          ? "Bulk Registration"
-                          : st.studentPhone || "No Phone"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                      <Calendar className="h-3.5 w-3.5" />
-                      <span>
-                        Submitted:{" "}
-                        {st.submittedAt?.toDate().toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </span>
-                    </div>
+                  {/* Parish */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5 ml-1">
+                      <Church className="h-3 w-3" /> Parish/School
+                    </Label>
+                    <Select
+                      value={selectedParishId}
+                      onValueChange={setSelectedParishId}
+                    >
+                      <SelectTrigger className="h-9 bg-background border-input">
+                        <SelectValue placeholder="All Parishes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All">All Parishes</SelectItem>
+                        {dynamicParishesForFilter.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {st.isCountOnly ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openProfile(st.schoolUserId)}
-                    >
-                      <Info className="h-5 w-5 text-blue-600" />
-                    </Button>
-                  ) : (
-                    <Badge
-                      variant="secondary"
-                      className="bg-green-50 text-green-700 border-green-200"
-                    >
-                      Verified
-                    </Badge>
-                  )}
-                </div>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+
+            {schoolGroups.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-20 text-center text-muted-foreground italic">
+                  No schools found matching the current filters.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {schoolGroups.map((s) => (
+                  <Card
+                    key={s.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow group"
+                    onClick={() => handleSchoolClick(s.id)}
+                  >
+                    <CardContent className="p-6 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center">
+                          <School className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-foreground leading-tight">
+                            {s.name}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium text-muted-foreground">
+                              {s.count} Students
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-orange-500 transition-colors" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      {/* Level 3: Student list */}
+      {
+        level === "students" && (
+          <div className="space-y-4">
+            {studentList.map((st, idx) => (
+              <Card key={st.id || idx}>
+                <CardContent className="p-5 flex items-center gap-5">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center flex-shrink-0">
+                    {st.isCountOnly ? (
+                      <span className="font-bold text-primary">
+                        +{st.studentCount}
+                      </span>
+                    ) : (
+                      <User className="h-6 w-6 text-primary" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-foreground truncate">
+                      {st.isCountOnly
+                        ? `${st.studentCount} Students (Consolidated)`
+                        : st.studentName}
+                    </h3>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        {st.isCountOnly ? (
+                          <School className="h-3.5 w-3.5" />
+                        ) : (
+                          <Phone className="h-3.5 w-3.5" />
+                        )}
+                        <span>
+                          {st.isCountOnly
+                            ? "Bulk Registration"
+                            : st.studentPhone || "No Phone"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>
+                          Submitted:{" "}
+                          {st.submittedAt?.toDate().toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {st.isCountOnly ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openProfile(st.schoolUserId)}
+                      >
+                        <Info className="h-5 w-5 text-primary" />
+                      </Button>
+                    ) : (
+                      <Badge
+                        variant="secondary"
+                        className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                      >
+                        Verified
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )
+      }
 
       {/* School Profile Dialog */}
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-blue-900">
+            <DialogTitle className="flex items-center gap-2 text-primary">
               <Building className="h-5 w-5" />
               School Profile
             </DialogTitle>
@@ -548,10 +552,10 @@ export function ProgramRegistrations() {
           {currentSchoolProfile ? (
             <div className="space-y-5 py-4">
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Institution
                 </p>
-                <p className="text-lg font-bold text-gray-900 leading-tight">
+                <p className="text-lg font-bold text-foreground leading-tight">
                   {currentSchoolProfile.schoolName ||
                     currentSchoolProfile.schoolname ||
                     currentSchoolProfile.name}
@@ -582,14 +586,14 @@ export function ProgramRegistrations() {
                   },
                 ].map((item, i) => (
                   <div key={i} className="flex gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-                      <item.icon className="h-5 w-5 text-blue-600" />
+                    <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <item.icon className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         {item.label}
                       </p>
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-foreground">
                         {item.value}
                       </p>
                     </div>
@@ -598,7 +602,7 @@ export function ProgramRegistrations() {
               </div>
             </div>
           ) : (
-            <div className="py-10 text-center text-gray-500">
+            <div className="py-10 text-center text-muted-foreground">
               Profile data not found.
             </div>
           )}
@@ -612,6 +616,6 @@ export function ProgramRegistrations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

@@ -80,6 +80,7 @@ export function Logs() {
                   <TableRow>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Device</TableHead>
                     <TableHead>Action</TableHead>
                     <TableHead>Time</TableHead>
                   </TableRow>
@@ -92,13 +93,17 @@ export function Logs() {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                            log.role === "admin"
+                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${log.role === "admin"
                               ? "bg-purple-50 text-purple-700 ring-purple-700/10 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-400/20"
                               : "bg-green-50 text-green-700 ring-green-700/10 dark:bg-green-900/30 dark:text-green-400 dark:ring-green-400/20"
-                          }`}
+                            }`}
                         >
                           {log.role || "user"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-600/10 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-500/20 capitalize">
+                          {log.device || "web"}
                         </span>
                       </TableCell>
                       <TableCell>

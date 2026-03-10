@@ -55,8 +55,8 @@ export function EventApprovals() {
             // Fetch events with forane filter from backend
             const foraneToQuery = foraneFilter !== 'All' ? foraneFilter : undefined;
             const allEvents = await getEvents(undefined, foraneToQuery);
-            // Filter for draft events
-            const draftEvents = (allEvents as EventData[]).filter(event => !event.isPublic);
+            // Filter for pending events specifically, ignoring 'published' and 'private' ones
+            const draftEvents = (allEvents as EventData[]).filter(event => event.status === 'pending' || (!event.status && !event.isPublic));
             setEvents(draftEvents);
         } catch (error) {
             console.error("Error fetching draft events:", error);
@@ -104,16 +104,16 @@ export function EventApprovals() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Event Approvals</h1>
-                <p className="text-gray-500">Review and manage pending event submissions</p>
+                <h1 className="text-2xl font-bold text-foreground">Publish Events</h1>
+                <p className="text-muted-foreground">Review and manage pending event submissions</p>
             </div>
 
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                        <CardTitle>Pending Requests</CardTitle>
+                        <CardTitle>Pending Review</CardTitle>
                         <CardDescription>
-                            {events.length} event{events.length !== 1 ? 's' : ''} waiting for approval
+                            {events.length} event{events.length !== 1 ? 's' : ''} waiting to be published
                         </CardDescription>
                     </div>
                     <div className="relative min-w-[160px]">
@@ -145,16 +145,16 @@ export function EventApprovals() {
                                 <TableRow key={event.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden">
+                                            <div className="w-12 h-12 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
                                                 {event.imageUrl ? (
                                                     <ImageWithFallback src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
+                                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">No Img</div>
                                                 )}
                                             </div>
                                             <div>
-                                                <h3 className="font-medium text-gray-900">{event.title}</h3>
-                                                <p className="text-sm text-gray-500 truncate max-w-[200px]">{event.place}</p>
+                                                <h3 className="font-medium text-foreground">{event.title}</h3>
+                                                <p className="text-sm text-muted-foreground truncate max-w-[200px]">{event.place}</p>
                                             </div>
                                         </div>
                                     </TableCell>
@@ -163,17 +163,17 @@ export function EventApprovals() {
                                             {event.category}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="text-gray-600">
+                                    <TableCell className="text-muted-foreground">
                                         {event.creatorSchoolName}
                                     </TableCell>
-                                    <TableCell className="text-gray-600">
+                                    <TableCell className="text-muted-foreground">
                                         {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             <Link to={`/events/${event.id}`}>
                                                 <Button variant="ghost" size="icon" title="View Details">
-                                                    <Eye className="w-4 h-4 text-gray-500" />
+                                                    <Eye className="w-4 h-4 text-muted-foreground" />
                                                 </Button>
                                             </Link>
                                             <Button
@@ -182,9 +182,10 @@ export function EventApprovals() {
                                                 className="text-green-600 hover:text-green-700 hover:bg-green-50"
                                                 onClick={() => handleAction(event.id!, 'approved')}
                                                 disabled={actionLoading === event.id}
-                                                title="Approve"
+                                                title="Publish"
                                             >
                                                 {actionLoading === event.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                                <span className="ml-2">Publish</span>
                                             </Button>
                                             <Button
                                                 variant="ghost"
@@ -192,9 +193,10 @@ export function EventApprovals() {
                                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                                 onClick={() => handleAction(event.id!, 'rejected')}
                                                 disabled={actionLoading === event.id}
-                                                title="Reject"
+                                                title="Make Private"
                                             >
                                                 {actionLoading === event.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                                <span className="ml-2">Private</span>
                                             </Button>
                                         </div>
                                     </TableCell>
@@ -202,7 +204,7 @@ export function EventApprovals() {
                             ))}
                             {filteredEvents.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center text-gray-500">
+                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                                         No pending events found.
                                     </TableCell>
                                 </TableRow>

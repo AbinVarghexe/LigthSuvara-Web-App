@@ -152,15 +152,15 @@ export function EventForm() {
             <div className="flex items-center gap-4 mb-8">
                 <Link
                     to="/events"
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    className="p-2 hover:bg-muted rounded-full transition-colors"
                 >
-                    <ArrowLeft className="w-5 h-5 text-gray-600" />
+                    <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
+                    <h1 className="text-2xl font-bold text-foreground">
                         {id ? 'Edit Event' : 'Create New Event'}
                     </h1>
-                    <p className="text-gray-500 text-sm mt-1">
+                    <p className="text-muted-foreground text-sm mt-1">
                         Fill in the details below to {id ? 'update the' : 'create a new'} event
                     </p>
                 </div>
@@ -178,8 +178,8 @@ export function EventForm() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
                 {/* Basic Info Section */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
-                    <h2 className="text-lg font-semibold border-b border-gray-100 pb-4">
+                <div className="bg-card text-card-foreground p-6 rounded-xl shadow-sm border border-border space-y-6">
+                    <h2 className="text-lg font-semibold border-b border-border pb-4">
                         Basic Information
                     </h2>
 
@@ -225,7 +225,7 @@ export function EventForm() {
                         <div className="space-y-2">
                             <Label htmlFor="date">Date</Label>
                             <div className="relative">
-                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                     id="date"
                                     type="date"
@@ -241,7 +241,7 @@ export function EventForm() {
                         <div className="space-y-2 md:col-span-2">
                             <Label htmlFor="place">Venue / Location</Label>
                             <div className="relative">
-                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                     id="place"
                                     className="pl-10"
@@ -270,15 +270,15 @@ export function EventForm() {
                 </div>
 
                 {/* Media Section */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
-                    <h2 className="text-lg font-semibold border-b border-gray-100 pb-4">
+                <div className="bg-card text-card-foreground p-6 rounded-xl shadow-sm border border-border space-y-6">
+                    <h2 className="text-lg font-semibold border-b border-border pb-4">
                         Event Media
                     </h2>
 
                     <div className="space-y-4">
                         <Label>Event Image</Label>
-                        <div className="flex items-center gap-6">
-                            <div className="relative w-40 h-40 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden group hover:border-blue-400 transition-colors">
+                        <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                            <div className="relative w-40 h-40 bg-muted rounded-xl border-2 border-dashed border-border flex items-center justify-center overflow-hidden group hover:border-primary transition-colors">
                                 {imagePreview ? (
                                     <>
                                         <ImageWithFallback
@@ -292,8 +292,8 @@ export function EventForm() {
                                     </>
                                 ) : (
                                     <div className="text-center p-4">
-                                        <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-xs text-gray-500">Click to upload</p>
+                                        <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                                        <p className="text-xs text-muted-foreground">Click to upload</p>
                                     </div>
                                 )}
                                 <input
@@ -303,8 +303,8 @@ export function EventForm() {
                                     onChange={handleImageChange}
                                 />
                             </div>
-                            <div className="flex-1 text-sm text-gray-500">
-                                <p className="font-medium text-gray-700 mb-1">Upload Guidelines</p>
+                            <div className="flex-1 text-sm text-muted-foreground">
+                                <p className="font-medium text-foreground mb-1">Upload Guidelines</p>
                                 <ul className="list-disc list-inside space-y-1">
                                     <li>Recommended size: 1200x630px</li>
                                     <li>Max file size: 5MB</li>
@@ -324,7 +324,7 @@ export function EventForm() {
                     </Link>
                     <Button
                         type="submit"
-                        className="px-8 bg-blue-600 hover:bg-blue-700"
+                        className="px-8"
                         disabled={isLoading}
                     >
                         {isLoading ? (
