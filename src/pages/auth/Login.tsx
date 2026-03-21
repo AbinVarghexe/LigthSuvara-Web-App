@@ -46,7 +46,7 @@ export function Login() {
       const role = fetchedRole || "user";
 
       // Fire and forget logging so it doesn't block the UI navigation
-      logUserAccess(userCredential.user, role).catch(console.error);
+      logUserAccess({ uid: userCredential.user.uid, email: data.email }, role, 'LOGIN').catch(console.error);
 
       if (adminStatus) {
         toast.success("Welcome back!");

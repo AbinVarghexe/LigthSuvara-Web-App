@@ -333,9 +333,9 @@ export function Events() {
               if (user) {
                 // Prioritize authentic DB data over stale/cached event metadata
                 resolvedSchool =
-                  (event as any).creatorSchoolName && (event as any).creatorSchoolName !== "Admin"
-                    ? (event as any).creatorSchoolName
-                    : user.schoolName || user.schoolname || user.fullName || resolvedSchool;
+                  event.lastEditedByName ||
+                  (event as any).creatorSchoolName ||
+                  user.schoolName || user.schoolname || user.fullName || resolvedSchool;
                 resolvedForane = user.forane || resolvedForane;
               }
             } catch (err) {
@@ -874,7 +874,7 @@ export function Events() {
                     <TableRow>
                       <TableHead className="w-[300px]">Event Details</TableHead>
                       <TableHead>Category</TableHead>
-                      <TableHead>Created By</TableHead>
+                      <TableHead>Last Edited By</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -886,13 +886,12 @@ export function Events() {
                         (u) => u.id === event.creatorId,
                       );
                       const schoolName =
-                        event.creatorSchoolName &&
-                          event.creatorSchoolName !== "Admin"
-                          ? event.creatorSchoolName
-                          : creator?.schoolName ||
-                          creator?.schoolname ||
-                          creator?.fullName ||
-                          "Unknown";
+                        event.lastEditedByName ||
+                        (event as any).creatorSchoolName ||
+                        creator?.schoolName ||
+                        creator?.schoolname ||
+                        creator?.fullName ||
+                        "Unknown";
 
                       return (
                         <TableRow key={event.id}>
@@ -1099,7 +1098,7 @@ export function Events() {
                             Event Details
                           </TableHead>
                           <TableHead>Category</TableHead>
-                          <TableHead>Created By</TableHead>
+                          <TableHead>Last Edited By</TableHead>
                           <TableHead>Forane</TableHead>
                           <TableHead>Created</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
@@ -1111,13 +1110,12 @@ export function Events() {
                             (u) => u.id === event.creatorId,
                           );
                           const schoolName =
-                            event.creatorSchoolName &&
-                              event.creatorSchoolName !== "Admin"
-                              ? event.creatorSchoolName
-                              : creator?.schoolName ||
-                              creator?.schoolname ||
-                              creator?.fullName ||
-                              "Unknown";
+                            event.lastEditedByName ||
+                            (event as any).creatorSchoolName ||
+                            creator?.schoolName ||
+                            creator?.schoolname ||
+                            creator?.fullName ||
+                            "Unknown";
 
                           return (
                             <TableRow key={event.id}>
@@ -1334,7 +1332,7 @@ export function Events() {
                               Event Details
                             </TableHead>
                             <TableHead>Category</TableHead>
-                            <TableHead>Created By</TableHead>
+                            <TableHead>Last Edited By</TableHead>
                             <TableHead>Forane</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead className="text-right">
@@ -1348,13 +1346,12 @@ export function Events() {
                               (u) => u.id === event.creatorId,
                             );
                             const schoolName =
-                              event.creatorSchoolName &&
-                                event.creatorSchoolName !== "Admin"
-                                ? event.creatorSchoolName
-                                : creator?.schoolName ||
-                                creator?.schoolname ||
-                                creator?.fullName ||
-                                "Unknown";
+                              event.lastEditedByName ||
+                              (event as any).creatorSchoolName ||
+                              creator?.schoolName ||
+                              creator?.schoolname ||
+                              creator?.fullName ||
+                              "Unknown";
                             const foraneName = event.creatorForane || creator?.forane || "—";
 
                             return (
@@ -1587,7 +1584,7 @@ export function Events() {
                               Event Details
                             </TableHead>
                             <TableHead>Category</TableHead>
-                            <TableHead>Created By</TableHead>
+                            <TableHead>Last Edited By</TableHead>
                             <TableHead>Forane</TableHead>
                             <TableHead>Created</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -1599,13 +1596,12 @@ export function Events() {
                               (u) => u.id === event.creatorId,
                             );
                             const schoolName =
-                              event.creatorSchoolName &&
-                                event.creatorSchoolName !== "Admin"
-                                ? event.creatorSchoolName
-                                : creator?.schoolName ||
-                                creator?.schoolname ||
-                                creator?.fullName ||
-                                "Unknown";
+                              event.lastEditedByName ||
+                              (event as any).creatorSchoolName ||
+                              creator?.schoolName ||
+                              creator?.schoolname ||
+                              creator?.fullName ||
+                              "Unknown";
 
                             return (
                               <TableRow key={event.id}>

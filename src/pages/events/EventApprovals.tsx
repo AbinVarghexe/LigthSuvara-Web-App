@@ -135,7 +135,7 @@ export function EventApprovals() {
                             <TableRow>
                                 <TableHead className="w-[300px]">Event Details</TableHead>
                                 <TableHead>Category</TableHead>
-                                <TableHead>Created By</TableHead>
+                                <TableHead>Last Edited By</TableHead>
                                 <TableHead>Date</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -164,7 +164,7 @@ export function EventApprovals() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
-                                        {event.creatorSchoolName}
+                                        {event.lastEditedByName || (event as any).creatorSchoolName || 'N/A'}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {event.date ? new Date((event.date as any).seconds ? (event.date as any).seconds * 1000 : event.date).toLocaleDateString() : 'N/A'}

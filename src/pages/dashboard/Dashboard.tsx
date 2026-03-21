@@ -440,7 +440,7 @@ export function Dashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[200px]">Title</TableHead>
-                    <TableHead className="min-w-[150px]">School</TableHead>
+                    <TableHead className="min-w-[150px]">Last Edited By</TableHead>
                     <TableHead className="min-w-[100px]">Created</TableHead>
                     <TableHead className="min-w-[100px]">Status</TableHead>
                   </TableRow>
@@ -449,13 +449,12 @@ export function Dashboard() {
                   {filteredEvents.slice(0, 5).map((event) => {
                     const creator = users.find((u) => u.id === event.creatorId);
                     const schoolName =
-                      event.creatorSchoolName &&
-                        event.creatorSchoolName !== "Admin"
-                        ? event.creatorSchoolName
-                        : creator?.schoolName ||
-                        creator?.schoolname ||
-                        creator?.fullName ||
-                        "Unknown";
+                      event.lastEditedByName ||
+                      (event as any).creatorSchoolName ||
+                      creator?.schoolName ||
+                      creator?.schoolname ||
+                      creator?.fullName ||
+                      "Unknown";
 
                     const formatDate = (date: any) => {
                       if (!date) return "N/A";

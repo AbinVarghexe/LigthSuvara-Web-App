@@ -337,14 +337,19 @@ export function Reports() {
     fetchData();
   }, []);
 
-  const schoolNames = useMemo(() => {
+  const filteredSchoolNames = useMemo(() => {
     const names = new Set<string>();
     users.forEach((u) => {
-      const n = u.schoolName || u.schoolname;
-      if (n) names.add(n);
+      if (u.role === "school") {
+        const matchForane = evtForane === "All" || u.forane === evtForane;
+        if (matchForane) {
+          const n = u.schoolName || u.schoolname;
+          if (n) names.add(n);
+        }
+      }
     });
     return Array.from(names).sort();
-  }, [users]);
+  }, [users, evtForane]);
 
   const dynamicParishes = useMemo(() => {
     return users
@@ -395,7 +400,8 @@ export function Reports() {
         (u) => u.uid === event.creatorId || u.id === event.creatorId,
       );
       const s =
-        event.creatorSchoolName ||
+        event.lastEditedByName ||
+        (event as any).creatorSchoolName ||
         creator?.schoolName ||
         creator?.schoolname ||
         "";
@@ -520,7 +526,8 @@ export function Reports() {
         (u) => u.uid === event.creatorId || u.id === event.creatorId,
       );
       const school =
-        event.creatorSchoolName ||
+        event.lastEditedByName ||
+        (event as any).creatorSchoolName ||
         creator?.schoolName ||
         creator?.schoolname ||
         "Unknown";
@@ -604,7 +611,7 @@ export function Reports() {
             `"${e.title}"`,
             getEventDate(e).toLocaleDateString(),
             e.category,
-            `"${e.creatorSchoolName || ""}"`,
+            `"${e.lastEditedByName || (e as any).creatorSchoolName || ""}"`,
             `"${e.creatorForane || creator?.forane || ""}"`,
             creator?.role || "unknown",
             e.isPublic ? "Published" : "Draft",
@@ -666,12 +673,13 @@ export function Reports() {
 
   // Sunday School users count
   const ssCount = users.filter((u) => {
+    const isSchoolRole = u.role === "school";
     const matchForane = ssForane === "All" || u.forane === ssForane;
     const matchParish =
       ssParish === "All" ||
-      u.schoolName === ssParish ||
-      u.schoolname === ssParish;
-    return matchForane && matchParish;
+      u.uid === ssParish ||
+      u.id === ssParish;
+    return isSchoolRole && matchForane && matchParish;
   }).length;
 
   // Unique classes across all teachers
@@ -718,8 +726,8 @@ export function Reports() {
       const matchForane = ssForane === "All" || u.forane === ssForane;
       const matchParish =
         ssParish === "All" ||
-        u.schoolName === ssParish ||
-        u.schoolname === ssParish;
+        u.uid === ssParish ||
+        u.id === ssParish;
       return isSchoolRole && matchForane && matchParish;
     });
 
@@ -732,7 +740,7 @@ export function Reports() {
       await PremiumSundaySchoolPdfService.generateReport(
         filteredUsers,
         ssForane,
-        ssParish,
+        ssParish === "All" ? "All" : (dynamicParishes.find(p => p.id === ssParish)?.name || ssParish),
       );
       toast.success("Sunday School report generated");
     } catch {
@@ -755,7 +763,7 @@ export function Reports() {
         tmClassYear,
         tmClassFilter,
         tmClassForane,
-        tmClassParish,
+        tmClassParish === "All" ? "All" : (dynamicParishes.find(p => p.id === tmClassParish)?.name || tmClassParish),
       );
       toast.success("Teacher report generated");
     } catch {
@@ -1172,7 +1180,7 @@ export function Reports() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Schools / Parishes</SelectItem>
-                    {schoolNames.map((s) => (
+                    {filteredSchoolNames.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
                       </SelectItem>
@@ -1403,7 +1411,7 @@ export function Reports() {
             <CardContent className="space-y-3">
               <FilterBar
                 foranes={uniqueForanes}
-                parishes={schoolNames.map((n) => ({ id: n, name: n }))}
+                parishes={dynamicParishes.map((p) => ({ id: p.id, name: p.name, forane: p.forane }))}
                 forane={ssForane}
                 parishId={ssParish}
                 onForaneChange={setSsForane}

@@ -10,6 +10,9 @@ import {
   FileSpreadsheet,
   Sparkles,
   UserPlus,
+  Trash2,
+  Church,
+  Plus,
 } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "../../components/ui/button";
@@ -22,6 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +49,7 @@ import {
   getUsers,
   UserData,
   bulkCreateUsers,
+  deleteUser,
 } from "../../features/users/services/userService";
 import { Card, CardContent } from "../../components/ui/card";
 import {
@@ -51,23 +60,38 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { toast } from "sonner";
 
+interface NewUser extends Partial<UserData> {
+  password?: string;
+}
+
 export function Users() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"school" | "parish">("school");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [newUser, setNewUser] = useState({
+  const [isAdminDeleting, setIsAdminDeleting] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [newUsers, setNewUsers] = useState<NewUser[]>([{
     email: "",
     fullName: "",
-    role: "school" as "admin" | "school" | "animator",
+    name: "",
+    role: "school",
+    schoolname: "",
     schoolName: "",
     phoneNumber: "",
     password: "",
     forane: "",
-  });
+    parish: "",
+    address: "",
+    parishId: "",
+    parishName: "",
+    schoolId: "",
+  }]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const foraneNames = [
@@ -87,35 +111,64 @@ export function Users() {
   ];
 
   const handleCreateUser = async () => {
-    if (!newUser.email || !newUser.role || !newUser.password) {
-      toast.error("Email, role, and password are required");
+    const invalidUsers = newUsers.filter(u => !u.email || !u.role || !u.password);
+    if (invalidUsers.length > 0) {
+      toast.error("Email, role, and password are required for all users");
       return;
     }
     setIsCreating(true);
     try {
-      const result = await bulkCreateUsers([newUser]);
+      const result = await bulkCreateUsers(newUsers);
       if (result.success && result.created > 0) {
-        toast.success("User created successfully");
+        toast.success(`Successfully created ${result.created} user(s)`);
         setIsCreateDialogOpen(false);
-        setNewUser({
+        setNewUsers([{
           email: "",
           fullName: "",
+          name: "",
           role: "school",
-          schoolName: "",
+          schoolname: "",
           phoneNumber: "",
           password: "",
           forane: "",
-        });
+          parish: "",
+          address: "",
+          parishId: "",
+          parishName: "",
+          schoolId: "",
+        }]);
         fetchUsers();
       } else {
-        const errMsg = result.errors?.[0]?.error || "Failed to create user";
+        const errMsg = result.errors?.[0]?.error || "Failed to create users";
         toast.error(errMsg);
       }
     } catch (error: any) {
-      console.error("Error creating user:", error);
-      toast.error(error.message || "Failed to create user");
+      console.error("Error creating users:", error);
+      toast.error(error.message || "Failed to create users");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    setIsAdminDeleting(true);
+    try {
+      const result = await deleteUser(userToDelete.id || userToDelete.uid);
+      if (result.success) {
+        toast.success("User deleted successfully");
+        setIsDeleteConfirmOpen(false);
+        setUserToDelete(null);
+        fetchUsers();
+      } else {
+        toast.error("Failed to delete user account");
+      }
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      toast.error(error.message || "Failed to delete user");
+    } finally {
+      setIsAdminDeleting(false);
     }
   };
 
@@ -136,7 +189,7 @@ export function Users() {
 
   const filteredUsers = users
     .filter((user) => {
-      if (user.role !== "school") return false;
+      if (user.role !== activeTab) return false;
       const name = user.schoolName || user.schoolname || user.fullName || "";
       return (
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -154,12 +207,14 @@ export function Users() {
       "email",
       "fullName",
       "role",
-      "schoolName",
+      "schoolname",
       "phoneNumber",
       "password",
+      "forane",
+      "parish",
     ];
     const sample = [
-      "teacher@example.com,John Doe,school,St. Marys School,1234567890,ChangeMe123!",
+      "stdominicsschool@test.com,Akhil,school,St Dominics Kanjirapally,9061782311,Password123,Kanjirapally,Kanjirapally",
     ];
     const csvContent =
       "data:text/csv;charset=utf-8," +
@@ -169,7 +224,7 @@ export function Users() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "user_upload_template.csv");
+    link.setAttribute("download", "school_user_upload_template.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -185,26 +240,46 @@ export function Users() {
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
-        const rows = text.split("\n");
-        const headers = rows[0].split(",").map((h) => h.trim());
+        const rows = text.split("\n").filter(row => row.trim());
+        if (rows.length < 2) {
+          toast.warning("CSV file is empty or only contains headers");
+          setIsUploading(false);
+          return;
+        }
 
+        const headers = rows[0].split(",").map((h) => h.trim());
         const newUsers: Partial<UserData>[] = [];
 
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i].trim();
           if (!row) continue;
 
-          const values = row.split(",").map((v) => v.trim());
+          // Robust split by comma that ignores commas inside double quotes
+          const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim());
           const user: any = {};
 
           headers.forEach((header, index) => {
-            if (values[index]) {
-              user[header] = values[index];
+            let val = values[index]?.replace(/^"|"$/g, '').trim();
+            if (val) {
+              user[header] = val;
             }
           });
 
-          if (user.email && user.role) {
-            // Basic validation
+          // Basic validation for required fields before adding to import list
+          if (user.email) {
+            if (!user.role) user.role = "school";
+            
+            // Password is required for new accounts
+            if (!user.password) {
+              console.warn(`Skipping user ${user.email}: Missing password`);
+              continue;
+            }
+            
+            if (user.password.length < 6) {
+              console.warn(`Skipping user ${user.email}: Password too short`);
+              continue;
+            }
+
             newUsers.push(user);
           }
         }
@@ -216,19 +291,19 @@ export function Users() {
             toast.success(`Successfully created ${result.created} users`);
           } else {
             toast.warning(
-              `Created ${result.created} users, ${result.failed} failed. Check console for details.`
+              `Created ${result.created} users, ${result.failed} failed. See console for details.`
             );
-            console.log("Failed users:", result.errors);
+            console.log("Bulk creation results:", result);
           }
 
           setIsDialogOpen(false);
-          fetchUsers(); // Refresh list
+          fetchUsers();
         } else {
-          toast.warning("No valid users found in CSV");
+          toast.warning("No valid users (email and role required) found in CSV");
         }
       } catch (error) {
         console.error("Error parsing CSV:", error);
-        toast.error("Failed to process CSV file");
+        toast.error("Failed to process CSV file. Ensure it's in the correct format.");
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -264,95 +339,318 @@ export function Users() {
                 Add User
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>Create New Users</DialogTitle>
                 <DialogDescription>
-                  Add a new Sunday school or parish user account.
+                  Add one or more Sunday school or parish user accounts.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="user@example.com"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    placeholder="John Doe"
-                    value={newUser.fullName}
-                    onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="schoolName">School / Parish Name</Label>
-                  <Input
-                    id="schoolName"
-                    placeholder="St. Mary's School"
-                    value={newUser.schoolName}
-                    onChange={(e) => setNewUser({ ...newUser, schoolName: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role *</Label>
-                    <Select
-                      value={newUser.role}
-                      onValueChange={(val) => setNewUser({ ...newUser, role: val as any })}
-                    >
-                      <SelectTrigger id="role">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="school">School</SelectItem>
-                        <SelectItem value="animator">Animator</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
+              <div className="space-y-6 py-4">
+                {newUsers.map((user, index) => (
+                  <div key={index} className="space-y-4 p-4 border rounded-lg relative bg-muted/30">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-blue-600 uppercase tracking-wider">User {index + 1}</span>
+                      {newUsers.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            const updated = [...newUsers];
+                            updated.splice(index, 1);
+                            setNewUsers(updated);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor={`email-${index}`}>Email *</Label>
+                        <Input
+                          id={`email-${index}`}
+                          type="email"
+                          placeholder="user@example.com"
+                          value={user.email}
+                          onChange={(e) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, email: e.target.value };
+                            setNewUsers(updated);
+                          }}
+                        />
+                      </div>
+
+                      {(user.role === "animator" || user.role === "parish") ? (
+                        <div className="space-y-2">
+                          <Label htmlFor={`name-${index}`}>{user.role === "animator" ? "Full Name *" : "Parish Name *"}</Label>
+                          <Input
+                            id={`name-${index}`}
+                            placeholder={user.role === "animator" ? "Enter Full Name" : "Enter Parish Name"}
+                            value={user.name}
+                            onChange={(e) => {
+                              const updated = [...newUsers];
+                              updated[index] = { ...user, name: e.target.value };
+                              setNewUsers(updated);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor={`fullName-${index}`}>Full Name</Label>
+                          <Input
+                            id={`fullName-${index}`}
+                            placeholder="John Doe"
+                            value={user.fullName}
+                            onChange={(e) => {
+                              const updated = [...newUsers];
+                              updated[index] = { ...user, fullName: e.target.value };
+                              setNewUsers(updated);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor={`role-${index}`}>Role *</Label>
+                        <Select
+                          value={user.role}
+                          onValueChange={(val) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, role: val as any };
+                            setNewUsers(updated);
+                          }}
+                        >
+                          <SelectTrigger id={`role-${index}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="school">School</SelectItem>
+                            <SelectItem value="animator">Animator</SelectItem>
+                            <SelectItem value="parish">Parish</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`forane-${index}`}>Forane</Label>
+                        <Select
+                          value={user.forane}
+                          onValueChange={(val) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, forane: val };
+                            setNewUsers(updated);
+                          }}
+                        >
+                          <SelectTrigger id={`forane-${index}`}>
+                            <SelectValue placeholder="Select forane" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {foraneNames.map((f) => (
+                              <SelectItem key={f} value={f}>{f}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {user.role === "school" && (
+                      <div className="space-y-2">
+                        <Label htmlFor={`schoolname-${index}`}>School Name</Label>
+                        <Input
+                          id={`schoolname-${index}`}
+                          placeholder="St. Mary's School"
+                          value={user.schoolname}
+                          onChange={(e) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, schoolname: e.target.value };
+                            setNewUsers(updated);
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {user.role === "animator" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor={`address-${index}`}>Address</Label>
+                          <Input
+                            id={`address-${index}`}
+                            placeholder="Enter Address"
+                            value={user.address}
+                            onChange={(e) => {
+                              const updated = [...newUsers];
+                              updated[index] = { ...user, address: e.target.value };
+                              setNewUsers(updated);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`parishDropdown-${index}`}>Parish *</Label>
+                          <Select
+                            value={user.parishId}
+                            onValueChange={(val) => {
+                              const selectedParish = users.find(u => u.id === val || u.uid === val);
+                              const updated = [...newUsers];
+                              updated[index] = { 
+                                ...user, 
+                                parishId: val, 
+                                parishName: selectedParish?.schoolname || selectedParish?.schoolName || selectedParish?.fullName || "" 
+                              };
+                              setNewUsers(updated);
+                            }}
+                          >
+                            <SelectTrigger id={`parishDropdown-${index}`}>
+                              <SelectValue placeholder="Select Parish" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from(
+                                users
+                                  .filter(u => (u.role === "parish" || u.role === "school") && (!user.forane || u.forane === user.forane))
+                                  .reduce((acc, current) => {
+                                    const name = current.schoolname || current.schoolName || current.fullName || current.email;
+                                    if (!acc.has(name)) {
+                                      acc.set(name, current);
+                                    }
+                                    return acc;
+                                  }, new Map<string, typeof users[0]>())
+                                  .values()
+                              ).map((p) => (
+                                <SelectItem key={p.id} value={p.id || ""}>
+                                  {p.schoolname || p.schoolName || p.fullName || p.email}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {user.role === "parish" && (
+                      <div className="space-y-2">
+                        <Label htmlFor={`schoolSelect-${index}`}>Link to School *</Label>
+                        <Select
+                          value={user.schoolId}
+                          onValueChange={(val) => {
+                            const selectedSchool = users.find(u => u.id === val || u.uid === val);
+                            const updated = [...newUsers];
+                            updated[index] = { 
+                              ...user, 
+                              schoolId: val, 
+                              schoolName: selectedSchool?.schoolname || selectedSchool?.schoolName || "" 
+                            };
+                            setNewUsers(updated);
+                          }}
+                        >
+                          <SelectTrigger id={`schoolSelect-${index}`}>
+                            <SelectValue placeholder="Select School" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(() => {
+                              const assignedSchoolIds = new Set(
+                                users
+                                  .filter(u => u.role === "parish" && u.schoolId)
+                                  .map(u => u.schoolId)
+                              );
+
+                              return Array.from(
+                                users
+                                  .filter(u => u.role === "school" && (!user.forane || u.forane === user.forane) && !assignedSchoolIds.has(u.id || u.uid))
+                                  .reduce((acc, current) => {
+                                    const name = current.schoolname || current.schoolName || current.fullName || current.email;
+                                    if (!acc.has(name)) {
+                                      acc.set(name, current);
+                                    }
+                                    return acc;
+                                  }, new Map<string, typeof users[0]>())
+                                  .values()
+                              ).map((s) => (
+                                <SelectItem key={s.id} value={s.id || ""}>
+                                  {s.schoolname || s.schoolName || s.fullName || s.email}
+                                </SelectItem>
+                              ));
+                            })()}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {(user.role !== "animator" && user.role !== "parish") && (
+                      <div className="space-y-2">
+                        <Label htmlFor={`parish-${index}`}>Parish</Label>
+                        <Input
+                          id={`parish-${index}`}
+                          placeholder="Enter Parish"
+                          value={user.parish}
+                          onChange={(e) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, parish: e.target.value };
+                            setNewUsers(updated);
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor={`phone-${index}`}>Phone Number</Label>
+                        <Input
+                          id={`phone-${index}`}
+                          placeholder="Phone Number"
+                          value={user.phoneNumber}
+                          onChange={(e) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, phoneNumber: e.target.value };
+                            setNewUsers(updated);
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`password-${index}`}>Password *</Label>
+                        <Input
+                          id={`password-${index}`}
+                          type="password"
+                          placeholder="Min 6 characters"
+                          value={user.password}
+                          onChange={(e) => {
+                            const updated = [...newUsers];
+                            updated[index] = { ...user, password: e.target.value };
+                            setNewUsers(updated);
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="forane">Forane</Label>
-                    <Select
-                      value={newUser.forane}
-                      onValueChange={(val) => setNewUser({ ...newUser, forane: val })}
-                    >
-                      <SelectTrigger id="forane">
-                        <SelectValue placeholder="Select forane" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {foraneNames.map((f) => (
-                          <SelectItem key={f} value={f}>{f}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    placeholder="1234567890"
-                    value={newUser.phoneNumber}
-                    onChange={(e) => setNewUser({ ...newUser, phoneNumber: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Min 6 characters"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  />
-                </div>
+                ))}
+                
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-dashed"
+                  onClick={() => {
+                    const lastUser = newUsers[newUsers.length - 1];
+                    setNewUsers([...newUsers, {
+                      email: "",
+                      fullName: "",
+                      name: "",
+                      role: lastUser?.role || "school",
+                      forane: lastUser?.forane || "",
+                      parish: lastUser?.parish || "",
+                      parishId: lastUser?.parishId || "",
+                      parishName: lastUser?.parishName || "",
+                      schoolId: lastUser?.schoolId || "",
+                      schoolName: lastUser?.schoolName || "",
+                      password: "",
+                      address: "",
+                    }]);
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Another User
+                </Button>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
@@ -366,7 +664,7 @@ export function Users() {
                   {isCreating ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
                   ) : (
-                    "Create User"
+                    `Create ${newUsers.length} User(s)`
                   )}
                 </Button>
               </DialogFooter>
@@ -449,6 +747,17 @@ export function Users() {
         </div>
       </div>
 
+      <Tabs
+        defaultValue="school"
+        className="w-full"
+        onValueChange={(val) => setActiveTab(val as "school" | "parish")}
+      >
+        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
+          <TabsTrigger value="school">Sunday Schools</TabsTrigger>
+          <TabsTrigger value="parish">Parishes</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {/* Filters and Search */}
       <Card>
         <CardContent className="p-4 flex flex-col md:flex-row gap-4">
@@ -516,6 +825,16 @@ export function Users() {
                       <DropdownMenuItem asChild>
                         <Link to={`/users/${user.id}`}>View Details</Link>
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-red-600 focus:text-red-600 cursor-pointer"
+                        onSelect={() => {
+                          setUserToDelete(user);
+                          setIsDeleteConfirmOpen(true);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete User
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -524,16 +843,20 @@ export function Users() {
                   <Badge
                     variant={user.role === "admin" ? "default" : "secondary"}
                     className={`gap-1.5 ${user.role === "admin"
-                        ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
-                        : user.role === "animator"
-                          ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
-                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                      ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
+                      : user.role === "animator"
+                      ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                      : user.role === "parish"
+                        ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400"
+                        : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
                       }`}
                   >
                     {user.role === "admin" ? (
                       <Shield className="w-3 h-3" />
                     ) : user.role === "animator" ? (
                       <Sparkles className="w-3 h-3" />
+                    ) : user.role === "parish" ? (
+                      <Church className="w-3 h-3" />
                     ) : (
                       <School className="w-3 h-3" />
                     )}
@@ -541,14 +864,13 @@ export function Users() {
                       ? "Administrator"
                       : user.role === "animator"
                         ? "Animator"
-                        : "Sunday School"}
+                        : user.role === "parish"
+                          ? "Parish"
+                          : "Sunday School"}
                   </Badge>
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-between text-sm text-muted-foreground">
-                  <span className="truncate max-w-[100px]">
-                    ID: {user.uid?.substring(0, 8)}...
-                  </span>
+                <div className="pt-4 border-t border-border flex items-center justify-end text-sm text-muted-foreground">
                   <Link
                     to={`/users/${user.id}`}
                     className="text-blue-600 hover:text-blue-700 font-medium"
@@ -566,6 +888,51 @@ export function Users() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Confirm Deletion
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Are you sure you want to delete the account for{" "}
+              <span className="font-semibold text-foreground">
+                {userToDelete?.schoolname || userToDelete?.schoolName || userToDelete?.fullName || userToDelete?.email}
+              </span>
+              ?
+              <br />
+              <br />
+              <span className="text-red-500 font-medium italic text-xs">
+                This will permanently delete the account from Firebase Authentication and all profile data from Firestore. This action cannot be undone.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteConfirmOpen(false)}
+              disabled={isAdminDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUser}
+              disabled={isAdminDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isAdminDeleting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting...</>
+              ) : (
+                "Delete Account"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

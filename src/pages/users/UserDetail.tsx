@@ -69,8 +69,11 @@ export function UserDetail() {
   // Edit Form State
   const [editForm, setEditForm] = useState({
     fullName: "",
-    schoolName: "",
+    schoolname: "",
     phoneNumber: "",
+    forane: "",
+    parish: "",
+    address: "",
   });
 
   useEffect(() => {
@@ -88,8 +91,11 @@ export function UserDetail() {
         if (userData) {
           setEditForm({
             fullName: userData.fullName || "",
-            schoolName: userData.schoolName || userData.schoolname || "",
+            schoolname: userData.schoolname || userData.schoolName || "",
             phoneNumber: userData.phoneNumber || "",
+            forane: userData.forane || "",
+            parish: userData.parish || "",
+            address: (userData as any).address || "",
           });
         }
       } catch (error) {
@@ -144,12 +150,14 @@ export function UserDetail() {
       const updates: Partial<UserData> = {
         fullName: editForm.fullName,
         phoneNumber: editForm.phoneNumber,
+        address: user.role === "animator" ? editForm.address : undefined,
       };
 
-      // Handle school name variations
+      // Handle school name and geographic fields
       if (user.role === "school") {
-        updates.schoolName = editForm.schoolName;
-        updates.schoolname = editForm.schoolName; // Update both for compatibility
+        updates.schoolname = editForm.schoolname;
+        updates.forane = editForm.forane;
+        updates.parish = editForm.parish;
       }
 
       await updateUserProfile(user.id, updates);
@@ -273,13 +281,12 @@ export function UserDetail() {
             </h2>
             <div className="flex justify-center mb-6">
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
-                  user.role === "admin"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${user.role === "admin"
                     ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
                     : user.role === "animator"
-                    ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
-                    : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
-                }`}
+                      ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                      : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
+                  }`}
               >
                 {user.role === "admin" ? (
                   <Shield className="w-3 h-3" />
@@ -291,8 +298,10 @@ export function UserDetail() {
                 {user.role === "admin"
                   ? "Administrator"
                   : user.role === "animator"
-                  ? "Animator"
-                  : "School Account"}
+                    ? "Animator"
+                    : user.role === "parish"
+                      ? "Parish"
+                      : "School Account"}
               </span>
             </div>
 
@@ -301,10 +310,28 @@ export function UserDetail() {
                 <Mail className="w-4 h-4" />
                 <span className="text-sm">{user.email}</span>
               </div>
+              {user.forane && (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase">Forane:</span>
+                  <span className="text-sm">{user.forane}</span>
+                </div>
+              )}
+              {user.parish && (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase">Parish:</span>
+                  <span className="text-sm">{user.parish}</span>
+                </div>
+              )}
               {user.phoneNumber && (
                 <div className="flex items-center gap-3 text-muted-foreground">
                   <Phone className="w-4 h-4" />
                   <span className="text-sm">{user.phoneNumber}</span>
+              </div>
+              )}
+              {user.role === "animator" && (user as any).address && (
+                <div className="flex items-start gap-3 text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase mt-1 shrink-0">Address:</span>
+                  <span className="text-sm leading-relaxed">{(user as any).address}</span>
                 </div>
               )}
               <div className="flex items-center gap-3 text-muted-foreground">
@@ -436,17 +463,41 @@ export function UserDetail() {
             </div>
 
             {user.role === "school" && (
-              <div className="space-y-2">
-                <Label htmlFor="schoolName">School Name</Label>
-                <Input
-                  id="schoolName"
-                  value={editForm.schoolName}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, schoolName: e.target.value })
-                  }
-                  placeholder="St. Mary's School"
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="schoolname">School Name</Label>
+                  <Input
+                    id="schoolname"
+                    value={editForm.schoolname}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, schoolname: e.target.value })
+                    }
+                    placeholder="St. Mary's School"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="forane">Forane</Label>
+                  <Input
+                    id="forane"
+                    value={editForm.forane}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, forane: e.target.value })
+                    }
+                    placeholder="Enter Forane"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="parish">Parish</Label>
+                  <Input
+                    id="parish"
+                    value={editForm.parish}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, parish: e.target.value })
+                    }
+                    placeholder="Enter Parish"
+                  />
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
@@ -460,6 +511,20 @@ export function UserDetail() {
                 placeholder="+1 234 567 890"
               />
             </div>
+
+            {user.role === "animator" && (
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  value={editForm.address}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, address: e.target.value })
+                  }
+                  placeholder="Enter Address"
+                />
+              </div>
+            )}
 
             <DialogFooter>
               <Button

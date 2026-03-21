@@ -4,7 +4,6 @@ import {
     getDoc,
     doc,
     updateDoc,
-    deleteDoc,
     query,
     where,
 } from 'firebase/firestore';
@@ -23,8 +22,13 @@ export interface UserData {
     fullName?: string;
     name?: string;
     phoneNumber?: string;
+    address?: string;
+    parishId?: string;
+    parishName?: string;
     profileImageUrl?: string;
     forane?: string;
+    parish?: string;
+    schoolId?: string;
     lastActiveAt?: any; // Firestore Timestamp
 }
 
@@ -48,7 +52,17 @@ export const updateUserRole = async (userId: string, newRole: 'admin' | 'school'
 };
 
 export const deleteUser = async (userId: string) => {
-    return await deleteDoc(doc(db, 'users', userId));
+    const deleteUserFunction = httpsCallable<{ uid: string }, { success: boolean }>(
+        functions,
+        'deleteUser'
+    );
+    try {
+        const result = await deleteUserFunction({ uid: userId });
+        return result.data;
+    } catch (error: any) {
+        console.error('Error calling deleteUser function:', error);
+        throw new Error(error.message || 'Failed to delete user');
+    }
 };
 
 export const updateUserActivity = async (userId: string) => {

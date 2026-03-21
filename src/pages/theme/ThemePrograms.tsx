@@ -248,19 +248,19 @@ export function ThemePrograms() {
                                     {data.programs.map((program, index) => {
                                         const Icon = availableIcons[program.iconName] || Star;
                                         return (
-                                            <Card key={index} className="overflow-hidden border-blue-100 hover:border-blue-300 transition-colors">
+                                            <Card key={index} className="overflow-hidden border-blue-100 dark:border-blue-900/30 hover:border-blue-300 dark:hover:border-blue-700 transition-colors bg-card">
                                                 <CardContent className="p-4 flex gap-4">
-                                                    <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                                        <Icon className="w-6 h-6 text-blue-600" />
+                                                    <div className="h-12 w-12 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                                                        <Icon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <h3 className="font-semibold text-gray-900 truncate">{program.title}</h3>
-                                                        <p className="text-sm text-gray-500 line-clamp-2 mt-1">{program.desc}</p>
+                                                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">{program.title}</h3>
+                                                        <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{program.desc}</p>
                                                         <div className="flex justify-end gap-2 mt-3">
                                                             <Button
                                                                 size="icon"
                                                                 variant="ghost"
-                                                                className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                                                                className="h-8 w-8 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                                                                 onClick={() => openProgramDialog(index)}
                                                             >
                                                                 <Edit2 className="w-4 h-4" />
@@ -268,7 +268,7 @@ export function ThemePrograms() {
                                                             <Button
                                                                 size="icon"
                                                                 variant="ghost"
-                                                                className="h-8 w-8 text-red-500 hover:bg-red-50"
+                                                                className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                                                                 onClick={() => handleDeleteProgram(index)}
                                                             >
                                                                 <Trash2 className="w-4 h-4" />

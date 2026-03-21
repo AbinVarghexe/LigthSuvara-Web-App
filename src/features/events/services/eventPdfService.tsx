@@ -66,17 +66,14 @@ export const EventPdfService = {
       eventImageBase64 = await fetchImageAsBase64(event.imageUrl);
     }
 
-    // 1.5 Fetch creator name
-    let creatorName = (event as any).creatorSchoolName || "Unknown";
-    if (event.creatorId) {
+    // 1.5 Fetch editor name
+    let editorName = event.lastEditedByName || (event as any).creatorSchoolName || "Unknown";
+    if (event.creatorId && !event.lastEditedByName) {
       try {
         const user = await getUser(event.creatorId);
         if (user) {
-          creatorName =
-            (event as any).creatorSchoolName &&
-              (event as any).creatorSchoolName !== "Admin"
-              ? (event as any).creatorSchoolName
-              : user.schoolName || user.schoolname || user.fullName || "Unknown";
+          editorName =
+            user.schoolName || user.schoolname || user.fullName || "Unknown";
         }
       } catch (error) {
         console.warn("Could not fetch user, using fallback name.");
@@ -87,7 +84,7 @@ export const EventPdfService = {
     const htmlString = renderToString(
       <EventPdfTemplate
         event={event}
-        creatorName={creatorName}
+        editorName={editorName}
         eventImageBase64={eventImageBase64}
       />
     );

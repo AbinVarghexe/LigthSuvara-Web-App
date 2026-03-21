@@ -69,9 +69,9 @@ export function ModeToggle() {
           transition={{ duration: 0.2 }}
         >
           {theme === "dark" ? (
-            <Moon className="h-5 w-5 text-slate-950 dark:text-slate-50" />
+            <Moon className="h-5 w-5 text-foreground" />
           ) : (
-            <Sun className="h-5 w-5 text-slate-800" />
+            <Sun className="h-5 w-5 text-foreground" />
           )}
         </motion.div>
       </AnimatePresence>

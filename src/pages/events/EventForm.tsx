@@ -58,7 +58,6 @@ export function EventForm() {
                     }
                     // ── preserve original ownership ──
                     setOriginalCreatorId(event.creatorId || null);
-                    setOriginalCreatorSchoolName((event as any).creatorSchoolName || null);
                     setOriginalCreatorForane((event as any).creatorForane || null);
                 }
             } catch (error) {
@@ -97,6 +96,8 @@ export function EventForm() {
             const forane = userDetails?.forane;
 
             // Prepare event data
+            const entityName = isAdminUser ? "Admin" : (userDetails?.schoolName || userDetails?.schoolname || userDetails?.fullName || 'Unknown');
+            
             const eventData: EventData = {
                 title: data.title,
                 description: data.description,
@@ -106,14 +107,14 @@ export function EventForm() {
                 isPublic: data.isPublic || false,
                 status: isAdminUser ? 'approved' : 'pending', // Set status based on role
                 creatorId: currentUser.uid,
-                creatorSchoolName: schoolName,
+                lastEditedByName: entityName,
                 ...(forane ? { creatorForane: forane } : {}),
                 ...(imagePreview ? { imageUrl: imagePreview } : {})
             };
 
             if (id) {
                 // On edit: preserve the original creator — do NOT overwrite with admin's UID
-                const updatePayload: EventData = {
+                const updatePayload: Partial<EventData> = {
                     title: data.title,
                     description: data.description,
                     place: data.place,
@@ -122,7 +123,7 @@ export function EventForm() {
                     isPublic: data.isPublic || false,
                     status: isAdminUser ? 'approved' : 'pending',
                     creatorId: originalCreatorId || currentUser.uid,
-                    creatorSchoolName: originalCreatorSchoolName || schoolName,
+                    lastEditedByName: entityName,
                     ...(originalCreatorForane ? { creatorForane: originalCreatorForane } : forane ? { creatorForane: forane } : {}),
                     ...(imagePreview ? { imageUrl: imagePreview } : {}),
                 };

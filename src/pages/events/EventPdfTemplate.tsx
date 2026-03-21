@@ -2,11 +2,11 @@ import { EventData } from '../../features/events/services/eventService';
 
 interface EventPdfTemplateProps {
     event: EventData;
-    creatorName?: string;
+    editorName?: string;
     eventImageBase64?: string;
 }
 
-export const EventPdfTemplate = ({ event, creatorName, eventImageBase64 }: EventPdfTemplateProps) => {
+export const EventPdfTemplate = ({ event, editorName, eventImageBase64 }: EventPdfTemplateProps) => {
     const fmtDate = (date: any): string => {
         if (!date) return "N/A";
         const d = date?.seconds ? new Date(date.seconds * 1000) : new Date(date);
@@ -145,8 +145,8 @@ export const EventPdfTemplate = ({ event, creatorName, eventImageBase64 }: Event
                                 <td style={{ padding: '8px 0', color: '#1e293b', fontWeight: 600, borderBottom: '1px solid #f1f5f9' }}>{todayDate}</td>
                             </tr>
                             <tr>
-                                <td style={{ padding: '8px 0', color: '#64748b' }}>Authored By</td>
-                                <td style={{ padding: '8px 0', color: '#1e293b', fontWeight: 600 }}>{creatorName || event?.creatorSchoolName || 'N/A'}</td>
+                                <td style={{ padding: '8px 0', color: '#64748b' }}>Last Edited By</td>
+                                <td style={{ padding: '8px 0', color: '#1e293b', fontWeight: 600 }}>{editorName || (event as any).creatorSchoolName || 'N/A'}</td>
                             </tr>
                         </tbody>
                     </table>

@@ -44,7 +44,7 @@ export function EventDetail() {
   const navigate = useNavigate();
   const { isAdminUser, currentUser } = useAuth();
   const [event, setEvent] = useState<EventData | null>(null);
-  const [creatorName, setCreatorName] = useState<string>("");
+  const [lastEditedBy, setLastEditedBy] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -58,20 +58,19 @@ export function EventDetail() {
         const eventData = (await getEvent(id)) as EventData;
         setEvent(eventData);
 
-        if (eventData.creatorId) {
+        if (eventData.creatorId || eventData.lastEditedByName) {
           try {
-            const user = await getUser(eventData.creatorId);
+            const user = eventData.creatorId ? await getUser(eventData.creatorId) : null;
             const name =
-              (eventData as any).creatorSchoolName &&
-                (eventData as any).creatorSchoolName !== "Admin"
-                ? (eventData as any).creatorSchoolName
-                : user?.schoolName || user?.schoolname || user?.fullName || "Unknown";
-            setCreatorName(name);
+              eventData.lastEditedByName ||
+              (eventData as any).creatorSchoolName ||
+              user?.schoolName || user?.schoolname || user?.fullName || "Unknown";
+            setLastEditedBy(name);
           } catch {
-            setCreatorName((eventData as any).creatorSchoolName || "Unknown");
+            setLastEditedBy(eventData.lastEditedByName || (eventData as any).creatorSchoolName || "Unknown");
           }
         } else {
-          setCreatorName((eventData as any).creatorSchoolName || "Unknown");
+          setLastEditedBy("Unknown");
         }
       } catch (error) {
         console.error("Error fetching event:", error);
@@ -307,8 +306,8 @@ export function EventDetail() {
             <DetailRow
               color="orange"
               icon={<User className="w-4 h-4 text-orange-600" />}
-              label="Created By"
-              value={creatorName || "N/A"}
+              label="Last Edited By"
+              value={lastEditedBy || "N/A"}
             />
             <DetailRow
               color="teal"

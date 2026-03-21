@@ -107,8 +107,8 @@ export function Logs() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-400/20">
-                          {log.action}
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-400/20 capitalize">
+                          {log.action?.toLowerCase() || "unknown"}
                         </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">

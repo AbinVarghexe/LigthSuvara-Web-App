@@ -6,7 +6,8 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
-import { resetPassword, logout } from '../../features/auth/services/authService';
+import { resetPassword, logout, getUserRole } from '../../features/auth/services/authService';
+import { logUserAccess } from '../../features/logs/services/logService';
 import { updateUserProfile, uploadProfileImage } from '../../features/users/services/userService';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -73,6 +74,14 @@ export function Settings() {
 
     const handleLogout = async () => {
         try {
+            if (currentUser) {
+                const role = await getUserRole(currentUser);
+                await logUserAccess(
+                    { uid: currentUser.uid, email: currentUser.email },
+                    role || 'user',
+                    'LOGOUT'
+                );
+            }
             await logout();
             navigate('/login');
         } catch (error) {

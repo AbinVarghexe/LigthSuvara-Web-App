@@ -12,7 +12,8 @@ import {
     serverTimestamp,
     Timestamp,
     writeBatch,
-    onSnapshot
+    onSnapshot,
+    deleteField
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 
@@ -29,7 +30,7 @@ export interface EventData {
     isPublic: boolean;
     status?: EventStatus; // New field
     creatorId: string;
-    creatorSchoolName: string;
+    lastEditedByName?: string;
     creatorForane?: string; // Forane of the event creator
     timestamp?: Timestamp;
     updatedAt?: Timestamp;
@@ -140,7 +141,10 @@ export const updateEvent = async (eventId: string, eventData: Partial<EventData>
     const docRef = doc(db, 'events', eventId);
     return await updateDoc(docRef, {
         ...eventData,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        // Clean up legacy/unused fields
+        creatorSchoolName: deleteField(),
+        title_lowercase: deleteField()
     });
 };
 

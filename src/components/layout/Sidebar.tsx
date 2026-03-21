@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { logout, getUserRole } from "../../features/auth/services/authService";
+import { logUserAccess } from "../../features/logs/services/logService";
 
 // Define navigation item type
 interface NavItem {
@@ -91,7 +93,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
   const location = useLocation();
-  const { isAdminUser } = useAuth();
+  const { isAdminUser, currentUser } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>([
     "Animator Management",
   ]);
@@ -104,8 +106,22 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
     );
   };
 
-  const handleLogout = () => {
-    window.location.href = "/login";
+  const handleLogout = async () => {
+    try {
+      if (currentUser) {
+        const role = await getUserRole(currentUser);
+        await logUserAccess(
+          { uid: currentUser.uid, email: currentUser.email },
+          role || 'user',
+          'LOGOUT'
+        );
+      }
+      await logout();
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+      window.location.href = "/login";
+    }
   };
 
   return (
