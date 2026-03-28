@@ -71,6 +71,12 @@ const navigation: NavItem[] = [
     adminOnly: true,
   },
   { name: "Messages", href: "/messages", icon: MessageSquare },
+  {
+    name: "Public Registration",
+    href: "/public-registration",
+    icon: UserPlus,
+    adminOnly: true,
+  },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   {
     name: "Theme & Programs",
@@ -79,21 +85,15 @@ const navigation: NavItem[] = [
     adminOnly: true,
   },
   {
-    name: "Logs",
-    href: "/logs",
-    icon: Activity,
-    adminOnly: true,
-  },
-  {
-    name: "Public Registration",
-    href: "/public-registration",
-    icon: UserPlus,
-    adminOnly: true,
-  },
-  {
     name: "App Control",
     href: "/app-control",
     icon: ShieldCheck,
+    adminOnly: true,
+  },
+  {
+    name: "Logs",
+    href: "/logs",
+    icon: Activity,
     adminOnly: true,
   },
   { name: "Settings", href: "/settings", icon: Settings },
