@@ -25,6 +25,8 @@ import TeacherManagementPage from "../pages/teachers/TeacherManagementPage";
 import { Observers } from "../pages/observers/Observers";
 import { ThemePrograms } from "../pages/theme/ThemePrograms";
 import { Logs } from "../pages/logs/Logs";
+import { PublicRegistration } from "../pages/public-registration/PublicRegistration";
+import { AppControl } from "../pages/app-control/AppControl";
 
 export const router = createBrowserRouter([
   {
@@ -76,6 +78,8 @@ export const router = createBrowserRouter([
           { path: "teachers", Component: TeacherManagementPage },
           { path: "observers", Component: Observers },
           { path: "theme", Component: ThemePrograms },
+          { path: "public-registration", Component: PublicRegistration },
+          { path: "app-control", Component: AppControl },
           { path: "logs", Component: Logs },
         ],
       },

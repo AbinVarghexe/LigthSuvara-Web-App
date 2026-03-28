@@ -16,6 +16,8 @@ import {
   Eye,
   Info,
   Activity,
+  UserPlus,
+  ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -80,6 +82,18 @@ const navigation: NavItem[] = [
     name: "Logs",
     href: "/logs",
     icon: Activity,
+    adminOnly: true,
+  },
+  {
+    name: "Public Registration",
+    href: "/public-registration",
+    icon: UserPlus,
+    adminOnly: true,
+  },
+  {
+    name: "App Control",
+    href: "/app-control",
+    icon: ShieldCheck,
     adminOnly: true,
   },
   { name: "Settings", href: "/settings", icon: Settings },
