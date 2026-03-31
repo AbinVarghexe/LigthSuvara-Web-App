@@ -54,8 +54,27 @@ export const AssignmentService = {
       throw new Error("This observer is already assigned somewhere else for this year.");
     }
 
-    // 3. Generate Access Code (6 digits)
-    const accessCode = (Math.floor(Math.random() * 900000) + 100000).toString();
+    // 3. Generate UNIQUE Access Code (6 digits)
+    let accessCode = "";
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 15) {
+      accessCode = (Math.floor(Math.random() * 900000) + 100000).toString();
+      const codeQ = query(
+        collection(db, ASSIGNMENTS_COLLECTION),
+        where("accessCode", "==", accessCode),
+        where("academicYear", "==", academicYear)
+      );
+      const codeExisting = await getDocs(codeQ);
+      if (codeExisting.empty) {
+        isUnique = true;
+      }
+      attempts++;
+    }
+
+    if (!isUnique) {
+      throw new Error("Failed to generate a unique access code. This is very rare, please try again.");
+    }
 
     // 4. Create Assignment Record aligning with Flutter
     await addDoc(collection(db, ASSIGNMENTS_COLLECTION), {
@@ -145,7 +164,7 @@ export const AssignmentService = {
           !t.assigned &&
           !newlyAssignedTeacherIds.has(t.id) &&
           t.parishId !== parish.id &&
-          t.classes.includes(classId)
+          t.classes && t.classes.includes(classId)
         );
 
         if (eligible.length === 0) {
@@ -163,7 +182,8 @@ export const AssignmentService = {
         const bestTeacher = eligible[0];
 
         // 3. Assign
-        await AssignmentService.assignTeacher(bestTeacher.id, parish.id, classId);
+        // NOTE: We pass objects to ensure name and other fields are correctly populated
+        await AssignmentService.assignTeacher(bestTeacher, parish, "2025-26");
 
         // Track locally
         newlyAssignedTeacherIds.add(bestTeacher.id);
