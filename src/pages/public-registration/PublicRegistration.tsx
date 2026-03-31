@@ -4,7 +4,6 @@ import {
     Plus,
     Trash2,
     Edit2,
-    Calendar,
     Users,
     ChevronRight,
     Search,
@@ -17,7 +16,9 @@ import {
     GraduationCap,
     Clock,
     Briefcase,
+    Calendar as CalendarIcon,
 } from "lucide-react";
+import { cn } from "../../lib/utils";
 import {
     Card,
     CardContent,
@@ -30,6 +31,8 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Calendar } from "../../components/ui/calendar";
 import { Switch } from "../../components/ui/switch";
 import {
     Dialog,
@@ -39,6 +42,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "../../components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "../../components/ui/select";
 import {
     Table,
     TableBody,
@@ -54,6 +64,7 @@ import {
     deletePublicProgram,
     getPublicRegistrations,
     deletePublicRegistration,
+    savePublicRegistration,
     ProgramMetadata,
     PublicRegistration as RegistrationType,
 } from "../../features/public-registration/services/publicRegistrationService";
@@ -71,6 +82,158 @@ import {
 
 const COLORS = ['#1E3A8A', '#BC8A3A', '#2563EB', '#D97706', '#3B82F6', '#F59E0B'];
 
+function DateTimePicker({ 
+    date, 
+    onChange, 
+    label 
+}: { 
+    date: Timestamp | undefined; 
+    onChange: (date: Timestamp) => void; 
+    label: string 
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(date?.toDate());
+    
+    // 12-hour clock state
+    const d = date?.toDate() || new Date();
+    const [hours, setHours] = useState(d.getHours() % 12 || 12);
+    const [minutes, setMinutes] = useState(d.getMinutes());
+    const [period, setPeriod] = useState(d.getHours() >= 12 ? "PM" : "AM");
+
+    useEffect(() => {
+        if (date) {
+            const dt = date.toDate();
+            setSelectedDate(dt);
+            setHours(dt.getHours() % 12 || 12);
+            setMinutes(dt.getMinutes());
+            setPeriod(dt.getHours() >= 12 ? "PM" : "AM");
+        }
+    }, [date]);
+
+    const updateDateTime = (newD?: Date, newH?: number, newM?: number, newP?: string, close = false) => {
+        const targetDate = newD || selectedDate;
+        const targetHours = newH !== undefined ? newH : hours;
+        const targetMinutes = newM !== undefined ? newM : minutes;
+        const targetPeriod = newP || period;
+
+        if (targetDate) {
+            const finalDate = new Date(targetDate);
+            let hours24 = targetHours % 12;
+            if (targetPeriod === "PM") hours24 += 12;
+            finalDate.setHours(hours24);
+            finalDate.setMinutes(targetMinutes);
+            onChange(Timestamp.fromDate(finalDate));
+        }
+        if (close) setIsOpen(false);
+    };
+
+    return (
+        <div className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</Label>
+            <Popover open={isOpen} onOpenChange={setIsOpen}>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        className={cn(
+                            "w-full justify-start text-sm font-normal h-12 border-input bg-background hover:bg-accent/5 transition-all shadow-sm rounded-xl px-4",
+                            !date && "text-muted-foreground"
+                        )}
+                    >
+                        <CalendarIcon className="mr-3 h-5 w-5 text-primary" />
+                        <span className="flex-1 truncate">
+                            {date ? format(date.toDate(), "MMMM do, yyyy h:mm aa") : "Select Schedule"}
+                        </span>
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent 
+                    className="w-[340px] p-0 shadow-2xl border-primary/20 bg-background overflow-hidden rounded-2xl" 
+                    align="start" 
+                    collisionPadding={16}
+                    onWheel={(e) => e.stopPropagation()}
+                >
+                    <div className="max-h-[400px] overflow-y-auto overflow-x-hidden scroll-smooth [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent] focus:outline-none" tabIndex={-1}>
+                        <div className="p-2 flex justify-center translate-y-1">
+                            <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={(day) => {
+                                    if (day) {
+                                        setSelectedDate(day);
+                                        updateDateTime(day, undefined, undefined, undefined, true);
+                                    }
+                                }}
+                                initialFocus
+                                className="w-full h-auto scale-[0.95] origin-top"
+                            />
+                        </div>
+                        <div className="px-5 py-5 border-t bg-muted/20 space-y-4">
+                            <div className="flex flex-col gap-3.5">
+                                <div className="flex items-center justify-between pb-1">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1 px-2 rounded-md bg-primary/10">
+                                            <Clock className="w-3.5 h-3.5 text-primary" />
+                                        </div>
+                                        <span className="text-[10px] font-extrabold uppercase text-primary/80 tracking-[0.25em]">Picker Time</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-1 h-1 rounded-full bg-primary/40 animate-ping" />
+                                        <span className="text-[8px] font-black uppercase text-muted-foreground/40">Scroll for more</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between bg-background/90 backdrop-blur-md p-3.5 rounded-2xl border border-primary/10 shadow-sm">
+                                    <div className="flex items-center gap-2">
+                                        <Select value={hours.toString()} onValueChange={(v) => {
+                                            const h = parseInt(v);
+                                            setHours(h);
+                                            updateDateTime(undefined, h, undefined, undefined, false);
+                                        }}>
+                                            <SelectTrigger className="w-15 h-10 text-sm font-bold border-primary/10 shadow-sm bg-background hover:border-primary/40 transition-all rounded-xl">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {Array.from({ length: 12 }).map((_, i) => (
+                                                    <SelectItem key={i + 1} value={(i + 1).toString()} className="text-sm font-medium">{ (i + 1).toString().padStart(2, '0') }</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <span className="text-lg font-bold text-muted-foreground/30">:</span>
+                                        <Select value={minutes.toString()} onValueChange={(v) => {
+                                            const m = parseInt(v);
+                                            setMinutes(m);
+                                            updateDateTime(undefined, undefined, m, undefined, false);
+                                        }}>
+                                            <SelectTrigger className="w-15 h-10 text-sm font-bold border-primary/10 shadow-sm bg-background hover:border-primary/40 transition-all rounded-xl">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                        <SelectContent>
+                                            {Array.from({ length: 60 }).map((_, i) => (
+                                                <SelectItem key={i} value={i.toString()} className="text-sm">{i.toString().padStart(2, '0')}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Select value={period} onValueChange={(v: any) => {
+                                    setPeriod(v);
+                                    updateDateTime(undefined, undefined, undefined, v, true);
+                                }}>
+                                    <SelectTrigger className="w-20 h-10 text-sm font-black border-primary/10 shadow-sm bg-primary/5 text-primary hover:bg-primary/10 transition-all">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="AM" className="text-sm font-bold">AM</SelectItem>
+                                        <SelectItem value="PM" className="text-sm font-bold">PM</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </PopoverContent>
+            </Popover>
+        </div>
+    );
+}
+
 export function PublicRegistration() {
     const [programs, setPrograms] = useState<ProgramMetadata[]>([]);
     const [registrations, setRegistrations] = useState<RegistrationType[]>([]);
@@ -81,6 +244,11 @@ export function PublicRegistration() {
     // View Detail State
     const [selectedReg, setSelectedReg] = useState<RegistrationType | null>(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+    // Registration Dialog State
+    const [isRegDialogOpen, setIsRegDialogOpen] = useState(false);
+    const [editingRegId, setEditingRegId] = useState<string | undefined>(undefined);
+    const [regForm, setRegForm] = useState<Partial<RegistrationType>>({});
 
     // Program Dialog State
     const [isProgramDialogOpen, setIsProgramDialogOpen] = useState(false);
@@ -146,6 +314,12 @@ export function PublicRegistration() {
         setIsProgramDialogOpen(true);
     };
 
+    const openRegDialog = (reg: RegistrationType) => {
+        setRegForm({ ...reg });
+        setEditingRegId(reg.id);
+        setIsRegDialogOpen(true);
+    };
+
     const handleSaveProgram = async () => {
         if (!programForm.name?.trim()) {
             toast.error("Program name is required");
@@ -159,6 +333,27 @@ export function PublicRegistration() {
         } catch (error) {
             console.error("Error saving program:", error);
             toast.error("Failed to save program");
+        }
+    };
+
+    const handleSaveRegistration = async () => {
+        if (!editingRegId) return;
+        
+        // Ensure program name is updated if programId changed
+        const selectedProgram = programs.find(p => p.id === regForm.programId);
+        const dataToSave = {
+            ...regForm,
+            programTitle: selectedProgram?.name || regForm.programTitle
+        };
+
+        try {
+            await savePublicRegistration(dataToSave, editingRegId);
+            toast.success("Registration updated");
+            setIsRegDialogOpen(false);
+            fetchData();
+        } catch (error) {
+            console.error("Error saving registration:", error);
+            toast.error("Failed to save registration");
         }
     };
 
@@ -288,8 +483,8 @@ export function PublicRegistration() {
                                 </CardHeader>
                                 <CardContent className="pt-2 space-y-3">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>{format(program.startDate.toDate(), "PPP")} - {format(program.endDate.toDate(), "PPP")}</span>
+                                        <CalendarIcon className="w-4 h-4" />
+                                        <span>{format(program.startDate.toDate(), "PPP p")} - {format(program.endDate.toDate(), "PPP p")}</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Users className="w-4 h-4" />
@@ -430,6 +625,9 @@ export function PublicRegistration() {
                                             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{format(reg.timestamp.toDate(), "dd MMM yy")}</TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-1">
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openRegDialog(reg)}>
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </Button>
                                                     <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => {
                                                         setSelectedReg(reg);
                                                         setIsDetailOpen(true);
@@ -467,22 +665,16 @@ export function PublicRegistration() {
                                     placeholder="e.g., Faith Fest 2026"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Start Date</Label>
-                                <Input 
-                                    type="date" 
-                                    value={programForm.startDate ? format(programForm.startDate.toDate(), "yyyy-MM-dd") : ""}
-                                    onChange={(e) => setProgramForm({ ...programForm, startDate: Timestamp.fromDate(new Date(e.target.value)) })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>End Date</Label>
-                                <Input 
-                                    type="date" 
-                                    value={programForm.endDate ? format(programForm.endDate.toDate(), "yyyy-MM-dd") : ""}
-                                    onChange={(e) => setProgramForm({ ...programForm, endDate: Timestamp.fromDate(new Date(e.target.value)) })}
-                                />
-                            </div>
+                            <DateTimePicker 
+                                label="Start Date & Time"
+                                date={programForm.startDate}
+                                onChange={(date) => setProgramForm({ ...programForm, startDate: date })}
+                            />
+                            <DateTimePicker 
+                                label="End Date & Time"
+                                date={programForm.endDate}
+                                onChange={(date) => setProgramForm({ ...programForm, endDate: date })}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label>Registration Info (Instructions)</Label>
@@ -596,6 +788,90 @@ export function PublicRegistration() {
                             </div>
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Registration Edit Dialog */}
+            <Dialog open={isRegDialogOpen} onOpenChange={setIsRegDialogOpen}>
+                <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                        <DialogTitle>Edit Registration</DialogTitle>
+                        <DialogDescription>Modify applicant details and program assignment</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-1">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2 col-span-2">
+                                <Label>Applicant Name</Label>
+                                <Input 
+                                    value={regForm.name || regForm.applicantName || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, name: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Phone Number</Label>
+                                <Input 
+                                    value={regForm.phone || regForm.applicantMobile || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Email</Label>
+                                <Input 
+                                    value={regForm.email || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, email: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2 col-span-2">
+                                <Label>Program Selection</Label>
+                                <Select 
+                                    value={regForm.programId} 
+                                    onValueChange={(val) => setRegForm({ ...regForm, programId: val })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Program" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {programs.map(p => (
+                                            <SelectItem key={p.id} value={p.id!}>{p.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Qualification</Label>
+                                <Input 
+                                    value={regForm.qualification || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, qualification: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Current Status / Occupation</Label>
+                                <Input 
+                                    value={regForm.currentStatus || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, currentStatus: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2 col-span-2">
+                                <Label>Academic Background</Label>
+                                <Input 
+                                    value={regForm.academicBackground || regForm.applicantClass || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, academicBackground: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2 col-span-2">
+                                <Label>Address</Label>
+                                <Textarea 
+                                    value={regForm.address || regForm.applicantPlace || ""} 
+                                    onChange={(e) => setRegForm({ ...regForm, address: e.target.value })} 
+                                    rows={3}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsRegDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveRegistration}>Save Changes</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

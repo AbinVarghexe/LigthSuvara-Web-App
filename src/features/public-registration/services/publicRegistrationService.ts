@@ -87,3 +87,12 @@ export const getPublicRegistrations = async (programId?: string): Promise<Public
 export const deletePublicRegistration = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, REGISTRATIONS_COLLECTION, id));
 };
+
+export const savePublicRegistration = async (registration: Partial<PublicRegistration>, id: string): Promise<void> => {
+    const docRef = doc(db, REGISTRATIONS_COLLECTION, id);
+    await setDoc(docRef, {
+        ...registration,
+        updatedAt: Timestamp.now(),
+    }, { merge: true });
+};
+
