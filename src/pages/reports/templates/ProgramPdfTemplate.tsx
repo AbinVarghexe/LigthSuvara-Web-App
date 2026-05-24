@@ -1,5 +1,4 @@
-
-import { ProgramRegistration } from '../../../features/programs/services/programService';
+import { ProgramRegistration, CustomField } from '../../../features/programs/services/programService';
 import { UserData } from '../../../features/users/services/userService';
 
 interface ProgramPdfTemplateProps {
@@ -8,13 +7,24 @@ interface ProgramPdfTemplateProps {
     forane: string;
     parish: string;
     users: UserData[];
+    role?: 'student' | 'teacher';
+    customFields?: CustomField[];
 }
 
-export const ProgramPdfTemplate = ({ registrations, programName, forane, parish, users }: ProgramPdfTemplateProps) => {
+export const ProgramPdfTemplate = ({ 
+    registrations, 
+    programName, 
+    forane, 
+    parish, 
+    users, 
+    role = 'student', 
+    customFields = [] 
+}: ProgramPdfTemplateProps) => {
     const todayDate = new Date().toISOString().split('T')[0];
+    const isTeacher = role === 'teacher';
 
     // Calculate Summary Stats
-    const totalStudents = registrations.reduce((acc, reg) => acc + (reg.studentCount || (reg.studentName ? 1 : 0)), 0);
+    const totalCount = registrations.reduce((acc, reg) => acc + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
     const uniqueSchools = new Set(registrations.map(reg => reg.schoolUserId)).size;
 
     // Geographic Grouping Logic with Totals
@@ -22,7 +32,7 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
         const schoolInfo = users.find(u => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
         const regForane = schoolInfo?.forane || 'Unknown Forane';
         const regParish = reg.schoolName || 'Unknown Parish';
-        const count = reg.studentCount || (reg.studentName ? 1 : 0);
+        const count = reg.isCountOnly ? (reg.studentCount || 1) : 1;
 
         if (!acc[regForane]) {
             acc[regForane] = { parishes: {}, total: 0 };
@@ -75,8 +85,8 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
                 </div>
                 <div>
                     <div style={{ background: '#f8fafc', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '70px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Total Students</div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#2563eb' }}>{totalStudents}</div>
+                        <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>{isTeacher ? 'Total Teachers' : 'Total Students'}</div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#2563eb' }}>{totalCount}</div>
                     </div>
                 </div>
             </div>
@@ -99,7 +109,7 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
                     </div>
                     <div>
                         <div style={{ fontSize: '7px', color: '#3b82f6', fontWeight: 700, textTransform: 'uppercase' }}>Avg. Per School</div>
-                        <div style={{ fontSize: '12px', fontWeight: 800 }}>{uniqueSchools > 0 ? (totalStudents / uniqueSchools).toFixed(1) : 0}</div>
+                        <div style={{ fontSize: '12px', fontWeight: 800 }}>{uniqueSchools > 0 ? (totalCount / uniqueSchools).toFixed(1) : 0}</div>
                     </div>
                 </div>
             </div>
@@ -129,7 +139,7 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
                                     Forane: {fName}
                                 </span>
                                 <span style={{ fontSize: '8px', fontWeight: 500, opacity: 0.9 }}>
-                                    Total: {groupedData[fName].total} Student(s)
+                                    Total: {groupedData[fName].total} {isTeacher ? 'Teacher(s)' : 'Student(s)'}
                                 </span>
                             </div>
 
@@ -153,8 +163,12 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
                                         <thead>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
                                                 <th style={{ padding: '6px 11px', width: '22px' }}>#</th>
-                                                <th style={{ padding: '6px 11px' }}>Student Name</th>
-                                                <th style={{ padding: '6px 11px', textAlign: 'center', width: '45px' }}>Entry</th>
+                                                <th style={{ padding: '6px 11px' }}>{isTeacher ? 'Teacher Name' : 'Student Name'}</th>
+                                                <th style={{ padding: '6px 11px' }}>Phone</th>
+                                                {customFields.map(f => (
+                                                    <th key={f.id} style={{ padding: '6px 11px' }}>{f.name}</th>
+                                                ))}
+                                                {!isTeacher && <th style={{ padding: '6px 11px', textAlign: 'center', width: '45px' }}>Entry</th>}
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -170,9 +184,27 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
                                                             reg.studentName || 'N/A'
                                                         )}
                                                     </td>
-                                                    <td style={{ padding: '6px 11px', color: '#111827', fontWeight: 700, textAlign: 'center' }}>
-                                                        {reg.isCountOnly ? reg.studentCount : ''}
+                                                    <td style={{ padding: '6px 11px', color: '#4b5563' }}>
+                                                        {reg.isCountOnly ? '-' : (reg.studentPhone || 'N/A')}
                                                     </td>
+                                                    {customFields.map(field => {
+                                                        const val = reg.customFieldValues?.[field.id];
+                                                        let displayVal = "-";
+                                                        if (val !== undefined && val !== null) {
+                                                            if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+                                                            else displayVal = String(val);
+                                                        }
+                                                        return (
+                                                            <td key={field.id} style={{ padding: '6px 11px', color: '#4b5563' }}>
+                                                                {displayVal}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                    {!isTeacher && (
+                                                        <td style={{ padding: '6px 11px', color: '#111827', fontWeight: 700, textAlign: 'center' }}>
+                                                            {reg.isCountOnly ? reg.studentCount : ''}
+                                                        </td>
+                                                    )}
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -195,10 +227,9 @@ export const ProgramPdfTemplate = ({ registrations, programName, forane, parish,
 
             {/* Footer */}
             <div style={{ position: 'absolute', bottom: '22px', left: '30px', right: '30px', borderTop: '1px solid #f1f5f9', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '7.5px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                <div>SUVARA NEXTGEN • PROGRAM REGISTRY</div>
+                <div>SUVARA NEXTGEN • {isTeacher ? 'TEACHER REGISTRY' : 'STUDENT REGISTRY'}</div>
                 <div>GENERATED: {new Date().toLocaleString()}</div>
             </div>
         </div>
     );
-
 };

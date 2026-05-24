@@ -1,6 +1,8 @@
 import { doc, setDoc, collection, query, getDocs, orderBy, deleteDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../../config/firebase";
 
+import { CustomField } from "../../programs/services/programService";
+
 export interface ProgramMetadata {
     id?: string;
     name: string;
@@ -11,6 +13,7 @@ export interface ProgramMetadata {
     createdAt?: Timestamp;
     updatedAt?: Timestamp;
     timestamp?: Timestamp; // Keep for compatibility
+    customFields?: CustomField[];
 }
 
 export interface PublicRegistration {
@@ -35,6 +38,9 @@ export interface PublicRegistration {
     applicantClass?: string;
     parentName?: string;
     parentMobile?: string;
+    
+    // Dynamic Custom Field Values
+    customFieldValues?: Record<string, any>;
 }
 
 const PROGRAMS_COLLECTION = "public_registration_programs";

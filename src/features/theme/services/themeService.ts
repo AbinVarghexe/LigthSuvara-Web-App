@@ -24,7 +24,7 @@ export const getThemePrograms = async (): Promise<ThemeProgramsData> => {
     if (docSnap.exists()) {
         const data = docSnap.data();
         return {
-            themeYear: data.themeYear || "2025-26",
+            themeYear: data.themeYear || "2025-2026",
             themeMalayalam: data.themeMalayalam || "“നിത്യജീവനിലുള്ള പ്രത്യാശ”",
             themeEnglish: data.themeEnglish || "Hope in Eternal Life",
             programs: data.programs || [],
@@ -32,7 +32,7 @@ export const getThemePrograms = async (): Promise<ThemeProgramsData> => {
     } else {
         // Default values if no document exists
         return {
-            themeYear: "2025-26",
+            themeYear: "2025-2026",
             themeMalayalam: "“നിത്യജീവനിലുള്ള പ്രത്യാശ”",
             themeEnglish: "Hope in Eternal Life",
             programs: [

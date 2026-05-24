@@ -1,5 +1,5 @@
 import { renderToString } from "react-dom/server";
-import { ProgramRegistration } from "../../../features/programs/services/programService";
+import { ProgramRegistration, CustomField } from "../../../features/programs/services/programService";
 import { ProgramPdfTemplate } from "../../../pages/reports/templates/ProgramPdfTemplate";
 import { UserData } from "../../../features/users/services/userService";
 import html2canvas from "html2canvas";
@@ -14,7 +14,9 @@ export const PremiumProgramPdfService = {
         programName: string,
         forane: string,
         parish: string,
-        users: UserData[]
+        users: UserData[],
+        role?: 'student' | 'teacher',
+        customFields?: CustomField[]
     ) => {
         // 1. Render React component to static HTML string
         const htmlString = renderToString(
@@ -24,6 +26,8 @@ export const PremiumProgramPdfService = {
                 forane={forane}
                 parish={parish}
                 users={users}
+                role={role}
+                customFields={customFields}
             />
         );
 

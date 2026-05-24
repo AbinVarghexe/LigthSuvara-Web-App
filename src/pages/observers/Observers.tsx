@@ -59,6 +59,23 @@ import {
 import { TeacherList } from "@/features/teachers/components/TeacherList";
 import { useAuth } from "@/context/AuthContext";
 import { getUsers, UserData } from "@/features/users/services/userService";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarUI } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { getAcademicYears, getCurrentAcademicYear, isYearEditable } from "@/lib/academic-years";
+
+const normalizeYear = (year: string) => {
+  if (!year) return year;
+  const parts = year.split("-");
+  if (parts.length === 2 && parts[1].length === 2) {
+    return `${parts[0]}-20${parts[1]}`;
+  }
+  return year;
+};
 
 // --- Helper: Filter Bar ---
 function ReportFilterBar({
@@ -163,7 +180,7 @@ export function Observers() {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState("2025-26");
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(getCurrentAcademicYear());
 
   // No-op for now
 
@@ -220,10 +237,11 @@ export function Observers() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      setExpirationDate(null);
       try {
         const [usersData, teachersData, assignmentsData] = await Promise.all([
           getUsers(),
-          TeacherService.getTeachers(),
+          TeacherService.getTeachers({ includeDeleted: true }),
           AssignmentService.getAssignments(),
         ]);
         const allUsersRaw = usersData as UserData[];
@@ -268,8 +286,8 @@ export function Observers() {
 
         // Fetch expiration date
         const expDoc =
-          await AssignmentService.getExpirationDate(selectedAcademicYear);
-        if (expDoc) setExpirationDate(expDoc);
+          await AssignmentService.getExpirationDate(normalizeYear(selectedAcademicYear));
+        setExpirationDate(expDoc);
       } catch (error) {
         toast.error("Failed to load data");
       } finally {
@@ -286,7 +304,8 @@ export function Observers() {
   const schoolsWithStatus = schools.map((s) => {
     const assignment = assignments.find(
       (a) =>
-        a.targetSchoolId === s.id && a.academicYear === selectedAcademicYear,
+        a.targetSchoolId === s.id && 
+        normalizeYear(a.academicYear) === normalizeYear(selectedAcademicYear),
     );
     return { ...s, assignment };
   });
@@ -309,7 +328,7 @@ export function Observers() {
 
   // Filter logic for All Observers tab
   useEffect(() => {
-    let result = allTeachers;
+    let result = allTeachers.filter((t: any) => !t.deleted);
     if (dirFilterForane && dirFilterForane !== "All") {
       result = result.filter((t: any) => {
         const p = sourceParishes.find((s: any) =>
@@ -337,13 +356,26 @@ export function Observers() {
         (t: any) => t.classes && t.classes.includes(dirFilterClass),
       );
     }
-    setDirFilteredTeachers(result);
+
+    // Map to update assigned status for the current academic year
+    const updatedResult = result.map((t) => ({
+      ...t,
+      assigned: assignments.some(
+        (a) =>
+          a.teacherId === t.id &&
+          normalizeYear(a.academicYear) === normalizeYear(selectedAcademicYear),
+      ),
+    }));
+
+    setDirFilteredTeachers(updatedResult);
   }, [
     dirFilterForane,
     dirFilterParishId,
     dirFilterClass,
     allTeachers,
     sourceParishes,
+    assignments,
+    selectedAcademicYear,
   ]);
 
   // --- Handlers ---
@@ -471,7 +503,7 @@ export function Observers() {
   };
 
   const handleGenerateDirectoryReport = async () => {
-    const filtered = allTeachers.filter((t: any) => {
+    const filtered = allTeachers.filter((t: any) => !t.deleted).filter((t: any) => {
       const homeParish = sourceParishes.find((p: any) =>
         p.ids
           ? p.ids.includes(t.parishId || t.schoolId)
@@ -529,9 +561,13 @@ export function Observers() {
   const uniqueForanes = Array.from(
     new Set(sourceParishes.map((p: any) => p.forane).filter(Boolean)),
   ).sort() as string[];
+  const uniqueTeachersYears = allTeachers.map((t) => normalizeYear(t.academicYear)).filter(Boolean);
+  const uniqueAssignmentsYears = assignments.map((a) => normalizeYear(a.academicYear)).filter(Boolean);
   const uniqueAcademicYears = Array.from(
-    new Set(allTeachers.map((t) => t.academicYear).filter(Boolean)),
+    new Set([...getAcademicYears(), ...uniqueTeachersYears, ...uniqueAssignmentsYears])
   ).sort() as string[];
+
+  const isEditable = isYearEditable(selectedAcademicYear);
   const dirFilteredParishes =
     dirFilterForane === "All"
       ? sourceParishes
@@ -556,36 +592,44 @@ export function Observers() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => {
-              const dateInput = document.createElement("input");
-              dateInput.type = "date";
-              dateInput.onchange = async (e) => {
-                const newDate = (e.target as HTMLInputElement).value;
-                if (newDate) {
-                  try {
-                    await AssignmentService.setExpirationDate(
-                      selectedAcademicYear,
-                      new Date(newDate),
-                    );
-                    setExpirationDate(new Date(newDate));
-                    toast.success("Expiration date updated");
-                  } catch (err) {
-                    toast.error("Failed to update date");
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!isEditable}
+                className="gap-2 bg-white dark:bg-slate-900 border-indigo-100 hover:border-indigo-300 disabled:opacity-50"
+              >
+                <Calendar className="h-4 w-4 text-indigo-500" />
+                <span className="font-medium">
+                  {expirationDate
+                    ? format(new Date(expirationDate), "PPP")
+                    : "Set Exam Date"}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <CalendarUI
+                mode="single"
+                selected={expirationDate || undefined}
+                onSelect={async (date) => {
+                  if (date) {
+                    try {
+                      await AssignmentService.setExpirationDate(
+                        normalizeYear(selectedAcademicYear),
+                        date,
+                      );
+                      setExpirationDate(date);
+                      toast.success("Exam date updated successfully");
+                    } catch (err) {
+                      toast.error("Failed to update exam date");
+                    }
                   }
-                }
-              };
-              dateInput.click();
-            }}
-          >
-            <Calendar className="h-4 w-4" />
-            {expirationDate
-              ? new Date(expirationDate).toLocaleDateString()
-              : "Set Expiration"}
-          </Button>
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
           <Select
             value={selectedAcademicYear}
             onValueChange={setSelectedAcademicYear}
@@ -791,19 +835,21 @@ export function Observers() {
                                 >
                                   <MessageSquarePlus className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-500 hover:bg-red-50"
-                                  onClick={() =>
-                                    handleDelete(
-                                      school.assignment.id,
-                                      school.assignment.teacherId,
-                                    )
-                                  }
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {isEditable && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-500 hover:bg-red-50"
+                                    onClick={() =>
+                                      handleDelete(
+                                        school.assignment.id,
+                                        school.assignment.teacherId,
+                                      )
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           </>
@@ -812,19 +858,21 @@ export function Observers() {
                             <p className="text-sm text-muted-foreground italic">
                               No observer assigned
                             </p>
-                            <Button
-                              className="w-full mt-4 bg-indigo-900 hover:bg-indigo-800 text-white font-bold"
-                              onClick={() => {
-                                setSelectedTargetSchool(school);
-                                setAssignFilterForane("All");
-                                setAssignFilterParishId("All");
-                                setAssignFilterClass("All");
-                                setAssignSearchQuery("");
-                                setIsAssignDialogOpen(true);
-                              }}
-                            >
-                              Assign
-                            </Button>
+                             {isEditable && (
+                              <Button
+                                className="w-full mt-4 bg-indigo-900 hover:bg-indigo-800 text-white font-bold"
+                                onClick={() => {
+                                  setSelectedTargetSchool(school);
+                                  setAssignFilterForane("All");
+                                  setAssignFilterParishId("All");
+                                  setAssignFilterClass("All");
+                                  setAssignSearchQuery("");
+                                  setIsAssignDialogOpen(true);
+                                }}
+                              >
+                                Assign
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>
@@ -1028,7 +1076,7 @@ export function Observers() {
                 {/* Preview count */}
                 <p className="text-xs text-muted-foreground pl-1">
                   {(() => {
-                    const filtered = allTeachers.filter((t: any) => {
+                    const filtered = allTeachers.filter((t: any) => !t.deleted).filter((t: any) => {
                       const hp = sourceParishes.find((p: any) =>
                         p.ids
                           ? p.ids.includes(t.parishId || t.schoolId)
@@ -1210,6 +1258,7 @@ export function Observers() {
                         .toLowerCase()
                         .includes(assignSearchQuery.toLowerCase());
                       const isEligible =
+                        !t.deleted &&
                         t.schoolId !== selectedTargetSchool?.id &&
                         !assignments.some(
                           (a) =>
@@ -1250,6 +1299,7 @@ export function Observers() {
                       .toLowerCase()
                       .includes(assignSearchQuery.toLowerCase());
                     const isEligible =
+                      !t.deleted &&
                       t.schoolId !== selectedTargetSchool?.id &&
                       !assignments.some(
                         (a) =>
@@ -1319,6 +1369,7 @@ export function Observers() {
                     .toLowerCase()
                     .includes(assignSearchQuery.toLowerCase());
                   const isEligible =
+                    !t.deleted &&
                     t.schoolId !== selectedTargetSchool?.id &&
                     !assignments.some(
                       (a) =>

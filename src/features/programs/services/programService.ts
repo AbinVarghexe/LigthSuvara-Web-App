@@ -15,6 +15,14 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 
+export interface CustomField {
+    id: string;          // client-side generated ID
+    name: string;        // field label
+    type: 'text' | 'number' | 'boolean' | 'select';
+    isMandatory: boolean;
+    options?: string[];  // dropdown options for type === 'select'
+}
+
 export interface ProgramData {
     id?: string;
     name: string;
@@ -23,6 +31,13 @@ export interface ProgramData {
     endDate: Date | Timestamp;
     isActive: boolean;
     createdAt?: Timestamp;
+    
+    // Target roles config
+    targetAudience?: 'student' | 'teacher' | 'both';
+    
+    // Custom Fields Schema per participant role
+    studentFields?: CustomField[];
+    teacherFields?: CustomField[];
 }
 
 export interface ProgramRegistration {
@@ -39,6 +54,10 @@ export interface ProgramRegistration {
     studentCount?: number;
     submittedAt?: Timestamp;
     approvedAt?: Timestamp;
+    
+    // Dynamic Custom Field Values
+    type?: 'student' | 'teacher'; // defaults to 'student'
+    customFieldValues?: Record<string, any>;
 }
 
 // Program CRUD Operations

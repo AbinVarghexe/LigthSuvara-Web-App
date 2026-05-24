@@ -183,7 +183,7 @@ export const AssignmentService = {
 
         // 3. Assign
         // NOTE: We pass objects to ensure name and other fields are correctly populated
-        await AssignmentService.assignTeacher(bestTeacher, parish, "2025-26");
+        await AssignmentService.assignTeacher(bestTeacher, parish, "2025-2026");
 
         // Track locally
         newlyAssignedTeacherIds.add(bestTeacher.id);

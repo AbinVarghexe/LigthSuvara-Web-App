@@ -27,7 +27,6 @@ export function EventForm() {
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     // Preserve original creator info so admin edits don't overwrite ownership
     const [originalCreatorId, setOriginalCreatorId] = useState<string | null>(null);
-    const [originalCreatorSchoolName, setOriginalCreatorSchoolName] = useState<string | null>(null);
     const [originalCreatorForane, setOriginalCreatorForane] = useState<string | null>(null);
 
     useEffect(() => {
@@ -96,7 +95,7 @@ export function EventForm() {
             const forane = userDetails?.forane;
 
             // Prepare event data
-            const entityName = isAdminUser ? "Admin" : (userDetails?.schoolName || userDetails?.schoolname || userDetails?.fullName || 'Unknown');
+            const entityName = isAdminUser ? "Admin" : schoolName;
             
             const eventData: EventData = {
                 title: data.title,

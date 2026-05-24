@@ -21,6 +21,7 @@ export interface Teacher {
   dob: string; // ISO date string
   profilePicture?: string;
   qualification: string;
+  deleted?: boolean;
 }
 
 export interface Parish {
@@ -45,7 +46,7 @@ export interface Assignment {
 export const createTeacherSchema = z.object({
   name: z.string().min(2, "Name is required"),
   phone: z.string().min(10, "Valid phone number required"),
-  email: z.string().email("Invalid email address"),
+  email: z.string().email("Invalid email address").or(z.literal("")),
   parishId: z.string().min(1, "Parish is required"),
   classes: z.array(z.string()).min(1, "Class is required").max(1, "Only one class can be selected"),
   academicYear: z.string().min(1, "Academic Year is required"),

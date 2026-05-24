@@ -5,8 +5,7 @@ import {
   updateDoc,
   doc,
   query,
-  where,
-  deleteDoc
+  where
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import { Teacher, CreateTeacherInput } from "../types";
@@ -18,16 +17,18 @@ export const TeacherService = {
    * Add a new teacher to Firestore
    */
   addTeacher: async (data: CreateTeacherInput, schoolId: string, schoolName: string): Promise<string> => {
-    // Check for duplicates (Email + Academic Year)
-    const q = query(
-      collection(db, TEACHERS_COLLECTION),
-      where("email", "==", data.email),
-      where("academicYear", "==", data.academicYear)
-    );
-    const querySnapshot = await getDocs(q);
+    // Check for duplicates (Email + Academic Year) - Only if email is provided
+    if (data.email) {
+      const q = query(
+        collection(db, TEACHERS_COLLECTION),
+        where("email", "==", data.email),
+        where("academicYear", "==", data.academicYear)
+      );
+      const querySnapshot = await getDocs(q);
 
-    if (!querySnapshot.empty) {
-      throw new Error("A teacher with this email already exists for the selected academic year.");
+      if (!querySnapshot.empty) {
+        throw new Error("A teacher with this email already exists for the selected academic year.");
+      }
     }
 
     const newTeacher = {
@@ -63,7 +64,7 @@ export const TeacherService = {
   /**
    * Get all teachers, optionally filtered
    */
-  getTeachers: async (filters?: { parishId?: string; classId?: string }): Promise<Teacher[]> => {
+  getTeachers: async (filters?: { parishId?: string; classId?: string; includeDeleted?: boolean }): Promise<Teacher[]> => {
     let q = collection(db, TEACHERS_COLLECTION);
 
     // Note: Complex filtering might require compound indexes
@@ -80,7 +81,12 @@ export const TeacherService = {
     const teachers: Teacher[] = [];
 
     querySnapshot.forEach((doc) => {
-      teachers.push({ id: doc.id, ...doc.data() } as Teacher);
+      const data = doc.data();
+      // Filter out deleted teachers in memory unless includeDeleted is true
+      if (!filters?.includeDeleted && data.deleted === true) {
+        return;
+      }
+      teachers.push({ id: doc.id, ...data } as Teacher);
     });
 
     return teachers;
@@ -103,7 +109,8 @@ export const TeacherService = {
    */
   deleteTeacher: async (teacherId: string) => {
     try {
-      await deleteDoc(doc(db, TEACHERS_COLLECTION, teacherId));
+      const teacherRef = doc(db, TEACHERS_COLLECTION, teacherId);
+      await updateDoc(teacherRef, { deleted: true });
     } catch (error) {
       console.error("Error deleting teacher:", error);
       throw error;

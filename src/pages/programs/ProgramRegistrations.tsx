@@ -37,14 +37,23 @@ import {
 import { Label } from "../../components/ui/label";
 import {
   subscribeToAllRegistrations,
+  subscribeToPrograms,
   ProgramRegistration,
+  ProgramData,
 } from "../../features/programs/services/programService";
 import { getUsers, UserData } from "../../features/users/services/userService";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "../../components/ui/tabs";
 
 type DrillDownLevel = "programs" | "schools" | "students";
 
 export function ProgramRegistrations() {
   const [registrations, setRegistrations] = useState<ProgramRegistration[]>([]);
+  const [programs, setPrograms] = useState<ProgramData[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,6 +85,10 @@ export function ProgramRegistrations() {
       setLoading(false);
     });
 
+    const unsubscribePrograms = subscribeToPrograms((data) => {
+      setPrograms(data);
+    });
+
     const fetchUsers = async () => {
       try {
         const userData = await getUsers();
@@ -86,7 +99,10 @@ export function ProgramRegistrations() {
     };
     fetchUsers();
 
-    return () => unsubscribeRegistrations();
+    return () => {
+      unsubscribeRegistrations();
+      unsubscribePrograms();
+    };
   }, []);
 
   // Helpers
@@ -223,6 +239,18 @@ export function ProgramRegistrations() {
         return timeB - timeA;
       });
   }, [registrations, selectedProgramName, selectedSchoolId]);
+
+  const selectedProgram = useMemo(() => {
+    return programs.find(p => p.name === selectedProgramName);
+  }, [programs, selectedProgramName]);
+
+  const studentsOnly = useMemo(() => {
+    return studentList.filter(st => !st.type || st.type === 'student');
+  }, [studentList]);
+
+  const teachersOnly = useMemo(() => {
+    return studentList.filter(st => st.type === 'teacher');
+  }, [studentList]);
 
   // Actions
   const handleProgramClick = (name: string) => {
@@ -468,75 +496,157 @@ export function ProgramRegistrations() {
         )
       }
 
-      {/* Level 3: Student list */}
+      {/* Level 3: Student/Teacher list */}
       {
         level === "students" && (
-          <div className="space-y-4">
-            {studentList.map((st, idx) => (
-              <Card key={st.id || idx}>
-                <CardContent className="p-5 flex items-center gap-5">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center flex-shrink-0">
-                    {st.isCountOnly ? (
-                      <span className="font-bold text-primary">
-                        +{st.studentCount}
-                      </span>
-                    ) : (
-                      <User className="h-6 w-6 text-primary" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-foreground truncate">
-                      {st.isCountOnly
-                        ? `${st.studentCount} Students (Consolidated)`
-                        : st.studentName}
-                    </h3>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        {st.isCountOnly ? (
-                          <School className="h-3.5 w-3.5" />
-                        ) : (
-                          <Phone className="h-3.5 w-3.5" />
+          (() => {
+            const renderCardList = (role: 'student' | 'teacher', list: typeof studentList) => {
+              if (list.length === 0) {
+                return (
+                  <Card className="border-dashed">
+                    <CardContent className="py-12 text-center text-muted-foreground italic text-sm">
+                      No registered {role}s found for this school.
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              const customFields = role === 'student'
+                ? selectedProgram?.studentFields || []
+                : selectedProgram?.teacherFields || [];
+
+              return (
+                <div className="space-y-4">
+                  {list.map((st, idx) => (
+                    <Card key={st.id || idx}>
+                      <CardContent className="p-5 flex flex-col gap-3">
+                        <div className="flex items-center gap-5">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center flex-shrink-0">
+                            {st.isCountOnly ? (
+                              <span className="font-bold text-primary">
+                                +{st.studentCount}
+                              </span>
+                            ) : (
+                              <User className="h-6 w-6 text-primary" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-foreground truncate">
+                              {st.isCountOnly
+                                ? `${st.studentCount} Students (Consolidated)`
+                                : st.studentName}
+                            </h3>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                {st.isCountOnly ? (
+                                  <School className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Phone className="h-3.5 w-3.5" />
+                                )}
+                                <span>
+                                  {st.isCountOnly
+                                    ? "Bulk Registration"
+                                    : st.studentPhone || "No Phone"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <Calendar className="h-3.5 w-3.5" />
+                                <span>
+                                  Submitted:{" "}
+                                  {st.submittedAt?.toDate().toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {st.isCountOnly ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openProfile(st.schoolUserId)}
+                              >
+                                <Info className="h-5 w-5 text-primary" />
+                              </Button>
+                            ) : (
+                              <Badge
+                                variant="secondary"
+                                className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                              >
+                                Verified
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {!st.isCountOnly && customFields.length > 0 && (
+                          <div className="mt-1 pt-3 border-t border-dashed border-muted grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                            {customFields.map(field => {
+                              const val = st.customFieldValues?.[field.id];
+                              let displayVal = "-";
+                              if (val !== undefined && val !== null) {
+                                if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+                                else displayVal = String(val);
+                              }
+                              return (
+                                <div key={field.id} className="text-muted-foreground flex gap-1 items-baseline">
+                                  <span className="font-semibold text-foreground whitespace-nowrap">{field.name}: </span>
+                                  <span className="truncate">{displayVal}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
-                        <span>
-                          {st.isCountOnly
-                            ? "Bulk Registration"
-                            : st.studentPhone || "No Phone"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>
-                          Submitted:{" "}
-                          {st.submittedAt?.toDate().toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {st.isCountOnly ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openProfile(st.schoolUserId)}
-                      >
-                        <Info className="h-5 w-5 text-primary" />
-                      </Button>
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                      >
-                        Verified
-                      </Badge>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              );
+            };
+
+            const targetAudience = selectedProgram?.targetAudience || "both";
+            const showStudents = targetAudience === "both" || targetAudience === "student";
+            const showTeachers = targetAudience === "both" || targetAudience === "teacher";
+
+            if (showStudents && showTeachers) {
+              return (
+                <Tabs defaultValue="students" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="students">
+                      Students ({studentsOnly.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="teachers">
+                      Teachers ({teachersOnly.length})
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="students" className="space-y-4 py-4">
+                    {renderCardList('student', studentsOnly)}
+                  </TabsContent>
+                  
+                  <TabsContent value="teachers" className="space-y-4 py-4">
+                    {renderCardList('teacher', teachersOnly)}
+                  </TabsContent>
+                </Tabs>
+              );
+            }
+
+            if (showStudents) {
+              return (
+                <div className="space-y-4 py-4">
+                  {renderCardList('student', studentsOnly)}
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-4 py-4">
+                {renderCardList('teacher', teachersOnly)}
+              </div>
+            );
+          })()
         )
       }
 

@@ -15,6 +15,7 @@ import {
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { auth, db } from '../../../config/firebase';
+import { deleteUser } from '@/features/users/services/userService';
 
 export interface AnimatorAssignment {
     unitId: string;
@@ -266,9 +267,8 @@ export const getUnassignedSchools = async () => {
 export const deleteAnimator = async (animatorId: string): Promise<void> => {
     // Delete assignment document
     await deleteDoc(doc(db, 'animator_assignments', animatorId));
-    // Note: Firebase Auth user deletion requires Admin SDK or Cloud Functions
-    // Only delete Firestore user document here
-    await deleteDoc(doc(db, 'users', animatorId));
+    // Securely delete user from Firebase Auth and Firestore users collection via Cloud Function
+    await deleteUser(animatorId);
 };
 
 // Get assignment statistics

@@ -54,7 +54,7 @@ export function AssignmentHistory({ refreshTrigger }: AssignmentHistoryProps) {
     try {
       const [assignmentsData, teachersData, parishesData] = await Promise.all([
         AssignmentService.getAssignments(),
-        TeacherService.getTeachers(),
+        TeacherService.getTeachers({ includeDeleted: true }),
         ParishService.getAllParishes(),
       ]);
       setAssignments(assignmentsData as Assignment[]);

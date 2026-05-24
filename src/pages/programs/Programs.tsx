@@ -10,7 +10,6 @@ import {
   Eye,
   ChevronRight,
   Phone,
-  School,
   Clock,
   FileText,
   Download,
@@ -72,10 +71,24 @@ import {
   subscribeToPrograms,
   ProgramData,
   ProgramRegistration,
+  CustomField,
 } from "../../features/programs/services/programService";
 import { Timestamp } from "firebase/firestore";
 import { PremiumProgramPdfService } from "../../features/reports/services/programPdfService";
 import { getUsers } from "../../features/users/services/userService";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "../../components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 
 // Mobile Card Component
 interface ProgramCardProps {
@@ -185,6 +198,19 @@ const ProgramCard = ({
   );
 };
 
+const getInitialStudentFields = (): CustomField[] => [
+  { id: Math.random().toString(36).substring(2, 9), name: "Name", type: "text", isMandatory: true },
+  { id: Math.random().toString(36).substring(2, 9), name: "Phone Number", type: "text", isMandatory: false },
+  { id: Math.random().toString(36).substring(2, 9), name: "Class", type: "text", isMandatory: false },
+  { id: Math.random().toString(36).substring(2, 9), name: "Address", type: "text", isMandatory: false },
+];
+
+const getInitialTeacherFields = (): CustomField[] => [
+  { id: Math.random().toString(36).substring(2, 9), name: "Name", type: "text", isMandatory: true },
+  { id: Math.random().toString(36).substring(2, 9), name: "Phone Number", type: "text", isMandatory: false },
+  { id: Math.random().toString(36).substring(2, 9), name: "Address", type: "text", isMandatory: false },
+];
+
 export function Programs() {
   const [programs, setPrograms] = useState<ProgramData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -222,7 +248,117 @@ export function Programs() {
     startDate: "",
     endDate: "",
     isActive: true,
+    targetAudience: "student" as 'student' | 'teacher' | 'both',
   });
+
+  const [studentFields, setStudentFields] = useState<CustomField[]>(() => getInitialStudentFields());
+  const [teacherFields, setTeacherFields] = useState<CustomField[]>(() => getInitialTeacherFields());
+
+  const addField = (role: 'student' | 'teacher') => {
+    const newField: CustomField = {
+      id: Math.random().toString(36).substring(2, 9),
+      name: "",
+      type: "text",
+      isMandatory: false,
+      options: [],
+    };
+    if (role === 'student') {
+      setStudentFields([...studentFields, newField]);
+    } else {
+      setTeacherFields([...teacherFields, newField]);
+    }
+  };
+
+  const removeField = (role: 'student' | 'teacher', id: string) => {
+    if (role === 'student') {
+      setStudentFields(studentFields.filter(f => f.id !== id));
+    } else {
+      setTeacherFields(teacherFields.filter(f => f.id !== id));
+    }
+  };
+
+  const updateField = (role: 'student' | 'teacher', id: string, updates: Partial<CustomField>) => {
+    const fields = role === 'student' ? studentFields : teacherFields;
+    const updated = fields.map(f => {
+      if (f.id === id) {
+        return { ...f, ...updates };
+      }
+      return f;
+    });
+    if (role === 'student') {
+      setStudentFields(updated);
+    } else {
+      setTeacherFields(updated);
+    }
+  };
+
+  const renderFieldsBuilder = (role: 'student' | 'teacher') => {
+    const fields = role === 'student' ? studentFields : teacherFields;
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <Label className="font-semibold text-sm">
+            {role === 'student' ? 'Student Registration Fields' : 'Teacher Registration Fields'}
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Define extra fields required for {role === 'student' ? 'students' : 'teachers'}. Name and Phone are always collected.
+        </p>
+
+        <div className="space-y-3 max-h-[30vh] overflow-y-auto pr-1">
+          {fields.map((field) => (
+            <div key={field.id} className="flex flex-col gap-3 p-3 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-200 dark:border-gray-800">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs">Field Label</Label>
+                  <Input
+                    value={field.name}
+                    onChange={(e) => updateField(role, field.id, { name: e.target.value })}
+                    placeholder="e.g. Name,Phone Number"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-3 sm:pt-5">
+                  <div className="flex items-center space-x-1.5">
+                    <Switch
+                      id={`mandatory-${role}-${field.id}`}
+                      checked={field.isMandatory}
+                      onCheckedChange={(checked) => updateField(role, field.id, { isMandatory: checked })}
+                    />
+                    <Label htmlFor={`mandatory-${role}-${field.id}`} className="text-xs cursor-pointer select-none">Required</Label>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeField(role, field.id)}
+                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {fields.length === 0 && (
+            <div className="text-center py-6 border border-dashed rounded-lg text-muted-foreground text-xs">
+              No custom fields defined. Click the button below to add one.
+            </div>
+          )}
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => addField(role)}
+          className="w-full border-dashed flex items-center justify-center gap-1.5 text-xs h-8"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Field
+        </Button>
+      </div>
+    );
+  };
 
   // Real-time subscription to programs
   useEffect(() => {
@@ -284,6 +420,9 @@ export function Programs() {
         startDate: new Date(formData.startDate),
         endDate: new Date(formData.endDate),
         isActive: formData.isActive,
+        targetAudience: formData.targetAudience,
+        studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
+        teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
       });
       toast.success("Program created successfully");
       setIsCreateDialogOpen(false);
@@ -312,6 +451,9 @@ export function Programs() {
         startDate: new Date(formData.startDate),
         endDate: new Date(formData.endDate),
         isActive: formData.isActive,
+        targetAudience: formData.targetAudience,
+        studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
+        teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
       });
       toast.success("Program updated successfully");
       setIsEditDialogOpen(false);
@@ -350,7 +492,10 @@ export function Programs() {
       startDate: startDate.toISOString().split("T")[0],
       endDate: endDate.toISOString().split("T")[0],
       isActive: program.isActive,
+      targetAudience: program.targetAudience || "student",
     });
+    setStudentFields(program.studentFields || []);
+    setTeacherFields(program.teacherFields || []);
     setIsEditDialogOpen(true);
   };
 
@@ -361,7 +506,10 @@ export function Programs() {
       startDate: "",
       endDate: "",
       isActive: true,
+      targetAudience: "student",
     });
+    setStudentFields(getInitialStudentFields());
+    setTeacherFields(getInitialTeacherFields());
   };
 
   const getStatusColor = (status: ProgramRegistration["status"]) => {
@@ -429,56 +577,85 @@ export function Programs() {
     return { label: "Active", variant: "default" as const };
   };
 
-  const handleExportRegistrations = async (format: "csv" | "pdf") => {
+  const handleExportRegistrations = async (role: "student" | "teacher", format: "csv" | "pdf") => {
     if (!selectedProgram || detailRegistrations.length === 0) return;
+
+    const customFields = role === 'student'
+      ? selectedProgram.studentFields || []
+      : selectedProgram.teacherFields || [];
+
+    const filteredRegs = detailRegistrations.filter((r) => {
+      if (role === 'student') {
+        return !r.type || r.type === 'student';
+      }
+      return r.type === 'teacher';
+    });
+
+    if (filteredRegs.length === 0) {
+      toast.error(`No registered ${role}s found to export`);
+      return;
+    }
 
     if (format === "csv") {
       const headers = [
-        "Student Name",
+        role === 'teacher' ? "Teacher Name" : "Student Name",
         "Phone",
         "School",
         "Status",
+        ...customFields.map(f => `"${f.name}"`),
         "Submitted At",
       ];
 
-      const sortedRegistrations = [...detailRegistrations].sort((a, b) =>
+      const sortedRegistrations = [...filteredRegs].sort((a, b) =>
         (a.schoolName || "").localeCompare(b.schoolName || ""),
       );
 
       const csv = [
         headers.join(","),
-        ...sortedRegistrations.map((reg) =>
-          [
+        ...sortedRegistrations.map((reg) => {
+          const row = [
             `"${reg.studentName}"`,
             `"${reg.studentPhone}"`,
             `"${reg.schoolName}"`,
             getStatusLabel(reg.status),
-            reg.submittedAt
-              ? reg.submittedAt.toDate().toLocaleDateString()
-              : "N/A",
-          ].join(","),
-        ),
+          ];
+
+          customFields.forEach(field => {
+            const val = reg.customFieldValues?.[field.id];
+            let displayVal = "";
+            if (val !== undefined && val !== null) {
+              if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+              else displayVal = String(val);
+            }
+            row.push(`"${displayVal.replace(/"/g, '""')}"`);
+          });
+
+          row.push(reg.submittedAt ? reg.submittedAt.toDate().toLocaleDateString() : "N/A");
+          return row.join(",");
+        }),
       ].join("\n");
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `${selectedProgram.name.replace(/\s+/g, "_")}_registrations_${new Date().toISOString().split("T")[0]}.csv`;
+      link.download = `${selectedProgram.name.replace(/\s+/g, "_")}_${role}s_${new Date().toISOString().split("T")[0]}.csv`;
       link.click();
-      toast.success("CSV Exported successfully");
+      toast.success(`${role === 'teacher' ? 'Teachers' : 'Students'} CSV Exported successfully`);
     } else if (format === "pdf") {
       try {
-        toast.info("Generating PDF, please wait...");
+        toast.info(`Generating ${role === 'teacher' ? 'Teachers' : 'Students'} PDF, please wait...`);
         // Fetch users to try and lookup forane/parish metadata if needed by report
         const users = await getUsers();
         await PremiumProgramPdfService.generateReport(
-          detailRegistrations,
+          filteredRegs,
           selectedProgram.name,
           "All", // Using "All" forane context from within program detail
           "All", // Using "All" parish context
           users,
+          role,
+          customFields,
         );
-        toast.success("PDF Exported successfully");
+        toast.success(`${role === 'teacher' ? 'Teachers' : 'Students'} PDF Exported successfully`);
       } catch (err) {
         console.error("PDF generation failed", err);
         toast.error("Failed to generate PDF");
@@ -504,18 +681,23 @@ export function Programs() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Programs
         </h1>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (open) {
+            resetForm();
+          }
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Create Program
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Program</DialogTitle>
               <DialogDescription>
-                Add a new educational program for student registration.
+                Add a new educational program with optional custom fields.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -566,6 +748,28 @@ export function Programs() {
                   />
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="targetAudience">Target Audience / Participant Type</Label>
+                <Select
+                  value={formData.targetAudience}
+                  onValueChange={(val: any) => {
+                    setFormData({ ...formData, targetAudience: val });
+                    if (val === 'student' && studentFields.length === 0) {
+                      setStudentFields(getInitialStudentFields());
+                    } else if (val === 'teacher' && teacherFields.length === 0) {
+                      setTeacherFields(getInitialTeacherFields());
+                    }
+                  }}
+                >
+                  <SelectTrigger id="targetAudience">
+                    <SelectValue placeholder="Select who can register" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="teacher">Teacher</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex items-center space-x-2">
                 <Switch
                   id="isActive"
@@ -575,6 +779,10 @@ export function Programs() {
                   }
                 />
                 <Label htmlFor="isActive">Active</Label>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
+                {formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')}
               </div>
             </div>
             <DialogFooter>
@@ -754,10 +962,10 @@ export function Programs() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Program</DialogTitle>
-            <DialogDescription>Update program details.</DialogDescription>
+            <DialogDescription>Update program details and custom fields.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -807,6 +1015,28 @@ export function Programs() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-targetAudience">Target Audience / Participant Type</Label>
+              <Select
+                value={formData.targetAudience}
+                onValueChange={(val: any) => {
+                  setFormData({ ...formData, targetAudience: val });
+                  if (val === 'student' && studentFields.length === 0) {
+                    setStudentFields(getInitialStudentFields());
+                  } else if (val === 'teacher' && teacherFields.length === 0) {
+                    setTeacherFields(getInitialTeacherFields());
+                  }
+                }}
+              >
+                <SelectTrigger id="edit-targetAudience">
+                  <SelectValue placeholder="Select who can register" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Student</SelectItem>
+                  <SelectItem value="teacher">Teacher</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center space-x-2">
               <Switch
                 id="edit-isActive"
@@ -816,6 +1046,10 @@ export function Programs() {
                 }
               />
               <Label htmlFor="edit-isActive">Active</Label>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
+              {formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')}
             </div>
           </div>
           <DialogFooter>
@@ -877,16 +1111,34 @@ export function Programs() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => handleExportRegistrations("csv")}
-                    >
-                      Export as CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleExportRegistrations("pdf")}
-                    >
-                      Export as PDF
-                    </DropdownMenuItem>
+                    {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "student") && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("student", "csv")}
+                        >
+                          Export Students (CSV)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("student", "pdf")}
+                        >
+                          Export Students (PDF)
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "teacher") && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("teacher", "csv")}
+                        >
+                          Export Teachers (CSV)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("teacher", "pdf")}
+                        >
+                          Export Teachers (PDF)
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -897,178 +1149,270 @@ export function Programs() {
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
               </div>
             ) : detailStats ? (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3 text-center">
-                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                      {detailStats.total}
-                    </p>
-                    <p className="text-xs text-gray-500">Total</p>
-                  </div>
-                  <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3 text-center">
-                    <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">
-                      {detailStats.pending}
-                    </p>
-                    <p className="text-xs text-yellow-600 dark:text-yellow-500">
-                      Pending
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-3 text-center">
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                      {detailStats.approved}
-                    </p>
-                    <p className="text-xs text-green-600 dark:text-green-500">
-                      Approved
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-3 text-center">
-                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                      {detailStats.locked}
-                    </p>
-                    <p className="text-xs text-blue-600 dark:text-blue-500">
-                      Locked
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-center">
-                    <p className="text-2xl font-bold text-red-700 dark:text-red-400">
-                      {detailStats.rejected}
-                    </p>
-                    <p className="text-xs text-red-600 dark:text-red-500">
-                      Rejected
-                    </p>
-                  </div>
-                </div>
+              (() => {
+                const studentRegs = detailRegistrations.filter(r => !r.type || r.type === 'student');
+                const teacherRegs = detailRegistrations.filter(r => r.type === 'teacher');
 
-                {/* Registrations Table */}
-                <div>
-                  {detailRegistrations.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400">
-                      <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                      <p>No registrations yet</p>
+                const getStatsForRole = (regs: ProgramRegistration[]) => {
+                  const countStudents = (arr: ProgramRegistration[]) => {
+                    return arr.reduce((sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
+                  };
+                  return {
+                    total: countStudents(regs),
+                    pending: countStudents(regs.filter(r => r.status === 'pending_parish')),
+                    approved: countStudents(regs.filter(r => r.status === 'approved_parish')),
+                    locked: countStudents(regs.filter(r => r.status === 'locked')),
+                    rejected: countStudents(regs.filter(r => r.status === 'rejected'))
+                  };
+                };
+
+                const sStats = getStatsForRole(studentRegs);
+                const tStats = getStatsForRole(teacherRegs);
+
+                const renderStatsSummary = (stats: typeof sStats) => (
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3 text-center">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        {stats.total}
+                      </p>
+                      <p className="text-xs text-gray-500">Total</p>
                     </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {Array.from(
-                        new Set(
-                          detailRegistrations.map((reg) => reg.schoolName),
-                        ),
-                      )
-                        .sort()
-                        .map((schoolName) => {
-                          const schoolRegs = detailRegistrations.filter(
-                            (reg) => reg.schoolName === schoolName,
-                          );
-                          return (
-                            <div key={schoolName} className="space-y-3">
-                              <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
-                                <span>{schoolName}</span>
-                                <Badge variant="outline" className="text-xs">
-                                  {schoolRegs.reduce(
-                                    (sum, reg) =>
-                                      sum +
-                                      (reg.isCountOnly
-                                        ? reg.studentCount || 1
-                                        : 1),
-                                    0,
-                                  )}{" "}
-                                  students
-                                </Badge>
-                              </h4>
-                              {/* Desktop table */}
-                              <div className="hidden sm:block rounded-lg border overflow-hidden">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>#</TableHead>
-                                      <TableHead>Student Name</TableHead>
-                                      <TableHead>Phone</TableHead>
-                                      <TableHead>Status</TableHead>
-                                      <TableHead>Submitted</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {schoolRegs.map((reg, idx) => (
-                                      <TableRow key={reg.id}>
-                                        <TableCell className="text-gray-500">
-                                          {idx + 1}
-                                        </TableCell>
-                                        <TableCell className="font-medium">
-                                          {reg.isCountOnly
-                                            ? `${reg.studentCount} Students`
-                                            : reg.studentName}
-                                        </TableCell>
-                                        <TableCell>
-                                          {reg.isCountOnly
-                                            ? "-"
-                                            : reg.studentPhone}
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge
-                                            className={getStatusColor(
-                                              reg.status,
-                                            )}
-                                            variant="secondary"
-                                          >
-                                            {getStatusLabel(reg.status)}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-gray-500 text-xs">
-                                          {reg.submittedAt
-                                            ? reg.submittedAt
-                                              .toDate()
-                                              .toLocaleDateString()
-                                            : "N/A"}
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
+                    <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3 text-center">
+                      <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">
+                        {stats.pending}
+                      </p>
+                      <p className="text-xs text-yellow-600 dark:text-yellow-500">
+                        Pending
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                        {stats.approved}
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-500">
+                        Approved
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-3 text-center">
+                      <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                        {stats.locked}
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-500">
+                        Locked
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-center">
+                      <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                        {stats.rejected}
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-500">
+                        Rejected
+                      </p>
+                    </div>
+                  </div>
+                );
 
-                              {/* Mobile cards */}
-                              <div className="sm:hidden space-y-3">
-                                {schoolRegs.map((reg, idx) => (
-                                  <Card key={reg.id}>
-                                    <CardContent className="p-3 space-y-1.5">
-                                      <div className="flex items-center justify-between">
-                                        <span className="font-medium text-sm">
-                                          {idx + 1}.{" "}
-                                          {reg.isCountOnly
-                                            ? `${reg.studentCount} Students (Bulk)`
-                                            : reg.studentName}
-                                        </span>
+                const renderRegistrationsList = (role: 'student' | 'teacher', regs: ProgramRegistration[]) => {
+                  if (regs.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-gray-400">
+                        <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                        <p>No registered {role}s yet</p>
+                      </div>
+                    );
+                  }
+
+                  const customFields = role === 'student'
+                    ? selectedProgram?.studentFields || []
+                    : selectedProgram?.teacherFields || [];
+
+                  const uniqueSchools = Array.from(new Set(regs.map(r => r.schoolName))).sort();
+
+                  return (
+                    <div className="space-y-6">
+                      {uniqueSchools.map(schoolName => {
+                        const schoolRegs = regs.filter(r => r.schoolName === schoolName);
+                        const totalSchoolCount = schoolRegs.reduce(
+                          (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
+                          0
+                        );
+                        return (
+                          <div key={schoolName} className="space-y-3">
+                            <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
+                              <span>{schoolName}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {totalSchoolCount} {role === 'student' ? 'students' : 'teachers'}
+                              </Badge>
+                            </h4>
+
+                            {/* Desktop table */}
+                            <div className="hidden sm:block rounded-lg border overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>#</TableHead>
+                                    <TableHead>{role === 'teacher' ? 'Teacher Name' : 'Student Name'}</TableHead>
+                                    <TableHead>Phone</TableHead>
+                                    {customFields.map(f => (
+                                      <TableHead key={f.id}>{f.name}</TableHead>
+                                    ))}
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Submitted</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {schoolRegs.map((reg, idx) => (
+                                    <TableRow key={reg.id}>
+                                      <TableCell className="text-gray-500">
+                                        {idx + 1}
+                                      </TableCell>
+                                      <TableCell className="font-medium">
+                                        {reg.isCountOnly
+                                          ? `${reg.studentCount} Students`
+                                          : reg.studentName}
+                                      </TableCell>
+                                      <TableCell>
+                                        {reg.isCountOnly
+                                          ? "-"
+                                          : reg.studentPhone}
+                                      </TableCell>
+                                      {customFields.map(field => {
+                                        const val = reg.customFieldValues?.[field.id];
+                                        let displayVal = "-";
+                                        if (val !== undefined && val !== null) {
+                                          if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+                                          else displayVal = String(val);
+                                        }
+                                        return (
+                                          <TableCell key={field.id}>
+                                            {displayVal}
+                                          </TableCell>
+                                        );
+                                      })}
+                                      <TableCell>
                                         <Badge
                                           className={getStatusColor(reg.status)}
                                           variant="secondary"
                                         >
                                           {getStatusLabel(reg.status)}
                                         </Badge>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                        <Phone className="h-3 w-3" />
-                                        {reg.isCountOnly
-                                          ? "-"
-                                          : reg.studentPhone}
-                                      </div>
-                                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                        <Clock className="h-3 w-3" />
+                                      </TableCell>
+                                      <TableCell className="text-gray-500 text-xs">
                                         {reg.submittedAt
                                           ? reg.submittedAt
                                             .toDate()
                                             .toLocaleDateString()
                                           : "N/A"}
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                ))}
-                              </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
                             </div>
-                          );
-                        })}
+
+                            {/* Mobile cards */}
+                            <div className="sm:hidden space-y-3">
+                              {schoolRegs.map((reg, idx) => (
+                                <Card key={reg.id}>
+                                  <CardContent className="p-3 space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-medium text-sm">
+                                        {idx + 1}.{" "}
+                                        {reg.isCountOnly
+                                          ? `${reg.studentCount} Students (Bulk)`
+                                          : reg.studentName}
+                                      </span>
+                                      <Badge
+                                        className={getStatusColor(reg.status)}
+                                        variant="secondary"
+                                      >
+                                        {getStatusLabel(reg.status)}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                      <Phone className="h-3 w-3" />
+                                      {reg.isCountOnly
+                                        ? "-"
+                                        : reg.studentPhone}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                      <Clock className="h-3 w-3" />
+                                      {reg.submittedAt
+                                        ? reg.submittedAt
+                                          .toDate()
+                                          .toLocaleDateString()
+                                        : "N/A"}
+                                    </div>
+                                    {!reg.isCountOnly && customFields.length > 0 && (
+                                      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                                        {customFields.map(field => {
+                                          const val = reg.customFieldValues?.[field.id];
+                                          let displayVal = "-";
+                                          if (val !== undefined && val !== null) {
+                                            if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+                                            else displayVal = String(val);
+                                          }
+                                          return (
+                                            <div key={field.id} className="text-gray-500">
+                                              <span className="font-medium text-gray-700 dark:text-gray-300">{field.name}: </span>
+                                              {displayVal}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
-              </>
+                  );
+                };
+
+                const targetAudience = selectedProgram?.targetAudience || "both";
+                const showStudents = targetAudience === "both" || targetAudience === "student";
+                const showTeachers = targetAudience === "both" || targetAudience === "teacher";
+
+                if (showStudents && showTeachers) {
+                  return (
+                    <Tabs defaultValue="students" className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="students">Students ({sStats.total})</TabsTrigger>
+                        <TabsTrigger value="teachers">Teachers ({tStats.total})</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="students" className="space-y-4 py-4">
+                        {renderStatsSummary(sStats)}
+                        {renderRegistrationsList('student', studentRegs)}
+                      </TabsContent>
+
+                      <TabsContent value="teachers" className="space-y-4 py-4">
+                        {renderStatsSummary(tStats)}
+                        {renderRegistrationsList('teacher', teacherRegs)}
+                      </TabsContent>
+                    </Tabs>
+                  );
+                }
+
+                if (showStudents) {
+                  return (
+                    <div className="space-y-4 py-4">
+                      {renderStatsSummary(sStats)}
+                      {renderRegistrationsList('student', studentRegs)}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4 py-4">
+                    {renderStatsSummary(tStats)}
+                    {renderRegistrationsList('teacher', teacherRegs)}
+                  </div>
+                );
+              })()
             ) : null}
           </div>
         </DialogContent>

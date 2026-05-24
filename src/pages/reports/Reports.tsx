@@ -316,7 +316,7 @@ export function Reports() {
         ] = await Promise.all([
           getEvents(),
           getUsers(),
-          TeacherService.getTeachers(),
+          TeacherService.getTeachers({ includeDeleted: true }),
           AssignmentService.getAssignments(),
           getPrograms(),
           getProgramRegistrations(),
@@ -661,7 +661,7 @@ export function Reports() {
     );
   }).length;
 
-  const obsDirCount = teachers.filter((t) => {
+  const obsDirCount = teachers.filter((t) => !t.deleted).filter((t) => {
     const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
     return (
@@ -684,11 +684,11 @@ export function Reports() {
 
   // Unique classes across all teachers
   const uniqueClasses = Array.from(
-    new Set(teachers.flatMap((t) => t.classes || [])),
+    new Set(teachers.filter((t) => !t.deleted).flatMap((t) => t.classes || [])),
   ).sort();
 
   // Class-wise teacher count & breakdown
-  const tmClassFiltered = teachers.filter((t) => {
+  const tmClassFiltered = teachers.filter((t) => !t.deleted).filter((t) => {
     const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
     return (
@@ -705,7 +705,7 @@ export function Reports() {
   const tmClassBreakdown: { cls: string; count: number }[] = uniqueClasses
     .map((cls) => ({
       cls,
-      count: teachers.filter((t) => {
+      count: teachers.filter((t) => !t.deleted).filter((t) => {
         const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
         return (
@@ -845,7 +845,7 @@ export function Reports() {
   };
 
   const handleGenerateObsDirReport = async () => {
-    const filtered = teachers.filter((t) => {
+    const filtered = teachers.filter((t) => !t.deleted).filter((t) => {
       const hp = dynamicParishes.find((p) => p.id === (t.parishId || (t as any).schoolId));
 
       return (

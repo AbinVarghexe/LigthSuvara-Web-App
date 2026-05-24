@@ -17,6 +17,7 @@ import {
     Clock,
     Briefcase,
     Calendar as CalendarIcon,
+    FileText,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
@@ -68,6 +69,7 @@ import {
     ProgramMetadata,
     PublicRegistration as RegistrationType,
 } from "../../features/public-registration/services/publicRegistrationService";
+import { CustomField } from "../../features/programs/services/programService";
 import { Timestamp } from "firebase/firestore";
 import { format } from "date-fns";
 import { 
@@ -234,12 +236,22 @@ function DateTimePicker({
     );
 }
 
+const getPredefinedFields = (): CustomField[] => [
+    { id: "name", name: "Name", type: "text", isMandatory: true },
+    { id: "phone", name: "Phone Number", type: "text", isMandatory: true },
+    { id: "email", name: "Email", type: "text", isMandatory: false },
+    { id: "qualification", name: "Qualification", type: "text", isMandatory: false },
+    { id: "currentStatus", name: "Current Status / Occupation", type: "text", isMandatory: false },
+    { id: "address", name: "Address", type: "text", isMandatory: false },
+];
+
 export function PublicRegistration() {
     const [programs, setPrograms] = useState<ProgramMetadata[]>([]);
     const [registrations, setRegistrations] = useState<RegistrationType[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("programs");
     const [searchTerm, setSearchTerm] = useState("");
+    const [selectedProgramId, setSelectedProgramId] = useState<string>("all");
     
     // View Detail State
     const [selectedReg, setSelectedReg] = useState<RegistrationType | null>(null);
@@ -259,47 +271,281 @@ export function PublicRegistration() {
         regInfo: "",
         startDate: Timestamp.now(),
         endDate: Timestamp.now(),
+        customFields: [],
     });
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const [progs, regs] = await Promise.all([
-                getPublicPrograms(),
-                getPublicRegistrations(),
-            ]);
-            setPrograms(progs);
-            setRegistrations(regs);
-        } catch (error) {
-            console.error("Error fetching public registration data:", error);
-            toast.error("Failed to load data");
-        } finally {
-            setLoading(false);
+    const getFieldValue = (reg: RegistrationType, fieldId: string): string => {
+        if (reg.customFieldValues && reg.customFieldValues[fieldId] !== undefined) {
+            const val = reg.customFieldValues[fieldId];
+            if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+            return String(val);
+        }
+        switch (fieldId) {
+            case 'name':
+                return reg.name || reg.applicantName || "";
+            case 'phone':
+                return reg.phone || reg.applicantMobile || "";
+            case 'email':
+                return reg.email || "";
+            case 'address':
+                return reg.address || reg.applicantPlace || "";
+            case 'academicBackground':
+                return reg.academicBackground || reg.applicantClass || "";
+            case 'qualification':
+                return reg.qualification || "";
+            case 'currentStatus':
+                return reg.currentStatus || "";
+            default:
+                return "";
         }
     };
 
-    // Analytics Data
-    const analytics = useMemo(() => {
-        const total = registrations.length;
-        const programCounts = programs.map(p => ({
-            name: p.name,
-            count: registrations.filter(r => r.programId === p.id).length
-        })).filter(p => p.count > 0);
+    const handleGetFormValue = (fieldId: string): any => {
+        if (regForm.customFieldValues && regForm.customFieldValues[fieldId] !== undefined) {
+            return regForm.customFieldValues[fieldId];
+        }
+        switch (fieldId) {
+            case 'name':
+                return regForm.name || regForm.applicantName || "";
+            case 'phone':
+                return regForm.phone || regForm.applicantMobile || "";
+            case 'email':
+                return regForm.email || "";
+            case 'address':
+                return regForm.address || regForm.applicantPlace || "";
+            case 'academicBackground':
+                return regForm.academicBackground || regForm.applicantClass || "";
+            case 'qualification':
+                return regForm.qualification || "";
+            case 'currentStatus':
+                return regForm.currentStatus || "";
+            default:
+                return "";
+        }
+    };
 
-        const recent = [...registrations]
-            .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())
-            .slice(0, 5);
+    const handleSetFormValue = (fieldId: string, value: any) => {
+        switch (fieldId) {
+            case 'name':
+                setRegForm(prev => ({ ...prev, name: value }));
+                break;
+            case 'phone':
+                setRegForm(prev => ({ ...prev, phone: value }));
+                break;
+            case 'email':
+                setRegForm(prev => ({ ...prev, email: value }));
+                break;
+            case 'qualification':
+                setRegForm(prev => ({ ...prev, qualification: value }));
+                break;
+            case 'currentStatus':
+                setRegForm(prev => ({ ...prev, currentStatus: value }));
+                break;
+            case 'academicBackground':
+                setRegForm(prev => ({ ...prev, academicBackground: value }));
+                break;
+            case 'address':
+                setRegForm(prev => ({ ...prev, address: value }));
+                break;
+            default:
+                setRegForm(prev => ({
+                    ...prev,
+                    customFieldValues: {
+                        ...(prev.customFieldValues || {}),
+                        [fieldId]: value
+                    }
+                }));
+                break;
+        }
+    };
 
-        return { total, programCounts, recent };
-    }, [registrations, programs]);
+    const addField = () => {
+        const newField: CustomField = {
+            id: "field_" + Math.random().toString(36).substring(2, 9),
+            name: "",
+            type: "text",
+            isMandatory: false,
+            options: [],
+        };
+        setProgramForm(prev => ({
+            ...prev,
+            customFields: [...(prev.customFields || []), newField]
+        }));
+    };
+
+    const removeField = (id: string) => {
+        setProgramForm(prev => ({
+            ...prev,
+            customFields: (prev.customFields || []).filter(f => f.id !== id)
+        }));
+    };
+
+    const updateField = (id: string, updates: Partial<CustomField>) => {
+        setProgramForm(prev => ({
+            ...prev,
+            customFields: (prev.customFields || []).map(f => {
+                if (f.id === id) {
+                    return { ...f, ...updates };
+                }
+                return f;
+            })
+        }));
+    };
+
+    const moveField = (index: number, direction: 'up' | 'down') => {
+        const fields = [...(programForm.customFields || [])];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= fields.length) return;
+        
+        const temp = fields[index];
+        fields[index] = fields[targetIndex];
+        fields[targetIndex] = temp;
+
+        setProgramForm(prev => ({
+            ...prev,
+            customFields: fields
+        }));
+    };
+
+    const renderFieldsBuilder = () => {
+        const fields = programForm.customFields || [];
+        return (
+            <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <Label className="font-semibold text-sm">
+                        Registration Fields Config
+                    </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Customize the fields to be filled by applicants. Predefined fields are populated by default.
+                </p>
+
+                <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
+                    {fields.map((field, index) => (
+                        <div key={field.id} className="flex flex-col gap-3 p-3 bg-muted/30 dark:bg-gray-800/40 rounded-xl border border-primary/10">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <div className="flex-1 space-y-1">
+                                    <Label className="text-xs">Field Label</Label>
+                                    <Input
+                                        value={field.name}
+                                        onChange={(e) => updateField(field.id, { name: e.target.value })}
+                                        placeholder="e.g. Email Address, Age"
+                                        className="h-8 text-xs rounded-lg"
+                                    />
+                                </div>
+                                <div className="w-32 space-y-1">
+                                    <Label className="text-xs">Field Type</Label>
+                                    <Select
+                                        value={field.type}
+                                        onValueChange={(val: any) => updateField(field.id, { type: val })}
+                                    >
+                                        <SelectTrigger className="h-8 text-xs rounded-lg">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="text">Text</SelectItem>
+                                            <SelectItem value="number">Number</SelectItem>
+                                            <SelectItem value="boolean">Yes/No</SelectItem>
+                                            <SelectItem value="select">Dropdown</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center gap-2 sm:pt-5">
+                                    <div className="flex items-center space-x-1.5">
+                                        <Switch
+                                            id={`mandatory-${field.id}`}
+                                            checked={field.isMandatory}
+                                            onCheckedChange={(checked) => updateField(field.id, { isMandatory: checked })}
+                                        />
+                                        <Label htmlFor={`mandatory-${field.id}`} className="text-xs cursor-pointer select-none">Required</Label>
+                                    </div>
+                                    <div className="flex items-center gap-0.5 ml-2">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => moveField(index, 'up')}
+                                            disabled={index === 0}
+                                            className="h-7 w-7 text-muted-foreground hover:bg-primary/10 rounded-md"
+                                        >
+                                            <span className="text-xs">▲</span>
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => moveField(index, 'down')}
+                                            disabled={index === fields.length - 1}
+                                            className="h-7 w-7 text-muted-foreground hover:bg-primary/10 rounded-md"
+                                        >
+                                            <span className="text-xs">▼</span>
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => removeField(field.id)}
+                                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md ml-1"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {field.type === 'select' && (
+                                <div className="space-y-1.5 pt-1 border-t border-dashed border-primary/5">
+                                    <Label className="text-xs">Dropdown Options (Comma-separated)</Label>
+                                    <Input
+                                        value={field.options?.join(', ') || ""}
+                                        onChange={(e) => updateField(field.id, { 
+                                            options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
+                                        })}
+                                        placeholder="e.g. Option 1, Option 2, Option 3"
+                                        className="h-8 text-xs rounded-lg"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    {fields.length === 0 && (
+                        <div className="text-center py-6 border border-dashed rounded-lg text-muted-foreground text-xs">
+                            No registration fields defined. Click the button below to add one.
+                        </div>
+                    )}
+                </div>
+
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addField}
+                    className="w-full border-dashed flex items-center justify-center gap-1.5 text-xs h-8 hover:bg-primary/5 hover:text-primary transition-colors"
+                >
+                    <Plus className="h-3.5 w-3.5" /> Add Custom Field
+                </Button>
+            </div>
+        );
+    };
 
     const openProgramDialog = (program?: ProgramMetadata) => {
         if (program) {
-            setProgramForm({ ...program });
+            const existingFields = program.customFields || [];
+            const predefinedFields = getPredefinedFields();
+            
+            // Merge predefined fields that are missing in the existing fields
+            const mergedFields = [...existingFields];
+            predefinedFields.forEach(prefField => {
+                const exists = existingFields.some(ef => ef.id === prefField.id);
+                if (!exists) {
+                    mergedFields.push(prefField);
+                }
+            });
+
+            setProgramForm({ 
+                ...program,
+                customFields: mergedFields
+            });
             setEditingProgramId(program.id);
         } else {
             setProgramForm({
@@ -308,6 +554,7 @@ export function PublicRegistration() {
                 regInfo: "",
                 startDate: Timestamp.now(),
                 endDate: Timestamp.now(),
+                customFields: getPredefinedFields(),
             });
             setEditingProgramId(undefined);
         }
@@ -333,6 +580,132 @@ export function PublicRegistration() {
         } catch (error) {
             console.error("Error saving program:", error);
             toast.error("Failed to save program");
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [progs, regs] = await Promise.all([
+                getPublicPrograms(),
+                getPublicRegistrations(),
+            ]);
+            
+            // Dynamically filter out 'academicBackground' from existing program schemas
+            const cleanedProgs = progs.map(p => {
+                if (p.customFields) {
+                    return {
+                        ...p,
+                        customFields: p.customFields.filter(f => f.id !== 'academicBackground')
+                    };
+                }
+                return p;
+            });
+
+            setPrograms(cleanedProgs);
+            setRegistrations(regs);
+        } catch (error) {
+            console.error("Error fetching public registration data:", error);
+            toast.error("Failed to load data");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Analytics Data
+    const analytics = useMemo(() => {
+        const total = registrations.length;
+        const programCounts = programs.map(p => ({
+            name: p.name,
+            count: registrations.filter(r => r.programId === p.id).length
+        })).filter(p => p.count > 0);
+
+        const recent = [...registrations]
+            .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())
+            .slice(0, 5);
+
+        return { total, programCounts, recent };
+    }, [registrations, programs]);
+
+    const filteredRegistrations = useMemo(() => {
+        return registrations.filter(reg => {
+            if (selectedProgramId !== "all" && reg.programId !== selectedProgramId) {
+                return false;
+            }
+            
+            const name = reg.name || reg.applicantName || "";
+            const phone = reg.phone || reg.applicantMobile || "";
+            const title = reg.programTitle || "";
+            const qualification = reg.qualification || "";
+            const currentStatus = reg.currentStatus || "";
+            const search = searchTerm.toLowerCase();
+            
+            return name.toLowerCase().includes(search) ||
+                   phone.includes(search) ||
+                   title.toLowerCase().includes(search) ||
+                   qualification.toLowerCase().includes(search) ||
+                   currentStatus.toLowerCase().includes(search);
+        });
+    }, [registrations, selectedProgramId, searchTerm]);
+
+    const activeProgram = useMemo(() => {
+        return programs.find(p => p.id === selectedProgramId);
+    }, [programs, selectedProgramId]);
+
+    const tableFields = useMemo(() => {
+        if (activeProgram && activeProgram.customFields && activeProgram.customFields.length > 0) {
+            return activeProgram.customFields;
+        }
+        return getPredefinedFields();
+    }, [activeProgram]);
+
+    const visibleTableFields = useMemo(() => {
+        return tableFields.filter(f => f.id !== 'email');
+    }, [tableFields]);
+
+    const selectedRegProgram = useMemo(() => {
+        if (!selectedReg) return null;
+        return programs.find(p => p.id === selectedReg.programId);
+    }, [selectedReg, programs]);
+
+    const selectedRegFields = useMemo(() => {
+        if (selectedRegProgram && selectedRegProgram.customFields && selectedRegProgram.customFields.length > 0) {
+            return selectedRegProgram.customFields;
+        }
+        return getPredefinedFields();
+    }, [selectedRegProgram]);
+
+    const editingRegProgram = useMemo(() => {
+        if (!regForm.programId) return null;
+        return programs.find(p => p.id === regForm.programId);
+    }, [regForm.programId, programs]);
+
+    const editingRegFields = useMemo(() => {
+        if (editingRegProgram && editingRegProgram.customFields && editingRegProgram.customFields.length > 0) {
+            return editingRegProgram.customFields;
+        }
+        return getPredefinedFields();
+    }, [editingRegProgram]);
+
+    const getFieldIcon = (fieldId: string) => {
+        switch (fieldId) {
+            case 'phone':
+                return <Phone className="w-5 h-5" />;
+            case 'email':
+                return <Mail className="w-5 h-5" />;
+            case 'address':
+                return <MapPin className="w-5 h-5" />;
+            case 'academicBackground':
+            case 'qualification':
+                return <GraduationCap className="w-5 h-5" />;
+            case 'currentStatus':
+                return <Briefcase className="w-5 h-5" />;
+            default:
+                return <FileText className="w-5 h-5" />;
         }
     };
 
@@ -382,50 +755,55 @@ export function PublicRegistration() {
     };
 
     const handleExportCSV = () => {
-        if (registrations.length === 0) {
+        const regsToExport = filteredRegistrations;
+        if (regsToExport.length === 0) {
             toast.error("No registrations to export");
             return;
         }
 
-        const headers = ["Name", "Phone", "Email", "Qualification", "Current Status", "Academic Background", "Address", "Program", "Date"];
-        const rows = registrations.map(reg => [
-            reg.name || reg.applicantName || "",
-            reg.phone || reg.applicantMobile || "",
-            reg.email || "",
-            reg.qualification || "N/A",
-            reg.currentStatus || "N/A",
-            reg.academicBackground || reg.applicantClass || "",
-            `"${(reg.address || reg.applicantPlace || "").replace(/"/g, '""')}"`,
-            reg.programTitle,
-            format(reg.timestamp.toDate(), "yyyy-MM-dd HH:mm")
-        ]);
+        let headers: string[] = [];
+        let rows: string[][] = [];
+
+        if (selectedProgramId !== "all" && activeProgram) {
+            const fields = activeProgram.customFields || getPredefinedFields();
+            headers = [...fields.map(f => f.name), "Date"];
+            rows = regsToExport.map(reg => {
+                const row = fields.map(field => {
+                    const val = getFieldValue(reg, field.id);
+                    return `"${val.replace(/"/g, '""')}"`;
+                });
+                row.push(format(reg.timestamp.toDate(), "yyyy-MM-dd HH:mm"));
+                return row;
+            });
+        } else {
+            // Default columns for all programs export
+            headers = ["Name", "Phone", "Email", "Qualification", "Current Status", "Address", "Program", "Date"];
+            rows = regsToExport.map(reg => [
+                reg.name || reg.applicantName || "",
+                reg.phone || reg.applicantMobile || "",
+                reg.email || "",
+                reg.qualification || "N/A",
+                reg.currentStatus || "N/A",
+                `"${(reg.address || reg.applicantPlace || "").replace(/"/g, '""')}"`,
+                reg.programTitle,
+                format(reg.timestamp.toDate(), "yyyy-MM-dd HH:mm")
+            ]);
+        }
 
         const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", `registrations_${format(new Date(), "yyyy-MM-dd")}.csv`);
+        const fileNameSuffix = selectedProgramId !== "all" && activeProgram 
+            ? activeProgram.name.replace(/\s+/g, "_") 
+            : "all";
+        link.setAttribute("download", `registrations_${fileNameSuffix}_${format(new Date(), "yyyy-MM-dd")}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
-
-    const filteredRegistrations = registrations.filter(reg => {
-        const name = reg.name || reg.applicantName || "";
-        const phone = reg.phone || reg.applicantMobile || "";
-        const title = reg.programTitle || "";
-        const qualification = reg.qualification || "";
-        const currentStatus = reg.currentStatus || "";
-        const search = searchTerm.toLowerCase();
-        
-        return name.toLowerCase().includes(search) ||
-               phone.includes(search) ||
-               title.toLowerCase().includes(search) ||
-               qualification.toLowerCase().includes(search) ||
-               currentStatus.toLowerCase().includes(search);
-    });
 
     if (loading) {
         return (
@@ -567,14 +945,29 @@ export function PublicRegistration() {
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                        <div className="relative w-full md:w-96">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input 
-                                placeholder="Search by name, phone, or program..." 
-                                className="pl-10"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
+                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto flex-1">
+                            <div className="relative flex-1 max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input 
+                                    placeholder="Search by name, phone, or program..." 
+                                    className="pl-10"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            <div className="w-full sm:w-64">
+                                <Select value={selectedProgramId} onValueChange={setSelectedProgramId}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Filter by Program" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Programs</SelectItem>
+                                        {programs.map(p => (
+                                            <SelectItem key={p.id} value={p.id!}>{p.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="flex gap-2 w-full md:w-auto">
                             <Button variant="outline" className="flex-1 md:flex-none" onClick={handleExportCSV}>
@@ -587,11 +980,10 @@ export function PublicRegistration() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Applicant</TableHead>
-                                    <TableHead>Program</TableHead>
-                                    <TableHead>Occupation/Status</TableHead>
-                                    <TableHead>Qualification</TableHead>
-                                    <TableHead>Phone</TableHead>
+                                    {selectedProgramId === "all" && <TableHead>Program</TableHead>}
+                                    {visibleTableFields.map(field => (
+                                        <TableHead key={field.id}>{field.name}</TableHead>
+                                    ))}
                                     <TableHead>Date</TableHead>
                                     <TableHead className="text-right">Action</TableHead>
                                 </TableRow>
@@ -599,29 +991,34 @@ export function PublicRegistration() {
                             <TableBody>
                                 {filteredRegistrations.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                                        <TableCell colSpan={visibleTableFields.length + (selectedProgramId === "all" ? 3 : 2)} className="text-center py-10 text-muted-foreground">
                                             No registrations found
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     filteredRegistrations.map((reg) => (
                                         <TableRow key={reg.id} className="hover:bg-muted/50 transition-colors">
-                                            <TableCell>
-                                                <div className="font-medium">{reg.name || reg.applicantName}</div>
-                                                <div className="text-[10px] text-muted-foreground truncate max-w-[120px]">{reg.email || "No email"}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className="px-2 py-0.5 rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
-                                                    {reg.programTitle}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-[11px] font-medium max-w-[100px] truncate">
-                                                {reg.currentStatus || "N/A"}
-                                            </TableCell>
-                                            <TableCell className="text-[11px] font-medium max-w-[100px] truncate">
-                                                {reg.qualification || reg.academicBackground || reg.applicantClass || "N/A"}
-                                            </TableCell>
-                                            <TableCell className="text-sm whitespace-nowrap">{reg.phone || reg.applicantMobile}</TableCell>
+                                            {selectedProgramId === "all" && (
+                                                <TableCell>
+                                                    <span className="px-2 py-0.5 rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
+                                                        {reg.programTitle}
+                                                    </span>
+                                                </TableCell>
+                                            )}
+                                            {visibleTableFields.map(field => (
+                                                <TableCell key={field.id} className="text-sm">
+                                                    {field.id === 'name' ? (
+                                                        <div>
+                                                            <div className="font-medium">{getFieldValue(reg, 'name')}</div>
+                                                            <div className="text-[10px] text-muted-foreground truncate max-w-[120px]">{reg.email || "No email"}</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="max-w-[150px] truncate">
+                                                            {getFieldValue(reg, field.id) || "N/A"}
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                            ))}
                                             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{format(reg.timestamp.toDate(), "dd MMM yy")}</TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-1">
@@ -650,12 +1047,12 @@ export function PublicRegistration() {
 
             {/* Program Dialog */}
             <Dialog open={isProgramDialogOpen} onOpenChange={setIsProgramDialogOpen}>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent className="sm:max-w-[700px]">
                     <DialogHeader>
                         <DialogTitle>{editingProgramId ? "Edit Program" : "Create New Program"}</DialogTitle>
-                        <DialogDescription>Configure public registration metadata</DialogDescription>
+                        <DialogDescription>Configure public registration metadata and fields schema</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2 col-span-2">
                                 <Label>Program Name</Label>
@@ -693,6 +1090,10 @@ export function PublicRegistration() {
                             />
                             <Label htmlFor="is-active">Active and Visible for Registration</Label>
                         </div>
+                        
+                        <div className="mt-6 pt-6 border-t border-primary/10">
+                            {renderFieldsBuilder()}
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsProgramDialogOpen(false)}>Cancel</Button>
@@ -726,48 +1127,24 @@ export function PublicRegistration() {
                                         </span>
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
-                                        <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary">
-                                            <Phone className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">Phone Number</p>
-                                            <p className="text-sm font-semibold">{selectedReg.phone || selectedReg.applicantMobile}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
-                                        <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary">
-                                            <Mail className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">Email Address</p>
-                                            <p className="text-sm font-semibold">{selectedReg.email || "Not provided"}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
-                                        <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary">
-                                            <Briefcase className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">Current Status / Occupation</p>
-                                            <p className="text-sm font-semibold">{selectedReg.currentStatus || "N/A"}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
-                                        <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary">
-                                            <MapPin className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">Address / Location</p>
-                                            <p className="text-sm font-semibold">{selectedReg.address || selectedReg.applicantPlace || "N/A"}</p>
-                                        </div>
-                                    </div>
-
+                                <div className="grid grid-cols-1 gap-4 max-h-[50vh] overflow-y-auto pr-1">
+                                    {selectedRegFields
+                                        .filter(f => f.id !== 'name')
+                                        .map(field => {
+                                            const val = getFieldValue(selectedReg, field.id);
+                                            if (!val) return null;
+                                            return (
+                                                <div key={field.id} className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
+                                                    <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary">
+                                                        {getFieldIcon(field.id)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{field.name}</p>
+                                                        <p className="text-sm font-semibold">{val}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     {(selectedReg.applicantSchool || selectedReg.applicantClass) && (
                                         <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30 border-l-4 border-yellow-500">
                                             <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-yellow-600">
@@ -801,31 +1178,17 @@ export function PublicRegistration() {
                     <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-1">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2 col-span-2">
-                                <Label>Applicant Name</Label>
-                                <Input 
-                                    value={regForm.name || regForm.applicantName || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, name: e.target.value })} 
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Phone Number</Label>
-                                <Input 
-                                    value={regForm.phone || regForm.applicantMobile || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })} 
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Email</Label>
-                                <Input 
-                                    value={regForm.email || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, email: e.target.value })} 
-                                />
-                            </div>
-                            <div className="space-y-2 col-span-2">
                                 <Label>Program Selection</Label>
                                 <Select 
                                     value={regForm.programId} 
-                                    onValueChange={(val) => setRegForm({ ...regForm, programId: val })}
+                                    onValueChange={(val) => {
+                                        const selectedProg = programs.find(p => p.id === val);
+                                        setRegForm(prev => ({
+                                            ...prev,
+                                            programId: val,
+                                            programTitle: selectedProg?.name || prev.programTitle
+                                        }));
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select Program" />
@@ -837,35 +1200,55 @@ export function PublicRegistration() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-2">
-                                <Label>Qualification</Label>
-                                <Input 
-                                    value={regForm.qualification || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, qualification: e.target.value })} 
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Current Status / Occupation</Label>
-                                <Input 
-                                    value={regForm.currentStatus || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, currentStatus: e.target.value })} 
-                                />
-                            </div>
-                            <div className="space-y-2 col-span-2">
-                                <Label>Academic Background</Label>
-                                <Input 
-                                    value={regForm.academicBackground || regForm.applicantClass || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, academicBackground: e.target.value })} 
-                                />
-                            </div>
-                            <div className="space-y-2 col-span-2">
-                                <Label>Address</Label>
-                                <Textarea 
-                                    value={regForm.address || regForm.applicantPlace || ""} 
-                                    onChange={(e) => setRegForm({ ...regForm, address: e.target.value })} 
-                                    rows={3}
-                                />
-                            </div>
+
+                            {editingRegFields.map(field => {
+                                const value = handleGetFormValue(field.id);
+                                const isFullWidth = field.id === 'name' || field.id === 'address' || field.id === 'academicBackground' || field.type === 'select';
+                                
+                                return (
+                                    <div key={field.id} className={cn("space-y-2", isFullWidth ? "col-span-2" : "col-span-1")}>
+                                        <Label>{field.name} {field.isMandatory && <span className="text-destructive">*</span>}</Label>
+                                        {field.type === 'boolean' ? (
+                                            <div className="flex items-center space-x-2 h-10">
+                                                <Switch
+                                                    id={`edit-reg-${field.id}`}
+                                                    checked={!!value}
+                                                    onCheckedChange={(val) => handleSetFormValue(field.id, val)}
+                                                />
+                                                <Label htmlFor={`edit-reg-${field.id}`} className="font-normal text-sm cursor-pointer select-none">
+                                                    {value ? 'Yes' : 'No'}
+                                                </Label>
+                                            </div>
+                                        ) : field.type === 'select' ? (
+                                            <Select
+                                                value={value}
+                                                onValueChange={(val) => handleSetFormValue(field.id, val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={`Select ${field.name}`} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {field.options?.map(opt => (
+                                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        ) : field.id === 'address' ? (
+                                            <Textarea
+                                                value={value}
+                                                onChange={(e) => handleSetFormValue(field.id, e.target.value)}
+                                                rows={3}
+                                            />
+                                        ) : (
+                                            <Input
+                                                type={field.type === 'number' ? 'number' : 'text'}
+                                                value={value}
+                                                onChange={(e) => handleSetFormValue(field.id, field.type === 'number' ? Number(e.target.value) : e.target.value)}
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                     <DialogFooter>

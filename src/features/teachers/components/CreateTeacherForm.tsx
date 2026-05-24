@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 
 import { createTeacherSchema, CreateTeacherInput, Teacher } from "../types";
+import { getCurrentAcademicYear, getAcademicYears } from "@/lib/academic-years";
 import { TeacherService } from "../services/teacherService";
 import { getUsers, UserData } from "@/features/users/services/userService";
 import { uploadFile } from "@/lib/upload";
@@ -39,7 +40,7 @@ const ACADEMIC_CLASSES = [
   "Class 5", "Class 6", "Class 7", "Class 8",
   "Class 9", "Class 10", "Class 11", "Class 12",
 ];
-const ACADEMIC_YEARS = ["2024-2025", "2025-2026", "2026-2027"];
+const ACADEMIC_YEARS = getAcademicYears();
 
 interface School {
   id: string;
@@ -102,7 +103,7 @@ export function CreateTeacherForm({
           ? initialData.classes.length ? [initialData.classes[0]] : []
           : [String(initialData.classes)]
         : [],
-      academicYear: initialData?.academicYear || "",
+      academicYear: initialData?.academicYear || getCurrentAcademicYear(),
       dob: toIsoDate(initialData?.dob),
       qualification: initialData?.qualification || "",
       profilePicture: initialData?.profilePicture || "",
@@ -379,7 +380,7 @@ export function CreateTeacherForm({
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email *</FormLabel>
+                <FormLabel>Email</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="teacher@example.com"
