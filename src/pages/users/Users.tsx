@@ -13,6 +13,8 @@ import {
   Trash2,
   Church,
   Plus,
+  Users as UsersIcon,
+  ArrowLeft,
 } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "../../components/ui/button";
@@ -112,6 +114,8 @@ export function Users() {
     schoolId: "",
   }]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAllUsersMode, setShowAllUsersMode] = useState(false);
+  const [allUsersRoleFilter, setAllUsersRoleFilter] = useState<string>("all");
 
   // Foranes + Parishes from Firestore
   const [foranesData, setForanesData] = useState<ForaneData[]>([]);
@@ -286,6 +290,24 @@ export function Users() {
       return nameA.localeCompare(nameB);
     });
 
+  const schoolCount = users.filter((u) => u.role === "school").length;
+  const parishCount = users.filter((u) => u.role === "parish").length;
+
+  const allUsersFilteredList = users
+    .filter((user) => {
+      if (allUsersRoleFilter !== "all" && user.role !== allUsersRoleFilter) return false;
+      const name = user.schoolName || user.schoolname || user.fullName || "";
+      return (
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    })
+    .sort((a, b) => {
+      const nameA = (a.schoolName || a.schoolname || a.fullName || "").toLowerCase();
+      const nameB = (b.schoolName || b.schoolname || b.fullName || "").toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
   const downloadTemplate = () => {
     const headers = [
       "email",
@@ -405,15 +427,256 @@ export function Users() {
     );
   }
 
+  if (showAllUsersMode) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setSearchTerm("");
+                setShowAllUsersMode(false);
+              }}
+              className="h-10 w-10 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <h1 className="text-2xl font-bold text-foreground">All Registered Users</h1>
+          </div>
+          <div className="text-sm text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border">
+            Total Database Users:{" "}
+            <span className="font-semibold text-foreground">{users.length}</span>
+          </div>
+        </div>
+
+        {/* Filters and Search */}
+        <Card>
+          <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by email or name..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="w-full md:w-64">
+              <Select
+                value={allUsersRoleFilter}
+                onValueChange={(val) => setAllUsersRoleFilter(val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="school">Sunday School</SelectItem>
+                  <SelectItem value="parish">Parish</SelectItem>
+                  <SelectItem value="animator">Animator</SelectItem>
+                  <SelectItem value="admin">Administrator</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Count display */}
+        <div className="flex items-center gap-2 px-1 text-sm font-medium">
+          <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+          <span className="text-muted-foreground">Filtered Users:</span>
+          <span className="text-foreground font-semibold">
+            {allUsersFilteredList.length}
+          </span>
+        </div>
+
+        {/* Users List */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {allUsersFilteredList.map((user) => {
+            const lastActiveDate = user.lastActiveAt?.seconds ? new Date(user.lastActiveAt.seconds * 1000) : null;
+            const isOnline = lastActiveDate && (new Date().getTime() - lastActiveDate.getTime()) < 300000;
+
+            return (
+              <Card key={user.id} className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage
+                            src={user.profileImageUrl}
+                            alt={user.fullName || "User"}
+                            loading="lazy"
+                          />
+                          <AvatarFallback>
+                            {(user.fullName || user.email || "U")
+                              .charAt(0)
+                              .toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {isOnline && (
+                          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-zinc-950 rounded-full shadow-sm"></span>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-foreground">
+                          {user.schoolname ||
+                            user.schoolName ||
+                            user.fullName ||
+                            "Unnamed User"}
+                        </h3>
+                        <p className="text-sm text-muted-foreground truncate max-w-[150px]">
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link to={`/users/${user.id}`}>View Details</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-red-600 focus:text-red-600 cursor-pointer"
+                          onSelect={() => {
+                            setUserToDelete(user);
+                            setIsDeleteConfirmOpen(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete User
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-4">
+                    <Badge
+                      variant={user.role === "admin" ? "default" : "secondary"}
+                      className={`gap-1.5 ${user.role === "admin"
+                        ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
+                        : user.role === "animator"
+                        ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                        : user.role === "parish"
+                          ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400"
+                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                        }`}
+                    >
+                      {user.role === "admin" ? (
+                        <Shield className="w-3 h-3" />
+                      ) : user.role === "animator" ? (
+                        <Sparkles className="w-3 h-3" />
+                      ) : user.role === "parish" ? (
+                        <Church className="w-3 h-3" />
+                      ) : (
+                        <School className="w-3 h-3" />
+                      )}
+                      {user.role === "admin"
+                        ? "Administrator"
+                        : user.role === "animator"
+                          ? "Animator"
+                          : user.role === "parish"
+                            ? "Parish"
+                            : "Sunday School"}
+                    </Badge>
+                  </div>
+
+                  <div className="pt-4 border-t border-border flex items-center justify-end text-sm text-muted-foreground">
+                    <Link
+                      to={`/users/${user.id}`}
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      View Profile
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+          {allUsersFilteredList.length === 0 && (
+            <div className="col-span-full py-12 text-center text-muted-foreground bg-card rounded-xl border border-border">
+              No users found matching the filter or search criteria.
+            </div>
+          )}
+        </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" />
+                Confirm Deletion
+              </DialogTitle>
+              <DialogDescription className="pt-2">
+                Are you sure you want to delete the account for{" "}
+                <span className="font-semibold text-foreground">
+                  {userToDelete?.schoolname || userToDelete?.schoolName || userToDelete?.fullName || userToDelete?.email}
+                </span>
+                ?
+                <br />
+                <br />
+                <span className="text-red-500 font-medium italic text-xs">
+                  This will permanently delete the account from Firebase Authentication and all profile data from Firestore. This action cannot be undone.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                disabled={isAdminDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteUser}
+                disabled={isAdminDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isAdminDeleting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting...</>
+                ) : (
+                  "Delete Account"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-foreground">Sunday School / Parish Management</h1>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground mr-1">
             Total Users:{" "}
             <span className="font-medium text-foreground">{users.length}</span>
           </div>
+
+          <Button
+            variant="outline"
+            className="border-border hover:bg-muted text-foreground"
+            onClick={() => {
+              setSearchTerm("");
+              setShowAllUsersMode(true);
+            }}
+          >
+            <UsersIcon className="w-4 h-4 mr-2" />
+            All Users
+          </Button>
 
           {/* Create Individual User */}
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -954,6 +1217,21 @@ export function Users() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="flex items-center gap-2 px-1 text-sm font-medium">
+        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+        <span className="text-muted-foreground">
+          Total {activeTab === "school" ? "Sunday Schools" : "Parishes"}:
+        </span>
+        <span className="text-foreground font-semibold">
+          {activeTab === "school" ? schoolCount : parishCount}
+        </span>
+        {searchTerm && (
+          <span className="text-xs text-muted-foreground ml-2">
+            ({filteredUsers.length} matching search)
+          </span>
+        )}
+      </div>
 
       {/* Users List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

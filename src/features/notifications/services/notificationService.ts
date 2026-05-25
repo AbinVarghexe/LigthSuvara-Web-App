@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../config/firebase';
+import { compressImage } from '../../../lib/imageCompression';
 
 const BROADCASTS_COLLECTION = 'broadcasts';
 const NOTIFICATIONS_COLLECTION = 'notifications';
@@ -35,9 +36,14 @@ export interface NotificationData {
 }
 
 export const uploadMessageImage = async (file: File): Promise<string> => {
-    const fileName = `${Date.now()}_${file.name}`;
+    let fileToUpload: File | Blob = file;
+    if (file.type.startsWith("image/") && file.type !== "image/gif") {
+        fileToUpload = await compressImage(file);
+    }
+    const finalFileName = fileToUpload instanceof File ? fileToUpload.name : file.name;
+    const fileName = `${Date.now()}_${finalFileName}`;
     const storageRef = ref(storage, `message-images/${fileName}`);
-    await uploadBytes(storageRef, file);
+    await uploadBytes(storageRef, fileToUpload);
     return await getDownloadURL(storageRef);
 };
 

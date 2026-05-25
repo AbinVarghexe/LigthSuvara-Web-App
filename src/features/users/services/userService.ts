@@ -11,6 +11,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, storage, auth, functions } from '../../../config/firebase';
+import { compressImage } from '../../../lib/imageCompression';
 
 export interface UserData {
     id: string;
@@ -94,8 +95,13 @@ export const getParishes = async (): Promise<UserData[]> => {
 };
 
 export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {
-    const storageRef = ref(storage, `profile-images/${userId}/${file.name}`);
-    await uploadBytes(storageRef, file);
+    let fileToUpload: File | Blob = file;
+    if (file.type.startsWith("image/") && file.type !== "image/gif") {
+        fileToUpload = await compressImage(file);
+    }
+    const finalFileName = fileToUpload instanceof File ? fileToUpload.name : file.name;
+    const storageRef = ref(storage, `profile-images/${userId}/${finalFileName}`);
+    await uploadBytes(storageRef, fileToUpload);
     return await getDownloadURL(storageRef);
 };
 
