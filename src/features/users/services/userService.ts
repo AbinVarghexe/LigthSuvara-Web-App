@@ -30,6 +30,8 @@ export interface UserData {
     forane?: string;
     parish?: string;
     schoolId?: string;
+    parishCode?: string;
+    code?: string;
     lastActiveAt?: any; // Firestore Timestamp
 }
 
@@ -126,6 +128,50 @@ export interface BulkCreateResponse {
 }
 
 export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkCreateResponse> => {
+    // Check if any email is already in use in Firestore users collection
+    const emails = users.map(u => u.email).filter(Boolean) as string[];
+    if (emails.length > 0) {
+        try {
+            const usersRef = collection(db, 'users');
+            const duplicateEmails: string[] = [];
+
+            // Query in chunks of 30 due to Firestore 'in' operator limitations
+            const chunkSize = 30;
+            for (let i = 0; i < emails.length; i += chunkSize) {
+                const chunk = emails.slice(i, i + chunkSize);
+                const q = query(usersRef, where('email', 'in', chunk));
+                const snap = await getDocs(q);
+                snap.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.email) {
+                        duplicateEmails.push(data.email.toLowerCase().trim());
+                    }
+                });
+            }
+
+            if (duplicateEmails.length > 0) {
+                return {
+                    success: false,
+                    created: 0,
+                    failed: users.length,
+                    errors: users.map(u => {
+                        const emailNorm = (u.email || '').toLowerCase().trim();
+                        const isDup = duplicateEmails.includes(emailNorm);
+                        return {
+                            email: u.email || 'unknown',
+                            error: isDup 
+                                ? 'Email is already in use by another user'
+                                : 'Creation failed due to duplicate email in batch'
+                        };
+                    })
+                };
+            }
+        } catch (err: any) {
+            console.error('Error checking for duplicate emails:', err);
+            throw new Error(err.message || 'Failed to validate existing users');
+        }
+    }
+
     // Call the Cloud Function to securely create users with Firebase Auth
     const bulkCreateUsersFunction = httpsCallable<{ users: Partial<UserData>[] }, BulkCreateResponse>(
         functions,
@@ -140,3 +186,4 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
         throw new Error(error.message || 'Failed to create users');
     }
 };
+

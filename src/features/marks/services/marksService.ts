@@ -5,7 +5,6 @@ import {
     doc,
     query,
     where,
-    orderBy,
     Timestamp,
     updateDoc
 } from 'firebase/firestore';
@@ -129,11 +128,10 @@ export const getMarks = async (year?: string): Promise<MarksData[]> => {
     if (year) {
         q = query(
             collection(db, 'marks'),
-            where('year', '==', year),
-            orderBy('submittedAt', 'desc')
+            where('year', '==', year)
         );
     } else {
-        q = query(collection(db, 'marks'), orderBy('submittedAt', 'desc'));
+        q = query(collection(db, 'marks'));
     }
     const snapshot = await getDocs(q);
     const rawMarks = snapshot.docs.map(doc => {
@@ -144,6 +142,14 @@ export const getMarks = async (year?: string): Promise<MarksData[]> => {
             schoolId: data.schoolUserId || data.schoolId || ''
         } as MarksData;
     });
+
+    // Sort client-side by submittedAt desc
+    rawMarks.sort((a, b) => {
+        const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : 0;
+        const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : 0;
+        return dateB - dateA;
+    });
+
     return await enrichMarksData(rawMarks);
 };
 
@@ -151,8 +157,7 @@ export const getMarks = async (year?: string): Promise<MarksData[]> => {
 export const getMarksByAnimator = async (animatorId: string): Promise<MarksData[]> => {
     const q = query(
         collection(db, 'marks'),
-        where('animatorId', '==', animatorId),
-        orderBy('submittedAt', 'desc')
+        where('animatorId', '==', animatorId)
     );
     const snapshot = await getDocs(q);
     const rawMarks = snapshot.docs.map(doc => {
@@ -163,6 +168,14 @@ export const getMarksByAnimator = async (animatorId: string): Promise<MarksData[
             schoolId: data.schoolUserId || data.schoolId || ''
         } as MarksData;
     });
+
+    // Sort client-side by submittedAt desc
+    rawMarks.sort((a, b) => {
+        const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : 0;
+        const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : 0;
+        return dateB - dateA;
+    });
+
     return await enrichMarksData(rawMarks);
 };
 
@@ -170,8 +183,7 @@ export const getMarksByAnimator = async (animatorId: string): Promise<MarksData[
 export const getMarksBySchool = async (schoolId: string): Promise<MarksData[]> => {
     const q = query(
         collection(db, 'marks'),
-        where('schoolId', '==', schoolId),
-        orderBy('submittedAt', 'desc')
+        where('schoolId', '==', schoolId)
     );
     const snapshot = await getDocs(q);
     const rawMarks = snapshot.docs.map(doc => {
@@ -182,6 +194,14 @@ export const getMarksBySchool = async (schoolId: string): Promise<MarksData[]> =
             schoolId: data.schoolUserId || data.schoolId || ''
         } as MarksData;
     });
+
+    // Sort client-side by submittedAt desc
+    rawMarks.sort((a, b) => {
+        const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : 0;
+        const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : 0;
+        return dateB - dateA;
+    });
+
     return await enrichMarksData(rawMarks);
 };
 

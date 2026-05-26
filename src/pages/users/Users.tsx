@@ -68,15 +68,18 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
+import { ParishService } from "../../features/parishes/services/parishService";
 
 interface NewUser extends Partial<UserData> {
   password?: string;
+  parishCode?: string;
 }
 
 interface ForaneParish {
   id: string;
   name: string;
-  saint?: string;
+  place?: string;
+  code?: string;
 }
 
 interface ForaneData {
@@ -120,6 +123,49 @@ export function Users() {
   // Foranes + Parishes from Firestore
   const [foranesData, setForanesData] = useState<ForaneData[]>([]);
   const [parishesPerForane, setParishesPerForane] = useState<Record<string, ForaneParish[]>>({});
+
+  const formatSchoolName = (churchName: string, placeName: string): string => {
+    const cleanChurch = (churchName || "")
+      .replace(/\./g, "")
+      .replace(/'s/gi, "")
+      .trim();
+    const cleanPlace = (placeName || "").trim().replace(/\s+/g, " ");
+    return `${cleanChurch} ${cleanPlace}`.trim();
+  };
+
+  const handleCodeChange = async (val: string, index: number) => {
+    const updated = [...newUsers];
+    updated[index] = { ...updated[index], parishCode: val };
+    setNewUsers(updated);
+
+    if (val.trim().length >= 2) {
+      try {
+        const foundParish = await ParishService.getParishByCode(val.trim());
+        if (foundParish && foundParish.foraneId) {
+          const foraneDoc = foranesData.find(f => f.id === foundParish.foraneId);
+          if (foraneDoc) {
+            // Fetch parishes list for this forane to populate the dropdown
+            await fetchParishesForForane(foraneDoc.id);
+
+            const schoolNameCombined = formatSchoolName(foundParish.name, foundParish.place || "");
+            const updatedWithAutofill = [...newUsers];
+            updatedWithAutofill[index] = {
+              ...updatedWithAutofill[index],
+              forane: foraneDoc.name,
+              parish: foundParish.place || foundParish.name,
+              parishCode: val.trim(),
+              schoolname: schoolNameCombined,
+              schoolName: schoolNameCombined,
+            };
+            setNewUsers(updatedWithAutofill);
+            toast.success(`Autofilled: ${foundParish.name} (${foraneDoc.name})`);
+          }
+        }
+      } catch (e) {
+        console.error("Lookup failed:", e);
+      }
+    }
+  };
   const [loadingParishes, setLoadingParishes] = useState<Record<string, boolean>>({});
 
   const fetchForanes = useCallback(async () => {
@@ -146,7 +192,8 @@ export function Users() {
       const parishes: ForaneParish[] = snap.docs.map(d => ({
         id: d.id,
         name: d.data().name as string,
-        saint: d.data().saint as string | undefined,
+        place: d.data().place as string | undefined,
+        code: d.data().code as string | undefined,
       }));
       setParishesPerForane(prev => ({ ...prev, [foraneId]: parishes }));
     } catch (e) {
@@ -821,49 +868,62 @@ export function Users() {
                         );
                         const isLoadingP = loadingParishes[foraneId] ?? false;
                         return (
-                          <div className="space-y-2">
-                            <Label htmlFor={`parish-select-${index}`}>Parish *</Label>
-                            <Select
-                              value={user.parish || ""}
-                              disabled={!user.forane}
-                              onValueChange={(val) => {
-                                const selectedParish = availableParishes.find(p => p.name === val);
-                                const saint = selectedParish?.saint || "";
-                                const schoolNameCombined = getAutofilledName(saint, val);
-                                const updated = [...newUsers];
-                                updated[index] = {
-                                  ...user,
-                                  parish: val,
-                                  schoolname: schoolNameCombined,
-                                  schoolName: schoolNameCombined,
-                                };
-                                setNewUsers(updated);
-                              }}
-                            >
-                              <SelectTrigger id={`parish-select-${index}`}>
-                                {isLoadingP
-                                  ? <span className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</span>
-                                  : <SelectValue placeholder={user.forane ? "Select parish" : "Select a forane first"} />}
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableParishes.length === 0 && !isLoadingP && (
-                                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                                    {user.forane ? "No parishes found" : "Select a forane first"}
-                                  </div>
-                                )}
-                                {availableParishes.map((p) => {
-                                  const alreadyUsed = usedParishNames.has(p.name.toLowerCase().trim());
-                                  return (
-                                    <SelectItem key={p.id} value={p.name} disabled={alreadyUsed}>
-                                      <span className={alreadyUsed ? "text-muted-foreground line-through" : ""}>
-                                        {toTitleCase(p.name)}{p.saint ? ` — ${toTitleCase(p.saint)}` : ""}
-                                      </span>
-                                      {alreadyUsed && <span className="ml-2 text-xs text-muted-foreground">(already registered)</span>}
-                                    </SelectItem>
-                                  );
-                                })}
-                              </SelectContent>
-                            </Select>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor={`parish-code-${index}`}>Parish Code (Quick Lookup)</Label>
+                              <Input
+                                id={`parish-code-${index}`}
+                                type="text"
+                                placeholder="e.g. 131"
+                                value={user.parishCode || ""}
+                                onChange={(e) => handleCodeChange(e.target.value, index)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`parish-select-${index}`}>Parish *</Label>
+                              <Select
+                                value={availableParishes.find(p => p.place === user.parish || p.name === user.parish)?.name || ""}
+                                disabled={!user.forane}
+                                onValueChange={(val) => {
+                                  const selectedParish = availableParishes.find(p => p.name === val);
+                                  const code = selectedParish?.code || "";
+                                  const schoolNameCombined = selectedParish ? formatSchoolName(selectedParish.name, selectedParish.place || "") : "";
+                                  const updated = [...newUsers];
+                                  updated[index] = {
+                                    ...user,
+                                    parish: selectedParish?.place || val,
+                                    parishCode: code,
+                                    schoolname: schoolNameCombined,
+                                    schoolName: schoolNameCombined,
+                                  };
+                                  setNewUsers(updated);
+                                }}
+                              >
+                                <SelectTrigger id={`parish-select-${index}`}>
+                                  {isLoadingP
+                                    ? <span className="text-muted-foreground text-sm flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</span>
+                                    : <SelectValue placeholder={user.forane ? "Select parish" : "Select a forane first"} />}
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableParishes.length === 0 && !isLoadingP && (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                                      {user.forane ? "No parishes found" : "Select a forane first"}
+                                    </div>
+                                  )}
+                                  {availableParishes.map((p) => {
+                                    const alreadyUsed = usedParishNames.has(p.name.toLowerCase().trim());
+                                    return (
+                                      <SelectItem key={p.id} value={p.name} disabled={alreadyUsed}>
+                                        <span className={alreadyUsed ? "text-muted-foreground line-through" : ""}>
+                                          {toTitleCase(p.name)}{p.place ? ` — ${toTitleCase(p.place)}` : ""}
+                                        </span>
+                                        {alreadyUsed && <span className="ml-2 text-xs text-muted-foreground">(already registered)</span>}
+                                      </SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         );
                       })()
@@ -973,19 +1033,47 @@ export function Users() {
                               <Label htmlFor={`schoolSelect-${index}`}>School *</Label>
                               <Select
                                 value={user.schoolId || ""}
-                                onValueChange={(val) => {
+                                onValueChange={async (val) => {
                                   const selectedSchool = users.find(u => u.id === val || u.uid === val);
                                   const schoolName = selectedSchool?.schoolname || selectedSchool?.schoolName || "";
-                                  const parish = selectedSchool?.parish || "";
-                                  const autofilledName = getAutofilledName(schoolName, parish);
+                                  const parishPlace = selectedSchool?.parish || "";
+                                  const schoolForane = selectedSchool?.forane || user.forane || "";
+                                  
+                                  let parishCode = "";
+                                  let saintName = "";
+                                  
+                                  const foraneDoc = foranesData.find(f => f.name === schoolForane);
+                                  if (foraneDoc) {
+                                    const parishesRef = collection(db, 'foranes', foraneDoc.id, 'parishes');
+                                    const snap = await getDocs(parishesRef);
+                                    const matchedParish = snap.docs.find(d => 
+                                      (d.data().place || "").toLowerCase().trim() === parishPlace.toLowerCase().trim() ||
+                                      (d.data().name || "").toLowerCase().trim() === parishPlace.toLowerCase().trim()
+                                    );
+                                    if (matchedParish) {
+                                      parishCode = matchedParish.data().code || "";
+                                      saintName = matchedParish.data().name || "";
+                                    }
+                                  }
+
+                                  let formattedParishName = "";
+                                  if (saintName && parishPlace) {
+                                    const cleanSaint = saintName.replace(/\./g, "").trim();
+                                    formattedParishName = `${cleanSaint} Church ${toTitleCase(parishPlace)}`;
+                                  } else {
+                                    formattedParishName = getAutofilledName(schoolName, parishPlace);
+                                  }
+
                                   const updated = [...newUsers];
                                   updated[index] = {
                                     ...user,
                                     schoolId: val,
-                                    schoolName: selectedSchool?.schoolname || selectedSchool?.schoolName || "",
-                                    forane: selectedSchool?.forane || user.forane || "",
-                                    parish: selectedSchool?.parish || "",
-                                    name: autofilledName,
+                                    schoolName: schoolName,
+                                    forane: schoolForane,
+                                    parish: parishPlace,
+                                    parishCode: parishCode,
+                                    code: parishCode,
+                                    name: formattedParishName,
                                   };
                                   setNewUsers(updated);
                                 }}
@@ -1010,14 +1098,30 @@ export function Users() {
                               </Select>
                             </div>
                           </div>
-                          {user.parish && (
-                            <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
-                              <Church className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
-                              <span className="text-xs text-green-700 dark:text-green-300">
-                                Parish auto-filled: <strong>{toTitleCase(user.parish)}</strong>
-                              </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <div className="space-y-2">
+                              <Label htmlFor={`parish-code-display-${index}`}>Parish Code</Label>
+                              <Input
+                                id={`parish-code-display-${index}`}
+                                type="text"
+                                placeholder="Autofetched"
+                                value={user.parishCode || ""}
+                                readOnly
+                                disabled
+                                className="bg-muted text-muted-foreground border-border cursor-not-allowed"
+                              />
                             </div>
-                          )}
+                            {user.parish && (
+                              <div className="flex items-end pb-0.5">
+                                <div className="flex items-center gap-2 px-2 py-2 rounded bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 w-full h-[40px]">
+                                  <Church className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">
+                                    Parish: <strong>{toTitleCase(user.parish)}</strong>
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         <div className="space-y-2">

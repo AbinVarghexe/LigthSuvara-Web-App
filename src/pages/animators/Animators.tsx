@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -67,10 +67,12 @@ import {
   AnimatorWithUser,
   AnimatorAssignment,
   updateAnimator,
+  getAcademicYear,
+  formatAcademicYear,
 } from "../../features/animators/services/animatorService";
 import { Marks } from "../marks/Marks";
 import { Questions } from "../questions/Questions";
-import { getParishes, UserData } from "../../features/users/services/userService";
+import { UserData, getUsers } from "../../features/users/services/userService";
 import {
   Tabs,
   TabsContent,
@@ -89,7 +91,7 @@ interface SchoolData {
 export function AnimatorsList() {
   const [animators, setAnimators] = useState<AnimatorWithUser[]>([]);
   const [unassignedSchools, setUnassignedSchools] = useState<SchoolData[]>([]);
-  const [parishes, setParishes] = useState<UserData[]>([]);
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -103,6 +105,18 @@ export function AnimatorsList() {
     unassigned: 0,
     fullyAssigned: 0,
   });
+
+  const [selectedYear, setSelectedYear] = useState(getAcademicYear());
+  const [allAnimatorsLoaded, setAllAnimatorsLoaded] = useState<string[]>([]);
+
+  // Build year list from actual assignment data (fallback to current year)
+  const years = useMemo(() => {
+    const yearsSet = new Set<string>();
+    allAnimatorsLoaded.forEach(y => yearsSet.add(y));
+    // Always include current year
+    yearsSet.add(getAcademicYear());
+    return Array.from(yearsSet).sort((a, b) => parseInt(b) - parseInt(a));
+  }, [allAnimatorsLoaded]);
 
   // Form state for creating animator
   const [formData, setFormData] = useState({
@@ -130,16 +144,22 @@ export function AnimatorsList() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [animatorsData, schoolsData, statsData, parishesData] = await Promise.all([
+      const [animatorsData, schoolsData, statsData, usersData] = await Promise.all([
         getAnimators(),
-        getUnassignedSchools(),
-        getAnimatorStats(),
-        getParishes(),
+        getUnassignedSchools(selectedYear),
+        getAnimatorStats(selectedYear),
+        getUsers(),
       ]);
       setAnimators(animatorsData);
       setUnassignedSchools(schoolsData as SchoolData[]);
       setStats(statsData);
-      setParishes(parishesData);
+      setAllUsers(usersData);
+      // Collect all unique years from assignment data
+      const yearsFromData = new Set<string>();
+      animatorsData.forEach(a => a.assignments.forEach(asg => {
+        if (asg.year) yearsFromData.add(asg.year);
+      }));
+      setAllAnimatorsLoaded(Array.from(yearsFromData));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load animators");
@@ -150,10 +170,10 @@ export function AnimatorsList() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedYear]);
 
   const handleCreateAnimator = async () => {
-    if (!formData.email || !formData.password || !formData.name) {
+    if (!formData.email || !formData.password || !formData.name || !formData.parishId) {
       toast.error("Please fill all required fields");
       return;
     }
@@ -249,12 +269,12 @@ export function AnimatorsList() {
     }
 
     const assignment: AnimatorAssignment = {
-      unitId: `${selectedAnimator.id}_${school.id}_${new Date().getFullYear()}`,
+      unitId: `${selectedAnimator.id}_${school.id}_${selectedYear}`,
       schoolUserId: school.id,
       schoolname: school.schoolname || school.schoolName || "",
       parish: school.parish || "",
       forane: school.forane || "",
-      year: new Date().getFullYear().toString(),
+      year: selectedYear,
     };
 
     try {
@@ -320,14 +340,27 @@ export function AnimatorsList() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Animator Management
         </h1>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) {
+            setFormData({
+              email: "",
+              password: "",
+              name: "",
+              phoneNumber: "",
+              address: "",
+              parishId: "",
+              parishName: "",
+            });
+          }
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-blue-600 hover:bg-blue-700">
               <Plus className="w-4 h-4 mr-2" />
               Create Animator
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Animator</DialogTitle>
               <DialogDescription>
@@ -344,6 +377,7 @@ export function AnimatorsList() {
                     setFormData({ ...formData, name: e.target.value })
                   }
                   placeholder="Enter name"
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-2">
@@ -356,6 +390,7 @@ export function AnimatorsList() {
                     setFormData({ ...formData, email: e.target.value })
                   }
                   placeholder="Enter email address"
+                  autoComplete="new-password"
                 />
               </div>
               <div className="space-y-2">
@@ -368,6 +403,7 @@ export function AnimatorsList() {
                     setFormData({ ...formData, password: e.target.value })
                   }
                   placeholder="Enter password (min 6 characters)"
+                  autoComplete="new-password"
                 />
               </div>
               <div className="space-y-2">
@@ -379,6 +415,7 @@ export function AnimatorsList() {
                     setFormData({ ...formData, phoneNumber: e.target.value })
                   }
                   placeholder="Enter phone number"
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-2">
@@ -390,30 +427,34 @@ export function AnimatorsList() {
                     setFormData({ ...formData, address: e.target.value })
                   }
                   placeholder="Enter address"
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="parish">Parish *</Label>
+                <Label htmlFor="school">School *</Label>
                 <Select
                   value={formData.parishId}
                   onValueChange={(value) => {
-                    const selectedParish = parishes.find((p) => p.id === value);
+                    const schools = allUsers.filter((u) => u.role === "school");
+                    const selectedSchool = schools.find((s) => s.id === value);
                     setFormData({
                       ...formData,
                       parishId: value,
-                      parishName: selectedParish ? (selectedParish.name || selectedParish.fullName || "") : "",
+                      parishName: selectedSchool ? (selectedSchool.schoolname || selectedSchool.schoolName || selectedSchool.fullName || selectedSchool.name || "") : "",
                     });
                   }}
                 >
-                  <SelectTrigger id="parish">
-                    <SelectValue placeholder="Select parish" />
+                  <SelectTrigger id="school">
+                    <SelectValue placeholder="Select school" />
                   </SelectTrigger>
                   <SelectContent>
-                    {parishes.map((parish) => (
-                      <SelectItem key={parish.id} value={parish.id}>
-                        {parish.name || parish.fullName || parish.email}
-                      </SelectItem>
-                    ))}
+                    {allUsers
+                      .filter((u) => u.role === "school")
+                      .map((school) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.schoolname || school.schoolName || school.name || school.fullName || school.email}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -425,7 +466,9 @@ export function AnimatorsList() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleCreateAnimator}>Create Animator</Button>
+              <Button onClick={handleCreateAnimator}>
+                Create Animator
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -465,18 +508,34 @@ export function AnimatorsList() {
         </Card>
       </div>
 
-      {/* Search */}
       <Card>
         <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search animators by name or email..."
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search animators by name or email..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-[240px]">
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Years</SelectItem>
+                  {years.map((yr) => (
+                    <SelectItem key={yr} value={yr}>
+                      Academic Year {formatAcademicYear(yr)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -491,131 +550,141 @@ export function AnimatorsList() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredAnimators.map((animator) => (
-            <Card key={animator.id} className="overflow-hidden">
-              <CardHeader className="pb-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={animator.profileImageUrl} />
-                      <AvatarFallback>
-                        {animator.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <CardTitle className="text-lg">
-                        {animator.name}
-                      </CardTitle>
-                      <p className="text-sm text-gray-500">{animator.email}</p>
-                      {(animator.parishName || animator.parish) && (
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-0.5">
-                          {animator.parishName || animator.parish}
-                        </p>
-                      )}
+          {filteredAnimators.map((animator) => {
+            const assignmentsForYear = selectedYear === "All"
+              ? animator.assignments
+              : animator.assignments.filter((a) => a.year === selectedYear);
+            return (
+              <Card key={animator.id} className="overflow-hidden">
+                <CardHeader className="pb-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={animator.profileImageUrl} />
+                        <AvatarFallback>
+                          {animator.name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle className="text-lg">
+                          {animator.name}
+                        </CardTitle>
+                        <p className="text-sm text-gray-500">{animator.email}</p>
+                        {(animator.parishName || animator.parish) && (
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-0.5">
+                            {animator.parishName || animator.parish}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <Badge
-                    variant={
-                      animator.assignments.length === 7
-                        ? "default"
-                        : animator.assignments.length === 0
+                    <Badge
+                      variant={
+                        assignmentsForYear.length === 0
                           ? "secondary"
                           : "outline"
-                    }
-                  >
-                    {animator.assignments.length}/7
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium mb-2">Assignments:</p>
-                  {animator.assignments.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">
-                      No schools assigned
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {animator.assignments.map((assignment, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                        >
-                          <div className="flex items-center gap-2">
-                            <School className="h-4 w-4 text-gray-400" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium truncate">
-                                {assignment.schoolname}
-                              </p>
-                              <p className="text-xs text-gray-500 truncate">
-                                {assignment.parish}
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() =>
-                              handleRemoveAssignment(animator.id, assignment)
-                            }
+                      }
+                    >
+                      {selectedYear === "All" ? assignmentsForYear.length : `${assignmentsForYear.length}/7`}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium mb-2">Assignments:</p>
+                    {assignmentsForYear.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic">
+                        No schools assigned{selectedYear !== "All" ? ` for ${formatAcademicYear(selectedYear)}` : ""}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {assignmentsForYear.map((assignment, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg"
                           >
-                            <X className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  {animator.assignments.length < 7 && (
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <School className="h-4 w-4 text-gray-400 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">
+                                  {assignment.schoolname}
+                                </p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="text-xs text-gray-500 truncate">
+                                    {assignment.parish}
+                                  </p>
+                                  {assignment.year && (
+                                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                      {formatAcademicYear(assignment.year)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() =>
+                                handleRemoveAssignment(animator.id, assignment)
+                              }
+                            >
+                              <X className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {(selectedYear !== "All" && assignmentsForYear.length < 7) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => openAssignDialog(animator)}
+                      >
+                        <UserPlus className="h-4 w-4 mr-1" />
+                        Assign School
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => openAssignDialog(animator)}
+                      size="icon"
+                      className="h-9 w-9 border-gray-200"
+                      onClick={() => openEditDialog(animator)}
                     >
-                      <UserPlus className="h-4 w-4 mr-1" />
-                      Assign School
+                      <Edit2 className="h-4 w-4 text-blue-500" />
                     </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 border-gray-200"
-                    onClick={() => openEditDialog(animator)}
-                  >
-                    <Edit2 className="h-4 w-4 text-blue-500" />
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9">
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Animator</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete {animator.name}?
-                          This will also remove all their assignments.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteAnimator(animator.id)}
-                          className="bg-red-600 hover:bg-red-700"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Animator</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {animator.name}?
+                            This will also remove all their assignments.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDeleteAnimator(animator.id)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -742,27 +811,30 @@ export function AnimatorsList() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-parish">Parish *</Label>
+              <Label htmlFor="edit-school">School *</Label>
               <Select
                 value={editFormData.parishId}
                 onValueChange={(value) => {
-                  const selectedParish = parishes.find((p) => p.id === value);
+                  const schools = allUsers.filter((u) => u.role === "school");
+                  const selectedSchool = schools.find((s) => s.id === value);
                   setEditFormData({
                     ...editFormData,
                     parishId: value,
-                    parishName: selectedParish ? (selectedParish.name || selectedParish.fullName || "") : "",
+                    parishName: selectedSchool ? (selectedSchool.schoolname || selectedSchool.schoolName || selectedSchool.fullName || selectedSchool.name || "") : "",
                   });
                 }}
               >
-                <SelectTrigger id="edit-parish">
-                  <SelectValue placeholder="Select parish" />
+                <SelectTrigger id="edit-school">
+                  <SelectValue placeholder="Select school" />
                 </SelectTrigger>
                 <SelectContent>
-                  {parishes.map((parish) => (
-                    <SelectItem key={parish.id} value={parish.id}>
-                      {parish.name || parish.fullName || parish.email}
-                    </SelectItem>
-                  ))}
+                  {allUsers
+                    .filter((u) => u.role === "school")
+                    .map((school) => (
+                      <SelectItem key={school.id} value={school.id}>
+                        {school.schoolname || school.schoolName || school.name || school.fullName || school.email}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

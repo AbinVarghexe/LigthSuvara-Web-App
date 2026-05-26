@@ -99,6 +99,22 @@ export const bulkCreateUsers = onCall(
           continue;
         }
 
+        // Check if user with this email already exists in Firestore users collection
+        const existingDocs = await admin.firestore()
+          .collection("users")
+          .where("email", "==", userData.email)
+          .limit(1)
+          .get();
+
+        if (!existingDocs.empty) {
+          results.failed++;
+          results.errors.push({
+            email: userData.email,
+            error: "Email is already in use by another user",
+          });
+          continue;
+        }
+
         // Validate password strength
         if (userData.password.length < 6) {
           results.failed++;

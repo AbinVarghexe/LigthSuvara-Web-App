@@ -6,10 +6,11 @@ interface AnimatorPdfTemplateProps {
     parishes: any[];
     foraneFilter: string;
     parishFilter: string;
+    yearFilter?: string;
 }
 
 export const AnimatorPdfTemplate = ({
-    animators, parishes, foraneFilter, parishFilter
+    animators, parishes, foraneFilter, parishFilter, yearFilter = "All Years"
 }: AnimatorPdfTemplateProps) => {
     const todayDate = new Date().toISOString().split('T')[0];
 
@@ -59,6 +60,7 @@ export const AnimatorPdfTemplate = ({
                     <div style={{ fontSize: '18px', color: '#64748b', fontWeight: 500, paddingLeft: '12px', borderLeft: '3px solid #cbd5e1', marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
                         <span><strong style={{ color: '#334155' }}>Forane:</strong> {foraneFilter || 'All'}</span>
                         <span><strong style={{ color: '#334155' }}>Parish:</strong> {parishFilter || 'All'}</span>
+                        <span><strong style={{ color: '#334155' }}>Year:</strong> {yearFilter}</span>
                         <span><strong style={{ color: '#334155' }}>Date:</strong> {todayDate}</span>
                     </div>
                 </div>
@@ -115,8 +117,13 @@ export const AnimatorPdfTemplate = ({
                                                             {a.assignments && a.assignments.length > 0 ? (
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                                     {a.assignments.map((asgn, idx) => (
-                                                                        <div key={idx} style={{ fontSize: '12px' }}>
-                                                                            • {asgn.schoolname} ({asgn.forane})
+                                                                        <div key={idx} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                            <span>• {asgn.schoolname} ({asgn.parish})</span>
+                                                                            {asgn.year && (
+                                                                                <span style={{ fontSize: '10px', backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px', fontWeight: 700, whiteSpace: 'nowrap', border: '1px solid #bfdbfe' }}>
+                                                                                    {asgn.year}-{String((parseInt(asgn.year) + 1) % 100).padStart(2, '0')}
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                     ))}
                                                                 </div>

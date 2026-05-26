@@ -27,6 +27,7 @@ import { ThemePrograms } from "../pages/theme/ThemePrograms";
 import { Logs } from "../pages/logs/Logs";
 import { PublicRegistration } from "../pages/public-registration/PublicRegistration";
 import { AppControl } from "../pages/app-control/AppControl";
+import { VideoResources } from "../pages/video-resources/VideoResources";
 
 export const router = createBrowserRouter([
   {
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
           { path: "public-registration", Component: PublicRegistration },
           { path: "app-control", Component: AppControl },
           { path: "logs", Component: Logs },
+          { path: "video-resources", Component: VideoResources },
         ],
       },
     ],

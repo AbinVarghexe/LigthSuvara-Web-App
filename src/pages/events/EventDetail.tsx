@@ -44,6 +44,7 @@ export function EventDetail() {
   const navigate = useNavigate();
   const { isAdminUser, currentUser } = useAuth();
   const [event, setEvent] = useState<EventData | null>(null);
+  const [createdBy, setCreatedBy] = useState<string>("");
   const [lastEditedBy, setLastEditedBy] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -58,6 +59,24 @@ export function EventDetail() {
         const eventData = (await getEvent(id)) as EventData;
         setEvent(eventData);
 
+        // Fetch Creator Details
+        if (eventData.creatorId) {
+          try {
+            const user = await getUser(eventData.creatorId);
+            const creatorName =
+              user?.schoolName ||
+              user?.schoolname ||
+              user?.fullName ||
+              "Unknown";
+            setCreatedBy(creatorName);
+          } catch {
+            setCreatedBy("Unknown");
+          }
+        } else {
+          setCreatedBy("Unknown");
+        }
+
+        // Fetch Last Edited Details
         if (eventData.creatorId || eventData.lastEditedByName) {
           try {
             const user = eventData.creatorId ? await getUser(eventData.creatorId) : null;
@@ -302,6 +321,12 @@ export function EventDetail() {
               icon={<MapPin className="w-4 h-4 text-purple-600" />}
               label="Location"
               value={event.place || "N/A"}
+            />
+            <DetailRow
+              color="blue"
+              icon={<User className="w-4 h-4 text-blue-600" />}
+              label="Created By"
+              value={createdBy || "N/A"}
             />
             <DetailRow
               color="orange"

@@ -47,7 +47,7 @@ import { PremiumSundaySchoolPdfService } from "../../features/reports/services/s
 import { PremiumTeacherClassPdfService } from "../../features/reports/services/teacherClassPdfService";
 import { PremiumAnimatorObserverPdfService } from "../../features/reports/services/animatorObserverPdfServices";
 import { UserData, getUsers } from "../../features/users/services/userService";
-import { getAnimators, AnimatorWithUser } from "../../features/animators/services/animatorService";
+import { getAnimators, AnimatorWithUser, formatAcademicYear, getAcademicYear } from "../../features/animators/services/animatorService";
 import {
   getPrograms,
   getProgramRegistrations,
@@ -384,6 +384,15 @@ export function Reports() {
     [teachers],
   );
 
+  // Animator-specific academic years: derived from actual assignment data in DB
+  const animatorAcademicYears = useMemo(() => {
+    // We build this lazily from the users state; a full load happens on report generation.
+    // But we also want the current year always present.
+    const baseYear = getAcademicYear();
+    const prev = (parseInt(baseYear) - 1).toString();
+    return Array.from(new Set([prev, baseYear])).sort((a, b) => parseInt(b) - parseInt(a));
+  }, []);
+
   const getEventDate = (event: EventData) =>
     event.date
       ? new Date(
@@ -394,7 +403,11 @@ export function Reports() {
       : new Date();
 
   const filteredEvents = events.filter((event) => {
-    if (evtForane !== "All" && event.creatorForane !== evtForane) return false;
+    if (evtForane !== "All") {
+      const resolvedForane = event.creatorForane ||
+        users.find((u) => u.uid === event.creatorId || u.id === event.creatorId)?.forane;
+      if (resolvedForane !== evtForane) return false;
+    }
     if (evtSchool !== "All") {
       const creator = users.find(
         (u) => u.uid === event.creatorId || u.id === event.creatorId,
@@ -791,15 +804,31 @@ export function Reports() {
           (selectedParish && a.parishName &&
             a.parishName.trim().toLowerCase() === selectedParish.name.trim().toLowerCase());
 
-        return matchForane && matchParish;
+        // Filter by year: only include animators who have assignments in the selected year
+        const matchYear = amYear === "All" || a.assignments.some(asg => asg.year === amYear);
+
+        return matchForane && matchParish && matchYear;
       });
 
-      if (filteredAnimators.length === 0) {
+      // For each animator, filter their assignments to the selected year (for the PDF)
+      const animatorsForPdf: AnimatorWithUser[] = filteredAnimators.map(a => ({
+        ...a,
+        assignments: amYear === "All" ? a.assignments : a.assignments.filter(asg => asg.year === amYear)
+      }));
+
+      if (animatorsForPdf.length === 0) {
         toast.warning("No animators found.");
         return;
       }
 
-      await PremiumAnimatorObserverPdfService.generateAnimatorReport(filteredAnimators, dynamicParishes, amForane, amParish);
+      const parishDisplayName = amParish === "All"
+        ? "All"
+        : dynamicParishes.find(p => p.id === amParish)?.name || amParish;
+      const yearDisplayLabel = amYear === "All" ? "All Years" : formatAcademicYear(amYear);
+
+      await PremiumAnimatorObserverPdfService.generateAnimatorReport(
+        animatorsForPdf, dynamicParishes, amForane, parishDisplayName, yearDisplayLabel
+      );
       toast.success("Animator report generated");
     } catch (error) {
       console.error("Animator report error:", error);
@@ -1664,7 +1693,7 @@ export function Reports() {
               <FilterBar
                 foranes={uniqueForanes}
                 parishes={dynamicParishes.map((p) => ({ id: p.id, name: p.name, forane: p.forane }))}
-                academicYears={uniqueAcademicYears}
+                academicYears={animatorAcademicYears}
                 forane={amForane}
                 parishId={amParish}
                 academicYear={amYear}
@@ -1677,6 +1706,7 @@ export function Reports() {
               />
               <p className="text-xs text-muted-foreground pl-1">
                 Animator data will be included based on selected filters.
+                {amYear !== "All" && ` Only assignments from ${formatAcademicYear(amYear)} will be shown.`}
               </p>
             </CardContent>
           </Card>

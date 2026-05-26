@@ -18,6 +18,7 @@ import {
   Activity,
   UserPlus,
   ShieldCheck,
+  Video,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -77,6 +78,7 @@ const navigation: NavItem[] = [
     icon: UserPlus,
     adminOnly: true,
   },
+  { name: "Video Resources", href: "/video-resources", icon: Video },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   {
     name: "Theme & Programs",

@@ -550,11 +550,13 @@ export function Events() {
     const matchesCategory =
       categoryFilter === "All" ||
       event.category.toLowerCase() === categoryFilter.toLowerCase();
-    const matchesForane =
-      foraneFilter === "All" ||
-      event.creatorForane === foraneFilter ||
-      (event.place &&
-        event.place.toLowerCase().includes(foraneFilter.toLowerCase()));
+    const matchesForane = (() => {
+      if (foraneFilter === "All") return true;
+      // Find the creator in the users list to get the most accurate forane
+      const creator = users.find((u) => u.uid === event.creatorId || u.id === event.creatorId);
+      const resolvedForane = creator?.forane || event.creatorForane || (event as any).forane;
+      return resolvedForane === foraneFilter;
+    })();
 
     let matchesStatus = true;
     if (statusFilter !== "All") {
@@ -1158,7 +1160,7 @@ export function Events() {
                                 {schoolName}
                               </TableCell>
                               <TableCell className="text-muted-foreground">
-                                {event.creatorForane || creator?.forane || "—"}
+                                {creator?.forane || event.creatorForane || (event as any).forane || "—"}
                               </TableCell>
                               <TableCell className="text-muted-foreground">
                                 <div className="flex flex-col">
@@ -1352,7 +1354,6 @@ export function Events() {
                               creator?.schoolname ||
                               creator?.fullName ||
                               "Unknown";
-                            const foraneName = event.creatorForane || creator?.forane || "—";
 
                             return (
                               <TableRow key={event.id}>
@@ -1393,7 +1394,7 @@ export function Events() {
                                   {schoolName}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">
-                                  {foraneName}
+                                  {creator?.forane || event.creatorForane || (event as any).forane || "—"}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">
                                   {formatDate(event.timestamp)}
@@ -1644,7 +1645,7 @@ export function Events() {
                                   {schoolName}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">
-                                  {event.creatorForane || creator?.forane || "—"}
+                                  {creator?.forane || event.creatorForane || (event as any).forane || "—"}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">
                                   <div className="flex flex-col">

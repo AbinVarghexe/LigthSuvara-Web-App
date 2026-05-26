@@ -8,14 +8,25 @@ import {
     doc,
     query,
     where,
-    Timestamp,
     arrayUnion,
     arrayRemove
 } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { auth, db } from '../../../config/firebase';
-import { deleteUser } from '@/features/users/services/userService';
+import { db } from '../../../config/firebase';
+import { deleteUser, bulkCreateUsers } from '@/features/users/services/userService';
+
+export const getAcademicYear = (): string => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const cutOffDate = new Date(year, 4, 15); // May 15 (month index 4 is May)
+    return today <= cutOffDate ? (year - 1).toString() : year.toString();
+};
+
+export const formatAcademicYear = (yearStr: string): string => {
+    const year = parseInt(yearStr);
+    if (isNaN(year)) return yearStr;
+    const nextYearLastTwo = ((year + 1) % 100).toString().padStart(2, '0');
+    return `${year}-${nextYearLastTwo}`;
+};
 
 export interface AnimatorAssignment {
     unitId: string;
@@ -125,40 +136,83 @@ export const createAnimator = async (
     phoneNumber?: string,
     address?: string
 ): Promise<string> => {
-    // Use a secondary Firebase app to create the user without
-    // affecting the admin's auth session on the primary app.
-    const secondaryApp = initializeApp(auth.app.options, 'secondaryApp');
-    const secondaryAuth = getAuth(secondaryApp);
-
-    try {
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-        const uid = userCredential.user.uid;
-
-        // Create user document with animator role matching Flutter app structure
-        await setDoc(doc(db, 'users', uid), {
-            uid,
+    // Call bulkCreateUsers Cloud Function to securely create the user with role animator
+    const result = await bulkCreateUsers([
+        {
             email,
+            password,
             name,
             role: 'animator',
             parishId,
             parishName,
             phoneNumber: phoneNumber || '',
             address: address || '',
-            createdAt: Timestamp.now(),
-            createdBy: auth.currentUser?.uid || ''
-        });
+        } as any
+    ]);
 
-        // Create empty animator_assignments document
-        await setDoc(doc(db, 'animator_assignments', uid), {
+    if (!result.success) {
+        const errorMsg = result.errors?.[0]?.error || 'Failed to create animator account';
+        throw new Error(errorMsg);
+    }
+
+    // Query the users collection to get the new user's UID
+    const q = query(collection(db, 'users'), where('email', '==', email));
+    const snap = await getDocs(q);
+    
+    if (snap.empty) {
+        throw new Error('User document was not found after creation');
+    }
+    
+    const uid = snap.docs[0].id;
+
+    // Create empty animator_assignments document
+    await setDoc(doc(db, 'animator_assignments', uid), {
+        animatorName: name,
+        animatorEmail: email,
+        assignments: []
+    });
+
+    return uid;
+};
+
+export const promoteToAnimator = async (
+    userId: string,
+    parishId: string,
+    parishName: string,
+    phoneNumber?: string,
+    address?: string
+): Promise<void> => {
+    // 1. Fetch user doc to get name and email
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    if (!userDoc.exists()) {
+        throw new Error('User not found');
+    }
+    
+    const userData = userDoc.data();
+    const name = userData.name || userData.fullName || '';
+    const email = userData.email || '';
+
+    // 2. Update user document to animator role and update other details
+    await updateDoc(userDocRef, {
+        role: 'animator',
+        parishId,
+        parishName,
+        phoneNumber: phoneNumber || userData.phoneNumber || '',
+        address: address || userData.address || '',
+        // Make sure name is set since animator role uses 'name'
+        name: name,
+    });
+
+    // 3. Create animator assignments document if it doesn't exist
+    const assignmentDocRef = doc(db, 'animator_assignments', userId);
+    const assignmentDoc = await getDoc(assignmentDocRef);
+    if (!assignmentDoc.exists()) {
+        await setDoc(assignmentDocRef, {
             animatorName: name,
             animatorEmail: email,
             assignments: []
         });
-
-        return uid;
-    } finally {
-        // Always clean up the secondary app
-        await deleteApp(secondaryApp);
     }
 };
 
@@ -186,25 +240,29 @@ export const updateAnimator = async (
     }
 };
 
-// Add assignment to animator (max 2)
+// Add assignment to animator (max 7)
 export const addAssignment = async (
     animatorId: string,
     assignment: AnimatorAssignment
 ): Promise<void> => {
+    // Check if the school is already assigned to any animator for this specific year
+    const allAssignmentsSnapshot = await getDocs(collection(db, 'animator_assignments'));
+    const alreadyAssignedThisYear = allAssignmentsSnapshot.docs.some(docSnapshot => {
+        const assignments = docSnapshot.data()?.assignments || [];
+        return assignments.some((a: AnimatorAssignment) => 
+            a.schoolUserId === assignment.schoolUserId && a.year === assignment.year
+        );
+    });
+    if (alreadyAssignedThisYear) {
+        throw new Error('This school is already assigned to an animator for this academic year');
+    }
+
     const assignmentDoc = await getDoc(doc(db, 'animator_assignments', animatorId));
 
     if (assignmentDoc.exists()) {
         const currentAssignments = assignmentDoc.data()?.assignments || [];
         if (currentAssignments.length >= 7) {
             throw new Error('Animator already has maximum 7 assignments');
-        }
-
-        // Check if school is already assigned to this animator
-        const schoolAlreadyAssigned = currentAssignments.some(
-            (a: AnimatorAssignment) => a.schoolUserId === assignment.schoolUserId
-        );
-        if (schoolAlreadyAssigned) {
-            throw new Error('This school is already assigned to this animator');
         }
 
         await updateDoc(doc(db, 'animator_assignments', animatorId), {
@@ -234,8 +292,8 @@ export const removeAssignment = async (
     });
 };
 
-// Get schools without animator assignment
-export const getUnassignedSchools = async () => {
+// Get schools without animator assignment for a specific year
+export const getUnassignedSchools = async (year: string = getAcademicYear()) => {
     // Get all schools
     const schoolsQuery = query(
         collection(db, 'users'),
@@ -250,7 +308,9 @@ export const getUnassignedSchools = async () => {
     assignmentsSnapshot.docs.forEach(doc => {
         const assignments = doc.data()?.assignments || [];
         assignments.forEach((a: AnimatorAssignment) => {
-            assignedSchoolIds.add(a.schoolUserId);
+            if (a.year === year) {
+                assignedSchoolIds.add(a.schoolUserId);
+            }
         });
     });
 
@@ -271,13 +331,16 @@ export const deleteAnimator = async (animatorId: string): Promise<void> => {
     await deleteUser(animatorId);
 };
 
-// Get assignment statistics
-export const getAnimatorStats = async () => {
+// Get assignment statistics for a specific year
+export const getAnimatorStats = async (year: string = getAcademicYear()) => {
     const animators = await getAnimators();
+    const assignedInYear = animators.filter(a => a.assignments.some(asg => asg.year === year));
+    const unassignedInYear = animators.filter(a => !a.assignments.some(asg => asg.year === year));
+    const fullyAssignedInYear = animators.filter(a => a.assignments.filter(asg => asg.year === year).length === 7);
     return {
         total: animators.length,
-        assigned: animators.filter(a => a.assignments.length > 0).length,
-        unassigned: animators.filter(a => a.assignments.length === 0).length,
-        fullyAssigned: animators.filter(a => a.assignments.length === 7).length
+        assigned: assignedInYear.length,
+        unassigned: unassignedInYear.length,
+        fullyAssigned: fullyAssignedInYear.length
     };
 };

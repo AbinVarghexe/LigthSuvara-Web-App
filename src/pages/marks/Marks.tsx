@@ -72,10 +72,10 @@ import { renderToString } from "react-dom/server";
 import { MarksPdfTemplate } from "./MarksPdfTemplate";
 import {
   getMarks,
-  getMarksWithDetails,
-  getAvailableYears,
   searchMarks,
   getMarksStats,
+  getAvailableYears,
+  getMarksWithDetails,
   toggleMarksLock,
   updateMarksRemark,
   updateQuestionRemark,
@@ -85,6 +85,7 @@ import {
   MarksWithDetails,
 } from "../../features/marks/services/marksService";
 import { Timestamp } from "firebase/firestore";
+import { formatAcademicYear } from "../../features/animators/services/animatorService";
 
 export function Marks() {
   const [marks, setMarks] = useState<MarksData[]>([]);
@@ -463,7 +464,7 @@ export function Marks() {
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="px-3 py-1 text-sm">
             <Calendar className="h-3.5 w-3.5 mr-2 text-blue-600" />
-            {selectedYear === "all" ? "All Years" : selectedYear}
+            {selectedYear === "all" ? "All Years" : formatAcademicYear(selectedYear)}
           </Badge>
         </div>
       </div>
@@ -575,7 +576,7 @@ export function Marks() {
                     <SelectItem value="all">All Years</SelectItem>
                     {availableYears.map((year) => (
                       <SelectItem key={year} value={year}>
-                        {year}
+                        {formatAcademicYear(year)}
                       </SelectItem>
                     ))}
                   </SelectContent>

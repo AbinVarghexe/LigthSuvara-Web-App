@@ -61,7 +61,8 @@ export const PremiumAnimatorObserverPdfService = {
         animators: AnimatorWithUser[],
         parishes: any[],
         foraneFilter: string,
-        parishFilter: string
+        parishFilter: string,
+        yearFilter: string = "All Years"
     ) => {
         const html = renderToString(
             <AnimatorPdfTemplate
@@ -69,6 +70,7 @@ export const PremiumAnimatorObserverPdfService = {
                 parishes={parishes}
                 foraneFilter={foraneFilter}
                 parishFilter={parishFilter}
+                yearFilter={yearFilter}
             />
         );
         await generatePdfFromHtml(html, `Animator_Registry_${new Date().toISOString().split('T')[0]}.pdf`);
