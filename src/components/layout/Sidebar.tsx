@@ -93,6 +93,12 @@ const navigation: NavItem[] = [
     adminOnly: true,
   },
   {
+    name: "Calendar",
+    href: "/calendar",
+    icon: Calendar,
+    adminOnly: true,
+  },
+  {
     name: "Logs",
     href: "/logs",
     icon: Activity,

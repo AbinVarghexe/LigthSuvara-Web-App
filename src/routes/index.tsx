@@ -28,6 +28,7 @@ import { Logs } from "../pages/logs/Logs";
 import { PublicRegistration } from "../pages/public-registration/PublicRegistration";
 import { AppControl } from "../pages/app-control/AppControl";
 import { VideoResources } from "../pages/video-resources/VideoResources";
+import { Calendar } from "../pages/calendar/Calendar";
 
 export const router = createBrowserRouter([
   {
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
           { path: "app-control", Component: AppControl },
           { path: "logs", Component: Logs },
           { path: "video-resources", Component: VideoResources },
+          { path: "calendar", Component: Calendar },
         ],
       },
     ],
