@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { CheckCircle, XCircle, Loader2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { getEvents, updateEventStatus, EventData } from '../../features/events/services/eventService';
-import { getUsers } from '../../features/users/services/userService';
+import { getUsers, UserData } from '../../features/users/services/userService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
@@ -14,6 +14,7 @@ import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 export function EventApprovals() {
     const { isAdminUser, currentUser } = useAuth();
     const [events, setEvents] = useState<EventData[]>([]);
+    const [users, setUsers] = useState<UserData[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -39,12 +40,13 @@ export function EventApprovals() {
 
     useEffect(() => {
         fetchPendingEvents();
-    }, [foraneFilter, currentUser]);
+    }, [currentUser]);
 
     const fetchPendingEvents = async () => {
         try {
             setLoading(true);
-            await getUsers();
+            const usersData = await getUsers();
+            setUsers(usersData);
 
 
             // Fetch current user's forane
@@ -52,9 +54,8 @@ export function EventApprovals() {
                 // current user forane state check removed since it is unused
             }
 
-            // Fetch events with forane filter from backend
-            const foraneToQuery = foraneFilter !== 'All' ? foraneFilter : undefined;
-            const allEvents = await getEvents(undefined, foraneToQuery);
+            // Fetch events without forane filter from backend, filter on client side instead
+            const allEvents = await getEvents(undefined, undefined);
             // Filter for pending events specifically, ignoring 'published' and 'private' ones
             const draftEvents = (allEvents as EventData[]).filter(event => event.status === 'pending' || (!event.status && !event.isPublic));
             setEvents(draftEvents);
@@ -66,8 +67,16 @@ export function EventApprovals() {
         }
     };
 
-    // Events are already filtered by forane from backend
-    const filteredEvents = events;
+    const getEventForane = (event: EventData) => {
+        const creator = users.find((u) => u.uid === event.creatorId || u.id === event.creatorId);
+        return creator?.forane || event.creatorForane || (event as any).forane || "";
+    };
+
+    // Filter events locally on the client side
+    const filteredEvents = events.filter(event => {
+        if (foraneFilter === 'All') return true;
+        return getEventForane(event) === foraneFilter;
+    });
 
     const handleAction = async (eventId: string, status: 'approved' | 'rejected') => {
         if (!eventId) return;

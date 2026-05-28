@@ -164,8 +164,6 @@ export function Events() {
   useEffect(() => {
     if (!isAdminUser) return;
     setApprovalLoading(true);
-    const foraneToQuery =
-      approvalForaneFilter !== "All" ? approvalForaneFilter : undefined;
     const unsubscribe = subscribeToEvents(
       (allEvents) => {
         const draftEvents = allEvents.filter(
@@ -175,17 +173,15 @@ export function Events() {
         setApprovalLoading(false);
       },
       undefined,
-      foraneToQuery,
+      undefined,
     );
 
     return () => unsubscribe();
-  }, [approvalForaneFilter, currentUser, isAdminUser]);
+  }, [currentUser, isAdminUser]);
 
   // Subscribe to approved events (real-time)
   useEffect(() => {
     setApprovedLoading(true);
-    const foraneToQuery =
-      approvedForaneFilter !== "All" ? approvedForaneFilter : undefined;
     const unsubscribe = subscribeToEvents(
       (allEvents) => {
         const approved = allEvents.filter(
@@ -195,18 +191,16 @@ export function Events() {
         setApprovedLoading(false);
       },
       "approved",
-      foraneToQuery,
+      undefined,
     );
 
     return () => unsubscribe();
-  }, [approvedForaneFilter]);
+  }, []);
 
   // Subscribe to private events (real-time)
   useEffect(() => {
     if (!isAdminUser) return;
     setPrivateLoading(true);
-    const foraneToQuery =
-      privateForaneFilter !== "All" ? privateForaneFilter : undefined;
     const unsubscribe = subscribeToEvents(
       (allEvents) => {
         const privates = allEvents.filter(
@@ -216,11 +210,11 @@ export function Events() {
         setPrivateLoading(false);
       },
       "rejected",
-      foraneToQuery,
+      undefined,
     );
 
     return () => unsubscribe();
-  }, [privateForaneFilter, isAdminUser]);
+  }, [isAdminUser]);
 
   const handleApprovalAction = async (
     eventId: string,
@@ -533,6 +527,11 @@ export function Events() {
     ),
   ).sort() as string[];
 
+  const getEventForane = (event: EventData) => {
+    const creator = users.find((u) => u.uid === event.creatorId || u.id === event.creatorId);
+    return creator?.forane || event.creatorForane || (event as any).forane || "";
+  };
+
   const filteredEvents = events.filter((event) => {
     // Visibility Check
     if (!isAdminUser) {
@@ -550,13 +549,7 @@ export function Events() {
     const matchesCategory =
       categoryFilter === "All" ||
       event.category.toLowerCase() === categoryFilter.toLowerCase();
-    const matchesForane = (() => {
-      if (foraneFilter === "All") return true;
-      // Find the creator in the users list to get the most accurate forane
-      const creator = users.find((u) => u.uid === event.creatorId || u.id === event.creatorId);
-      const resolvedForane = creator?.forane || event.creatorForane || (event as any).forane;
-      return resolvedForane === foraneFilter;
-    })();
+    const matchesForane = foraneFilter === "All" || getEventForane(event) === foraneFilter;
 
     let matchesStatus = true;
     if (statusFilter !== "All") {
@@ -589,14 +582,21 @@ export function Events() {
     const matchesSearch = event.title
       .toLowerCase()
       .includes(approvedSearchTerm.toLowerCase());
-    return matchesSearch;
+    const matchesForane = approvedForaneFilter === "All" || getEventForane(event) === approvedForaneFilter;
+    return matchesSearch && matchesForane;
   });
 
   const filteredPrivateEvents = privateEvents.filter((event) => {
     const matchesSearch = event.title
       .toLowerCase()
       .includes(privateSearchTerm.toLowerCase());
-    return matchesSearch;
+    const matchesForane = privateForaneFilter === "All" || getEventForane(event) === privateForaneFilter;
+    return matchesSearch && matchesForane;
+  });
+
+  const filteredApprovalEvents = approvalEvents.filter((event) => {
+    const matchesForane = approvalForaneFilter === "All" || getEventForane(event) === approvalForaneFilter;
+    return matchesForane;
   });
 
   const formatDate = (date: any) => {
@@ -1225,8 +1225,8 @@ export function Events() {
                 <div>
                   <CardTitle>Pending Requests</CardTitle>
                   <CardDescription>
-                    {approvalEvents.length} event
-                    {approvalEvents.length !== 1 ? "s" : ""} waiting for
+                    {filteredApprovalEvents.length} event
+                    {filteredApprovalEvents.length !== 1 ? "s" : ""} waiting for
                     approval
                   </CardDescription>
                 </div>
@@ -1254,7 +1254,7 @@ export function Events() {
                   <>
                     {/* Mobile View */}
                     <div className="md:hidden">
-                      {approvalEvents.map((event) => (
+                      {filteredApprovalEvents.map((event) => (
                         <div
                           key={event.id}
                           className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors"
@@ -1343,7 +1343,7 @@ export function Events() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {approvalEvents.map((event) => {
+                          {filteredApprovalEvents.map((event) => {
                             const creator = users.find(
                               (u) => u.id === event.creatorId,
                             );
@@ -1453,7 +1453,7 @@ export function Events() {
                               </TableRow>
                             );
                           })}
-                          {approvalEvents.length === 0 && (
+                          {filteredApprovalEvents.length === 0 && (
                             <TableRow>
                               <TableCell
                                 colSpan={5}
