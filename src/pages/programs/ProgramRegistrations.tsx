@@ -147,16 +147,20 @@ export function ProgramRegistrations() {
   // Aggregations
   const programGroups = useMemo(() => {
     const groups: Record<string, number> = {};
-    registrations.forEach((reg) => {
-      const name = reg.programName || "Unknown Program";
-      const count = reg.isCountOnly ? reg.studentCount || 1 : 1;
-      groups[name] = (groups[name] || 0) + count;
-    });
+    const existingProgramIds = new Set(programs.map(p => p.id));
+
+    registrations
+      .filter((reg) => existingProgramIds.has(reg.programId))
+      .forEach((reg) => {
+        const name = reg.programName || "Unknown Program";
+        const count = reg.isCountOnly ? reg.studentCount || 1 : 1;
+        groups[name] = (groups[name] || 0) + count;
+      });
     return Object.entries(groups)
       .map(([name, count]) => ({ name, count }))
       .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [registrations, searchQuery]);
+  }, [registrations, programs, searchQuery]);
 
   const schoolGroups = useMemo(() => {
     if (!selectedProgramName) return [];
@@ -165,8 +169,10 @@ export function ProgramRegistrations() {
       string,
       { count: number; fallbackName: string; isCountOnly: boolean }
     > = {};
+    const existingProgramIds = new Set(programs.map(p => p.id));
+
     registrations
-      .filter((reg) => reg.programName === selectedProgramName)
+      .filter((reg) => existingProgramIds.has(reg.programId) && reg.programName === selectedProgramName)
       .forEach((reg) => {
         const sid = reg.schoolUserId || "unknown";
         const count = reg.isCountOnly ? reg.studentCount || 1 : 1;
@@ -218,6 +224,7 @@ export function ProgramRegistrations() {
       .sort((a, b) => b.count - a.count); // Rank by students
   }, [
     registrations,
+    programs,
     selectedProgramName,
     users,
     searchSchoolsQuery,
@@ -227,9 +234,11 @@ export function ProgramRegistrations() {
 
   const studentList = useMemo(() => {
     if (!selectedProgramName || !selectedSchoolId) return [];
+    const existingProgramIds = new Set(programs.map(p => p.id));
     return registrations
       .filter(
         (reg) =>
+          existingProgramIds.has(reg.programId) &&
           reg.programName === selectedProgramName &&
           reg.schoolUserId === selectedSchoolId,
       )
@@ -238,7 +247,7 @@ export function ProgramRegistrations() {
         const timeB = b.submittedAt?.toMillis() || 0;
         return timeB - timeA;
       });
-  }, [registrations, selectedProgramName, selectedSchoolId]);
+  }, [registrations, programs, selectedProgramName, selectedSchoolId]);
 
   const selectedProgram = useMemo(() => {
     return programs.find(p => p.name === selectedProgramName);
@@ -316,10 +325,10 @@ export function ProgramRegistrations() {
           </h1>
           <p className="text-sm text-muted-foreground">
             {level === "programs" &&
-              "Overview of students registered across all active programs"}
+              "Overview of participants registered across all active programs"}
             {level === "schools" &&
               "Distribution of registrations per participating school"}
-            {level === "students" && `Student list for ${selectedProgramName}`}
+            {level === "students" && `Participant list for ${selectedProgramName}`}
           </p>
         </div>
       </div>

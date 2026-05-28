@@ -65,7 +65,6 @@ export function Events() {
   const [foraneFilter, setForaneFilter] = useState("All");
   const [academicYearFilter, setAcademicYearFilter] = useState("All");
   const [dateFromFilter, setDateFromFilter] = useState("");
-  const [forHonorFilter, setForHonorFilter] = useState(false);
 
   // Approvals state
   const [approvalEvents, setApprovalEvents] = useState<EventData[]>([]);
@@ -305,13 +304,11 @@ export function Events() {
         return { bg: '#dbeafe', text: '#1e40af', label: 'Suvara' };
       };
 
-      // Build filter summary
       const activeFilters = [
         academicYearFilter !== 'All' ? `Year: ${academicYearFilter}` : '',
         categoryFilter !== 'All' ? `Category: ${categoryFilter.toUpperCase()}` : '',
         statusFilter !== 'All' ? `Status: ${statusFilter}` : '',
         foraneFilter !== 'All' ? `Forane: ${foraneFilter}` : '',
-        forHonorFilter ? 'For Honor: Yes' : '',
         dateFromFilter ? `From: ${dateFromFilter}` : '',
       ].filter(Boolean);
 
@@ -572,10 +569,7 @@ export function Events() {
       matchesDateFrom = d ? d >= new Date(dateFromFilter) : false;
     }
 
-    // For Honor filter (CML category events)
-    const matchesForHonor = !forHonorFilter || event.category === "cml";
-
-    return matchesSearch && matchesCategory && matchesStatus && matchesForane && matchesAcademicYear && matchesDateFrom && matchesForHonor;
+    return matchesSearch && matchesCategory && matchesStatus && matchesForane && matchesAcademicYear && matchesDateFrom;
   });
 
   const filteredApprovedEvents = approvedEvents.filter((event) => {
@@ -770,14 +764,7 @@ export function Events() {
                     onChange={(e) => setDateFromFilter(e.target.value)}
                   />
                 </div>
-                <div className="flex items-center gap-2 pb-1">
-                  <Checkbox
-                    id="forHonor"
-                    checked={forHonorFilter}
-                    onCheckedChange={(checked) => setForHonorFilter(!!checked)}
-                  />
-                  <Label htmlFor="forHonor" className="text-sm cursor-pointer">For Honor (CML only)</Label>
-                </div>
+
                 {isAdminUser && (
                   <Button
                     variant="outline"

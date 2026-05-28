@@ -112,8 +112,12 @@ export function ProgramAnalytics() {
         const pCounts: Record<string, number> = {};
         const sCounts: Record<string, number> = {};
         const sNames: Record<string, string> = {};
+        const existingProgramIds = new Set(programs.map(p => p.id));
 
         registrations.forEach((reg) => {
+            if (!existingProgramIds.has(reg.programId)) {
+                return;
+            }
             const pName = reg.programName || "Unknown Program";
             const sid = reg.schoolUserId || "unknown";
 
@@ -168,7 +172,7 @@ export function ProgramAnalytics() {
             .slice(0, 5); // Top 5
 
         return { total, performance, leaderboard, maxCount };
-    }, [registrations, selectedProgramFilter, users, searchQuery, selectedForane, selectedParishId]);
+    }, [registrations, programs, selectedProgramFilter, users, searchQuery, selectedForane, selectedParishId]);
 
     if (loading) {
         return (

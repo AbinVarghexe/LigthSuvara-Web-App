@@ -79,7 +79,6 @@ const navigation: NavItem[] = [
     adminOnly: true,
   },
   { name: "Video Resources", href: "/video-resources", icon: Video },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
   {
     name: "Theme & Programs",
     href: "/theme",
@@ -98,6 +97,7 @@ const navigation: NavItem[] = [
     icon: Calendar,
     adminOnly: true,
   },
+  { name: "Reports", href: "/reports", icon: BarChart3 },
   {
     name: "Logs",
     href: "/logs",
