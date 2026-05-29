@@ -198,7 +198,7 @@ export function EventDetail() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground">{event.title}</h1>
           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
-            <span>Created on {formatDate((event as any).timestamp)}</span>
+            <span>Created on {formatDate((event as any).createdAt || event.timestamp)}</span>
             <span>•</span>
             <span className="uppercase">{event.category}</span>
           </div>
@@ -300,13 +300,13 @@ export function EventDetail() {
               color="blue"
               icon={<Calendar className="w-4 h-4 text-blue-600" />}
               label="Event Date"
-              value={formatDate(event.timestamp)}
+              value={formatDate(event.date)}
             />
             <DetailRow
               color="green"
               icon={<Calendar className="w-4 h-4 text-green-600" />}
               label="Created At"
-              value={formatDate((event as any).createdAt)}
+              value={formatDate((event as any).createdAt || event.timestamp)}
             />
             {(event as any).updatedAt && (
               <DetailRow
@@ -343,7 +343,7 @@ export function EventDetail() {
 
             <div className="pt-3 border-t border-border flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">Status</span>
-              <StatusBadge status={event.isPublic ? "Public" : "Draft"} />
+              <StatusBadge status={event.isPublic ? "Public" : "Private"} />
             </div>
           </div>
         </div>

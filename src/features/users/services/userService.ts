@@ -113,10 +113,16 @@ export const updateUserProfile = async (userId: string, data: Partial<UserData>)
 
     // Update Auth Profile if imageUrl or displayName is provided
     if (auth.currentUser && auth.currentUser.uid === userId) {
-        await updateProfile(auth.currentUser, {
-            photoURL: data.profileImageUrl,
-            displayName: data.fullName
-        });
+        const profileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
+        if (data.fullName !== undefined) {
+            profileUpdates.displayName = data.fullName || null;
+        }
+        if (data.profileImageUrl !== undefined) {
+            profileUpdates.photoURL = data.profileImageUrl || null;
+        }
+        if (Object.keys(profileUpdates).length > 0) {
+            await updateProfile(auth.currentUser, profileUpdates);
+        }
     }
 };
 

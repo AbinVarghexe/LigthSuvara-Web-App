@@ -47,8 +47,16 @@ export function Settings() {
                     // For now, let's assume we need to add the import.
                     const { getUser } = await import('../../features/users/services/userService');
                     const userData = await getUser(currentUser.uid);
-                    if (userData?.phoneNumber) {
-                        setValue('phoneNumber', userData.phoneNumber);
+                    if (userData) {
+                        if (userData.phoneNumber) {
+                            setValue('phoneNumber', userData.phoneNumber);
+                        }
+                        if (userData.fullName) {
+                            setValue('fullName', userData.fullName);
+                        }
+                        if (userData.profileImageUrl && !imagePreview) {
+                            setImagePreview(userData.profileImageUrl);
+                        }
                     }
                 } catch (error) {
                     console.error("Error fetching user details:", error);
@@ -56,7 +64,7 @@ export function Settings() {
             }
         };
         fetchUserData();
-    }, [currentUser, setValue]);
+    }, [currentUser, setValue, imagePreview]);
 
     const handlePasswordReset = async () => {
         if (!currentUser?.email) return;
