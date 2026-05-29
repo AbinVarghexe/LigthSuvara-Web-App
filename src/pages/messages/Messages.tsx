@@ -13,6 +13,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Badge } from "../../components/ui/badge";
+import { Switch } from "../../components/ui/switch";
 import {
   Tabs,
   TabsContent,
@@ -29,6 +30,7 @@ import {
 import { toast } from "sonner";
 import {
   sendBroadcast,
+  sendUpdateNotification,
   sendToAll,
   sendToSpecific,
   deleteNotification,
@@ -54,7 +56,9 @@ import {
   MessageSquare,
   Pencil,
   Megaphone,
+  Smartphone,
 } from "lucide-react";
+import updateBanner from "../../assets/update_banner.png";
 
 export function Messages() {
   const [audience, setAudience] = useState("public");
@@ -70,6 +74,88 @@ export function Messages() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Play Store update state
+  const [updateTitle, setUpdateTitle] = useState("New Update Available");
+  const [updateMessage, setUpdateMessage] = useState("New update available, update via Play Store");
+  const [updateImageFile, setUpdateImageFile] = useState<File | null>(null);
+  const [updateImagePreview, setUpdateImagePreview] = useState<string | null>(updateBanner);
+  const [isSendingUpdate, setIsSendingUpdate] = useState(false);
+  const [uploadingUpdateImage, setUploadingUpdateImage] = useState(false);
+  const updateImageInputRef = useRef<HTMLInputElement>(null);
+  const [updateNotificationOnly, setUpdateNotificationOnly] = useState(false);
+
+  const handleUpdateImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+
+    setUpdateImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setUpdateImagePreview(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeUpdateImage = () => {
+    setUpdateImageFile(null);
+    setUpdateImagePreview(null);
+    if (updateImageInputRef.current) updateImageInputRef.current.value = "";
+  };
+
+  const handleSendUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!updateTitle || !updateMessage) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setIsSendingUpdate(true);
+    try {
+      let imageUrl: string | undefined;
+      if (updateImageFile) {
+        setUploadingUpdateImage(true);
+        imageUrl = await uploadMessageImage(updateImageFile);
+        setUploadingUpdateImage(false);
+      } else if (updateImagePreview === updateBanner) {
+        setUploadingUpdateImage(true);
+        const response = await fetch(updateBanner);
+        const blob = await response.blob();
+        const defaultFile = new File([blob], "update_banner.png", { type: "image/png" });
+        imageUrl = await uploadMessageImage(defaultFile);
+        setUploadingUpdateImage(false);
+      }
+
+      await sendUpdateNotification(updateTitle, updateMessage, imageUrl, updateNotificationOnly);
+      toast.success("App Update notification broadcasted successfully");
+
+      // Refresh latest announcement preview
+      const broadcasts = await getBroadcasts();
+      setLatestAnnouncement(broadcasts.length > 0 ? broadcasts[0] : null);
+
+      // Reset update image to default banner and keep standard text defaults
+      setUpdateImageFile(null);
+      setUpdateImagePreview(updateBanner);
+      if (updateImageInputRef.current) updateImageInputRef.current.value = "";
+      setUpdateNotificationOnly(false);
+    } catch (error) {
+      console.error("Error sending update message:", error);
+      toast.error("Failed to send update message");
+    } finally {
+      setIsSendingUpdate(false);
+      setUploadingUpdateImage(false);
+    }
+  };
 
   // History state
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
@@ -201,20 +287,6 @@ export function Messages() {
       return;
     }
 
-    // Rate Limiting Check
-    const lastSent = localStorage.getItem("lastNotificationSent");
-    if (lastSent) {
-      const timeSinceLast = Date.now() - parseInt(lastSent);
-      const cooldown = 60000; // 1 minute
-      if (timeSinceLast < cooldown) {
-        const remaining = Math.ceil((cooldown - timeSinceLast) / 1000);
-        toast.error(
-          `Please wait ${remaining} seconds before sending another message.`,
-        );
-        return;
-      }
-    }
-
     setIsLoading(true);
     try {
       // Upload image if present
@@ -226,13 +298,13 @@ export function Messages() {
       }
 
       if (audience === "public") {
-        await sendBroadcast(title, message, imageUrl);
+        await sendBroadcast(title, message, imageUrl, false);
         toast.success("Broadcast sent successfully");
         // Refresh latest announcement preview
         const broadcasts = await getBroadcasts();
         setLatestAnnouncement(broadcasts.length > 0 ? broadcasts[0] : null);
       } else if (audience === "all") {
-        await sendToAll(title, message, imageUrl);
+        await sendToAll(title, message, imageUrl, false);
         toast.success("Message sent to all users");
       } else if (audience === "specific") {
         if (selectedSchools.length === 0) {
@@ -252,12 +324,10 @@ export function Messages() {
           selectedSchools,
           unitNames,
           imageUrl,
+          false,
         );
         toast.success(`Message sent to ${selectedSchools.length} school(s)`);
       }
-
-      // Update Rate Limit Timestamp
-      localStorage.setItem("lastNotificationSent", Date.now().toString());
 
       // Reset form
       setTitle("");
@@ -455,6 +525,10 @@ export function Messages() {
           <TabsTrigger value="compose">
             <Send className="w-4 h-4 mr-2" />
             Compose
+          </TabsTrigger>
+          <TabsTrigger value="app-update">
+            <Smartphone className="w-4 h-4 mr-2" />
+            App Update
           </TabsTrigger>
           <TabsTrigger value="history">
             <History className="w-4 h-4 mr-2" />
@@ -720,6 +794,179 @@ export function Messages() {
           </Card>
         </TabsContent>
 
+        {/* App Update Tab */}
+        <TabsContent value="app-update" className="mt-4">
+          <Card>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Form Section */}
+                <form onSubmit={handleSendUpdate} className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Play Store Update Notification</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Notify users about a new version of the app on Google Play Store.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="update-title">Notification Title</Label>
+                    <Input
+                      id="update-title"
+                      value={updateTitle}
+                      onChange={(e) => setUpdateTitle(e.target.value)}
+                      placeholder="e.g., New Update Available"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="update-message">Notification Body</Label>
+                    <Textarea
+                      id="update-message"
+                      value={updateMessage}
+                      onChange={(e) => setUpdateMessage(e.target.value)}
+                      placeholder="e.g., New update available, update via Play Store"
+                      className="min-h-[100px]"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Play Store Link</Label>
+                    <Input
+                      value="https://play.google.com/store/apps/details?id=com.lightsuvara.app"
+                      disabled
+                      className="bg-muted text-muted-foreground cursor-not-allowed"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This link is automatically embedded and will open on click.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Attach Image (optional)</Label>
+                    {updateImagePreview ? (
+                      <div className="relative inline-block">
+                        <img
+                          src={updateImagePreview}
+                          alt="Update attachment preview"
+                          className="max-h-40 rounded-lg border border-border object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeUpdateImage}
+                          className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 hover:bg-destructive/90 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        className="border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                        onClick={() => updateImageInputRef.current?.click()}
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          ref={updateImageInputRef}
+                          onChange={handleUpdateImageSelect}
+                        />
+                        <ImagePlus className="w-8 h-8 text-muted-foreground mx-auto mb-1" />
+                        <p className="text-sm font-medium text-foreground">Click to upload custom banner image</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Push Notification Only Toggle */}
+                  <div className="flex items-center justify-between p-4 rounded-xl border bg-card/50 border-border">
+                    <div className="space-y-0.5 max-w-[80%]">
+                      <Label htmlFor="update-notification-only-toggle" className="text-sm font-semibold">Send as notification only</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Sends a push notification to users immediately, but does not display it as a message on their in-app screens or history lists.
+                      </p>
+                    </div>
+                    <Switch
+                      id="update-notification-only-toggle"
+                      checked={updateNotificationOnly}
+                      onCheckedChange={setUpdateNotificationOnly}
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-primary hover:bg-primary/90"
+                    disabled={isSendingUpdate}
+                  >
+                    {isSendingUpdate ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {uploadingUpdateImage ? "Uploading image..." : "Sending..."}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Update Notification
+                      </>
+                    )}
+                  </Button>
+                </form>
+
+                {/* Preview Section */}
+                <div className="flex flex-col justify-start space-y-4 border-t lg:border-t-0 lg:border-l border-border pt-6 lg:pt-0 lg:pl-8">
+                  <h4 className="text-sm font-semibold text-foreground">Notification Preview</h4>
+                  <p className="text-xs text-muted-foreground">
+                    This is how the push notification will appear on user devices.
+                  </p>
+                  
+                  {/* Phone Notification Drawer Mockup */}
+                  <div className="w-full max-w-sm mx-auto bg-black rounded-[32px] p-3 shadow-2xl border-4 border-neutral-800">
+                    <div className="bg-neutral-900 rounded-[24px] overflow-hidden p-3 min-h-[220px] text-white flex flex-col justify-between">
+                      {/* Top Bar Status */}
+                      <div className="flex justify-between items-center text-[10px] text-neutral-400 px-2 pb-2">
+                        <span>12:00 PM</span>
+                        <div className="flex gap-1.5 items-center">
+                          <span className="w-2.5 h-2.5 bg-neutral-400 rounded-sm inline-block"></span>
+                        </div>
+                      </div>
+
+                      {/* Notification Container */}
+                      <div className="bg-neutral-800/90 backdrop-blur-md rounded-2xl p-3 border border-neutral-700/50 flex flex-col gap-2 shadow-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center border border-primary/30">
+                              <span className="text-[10px] font-bold text-primary">LS</span>
+                            </div>
+                            <span className="text-[11px] font-medium text-neutral-300">Light Suvara</span>
+                          </div>
+                          <span className="text-[9px] text-neutral-400">now</span>
+                        </div>
+
+                        <div>
+                          <h5 className="text-xs font-semibold text-white">{updateTitle}</h5>
+                          <p className="text-[11px] text-neutral-300 mt-0.5 line-clamp-2 leading-relaxed">{updateMessage}</p>
+                        </div>
+
+                        {updateImagePreview && (
+                          <div className="mt-1.5 overflow-hidden rounded-lg max-h-24 bg-neutral-950 border border-neutral-700/50">
+                            <img src={updateImagePreview} alt="Attached Notification image" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-1 text-[9px] text-primary font-medium mt-1 pt-1.5 border-t border-neutral-700/40">
+                          <Smartphone className="w-3 h-3" />
+                          <span>Tap to update via Play Store</span>
+                        </div>
+                      </div>
+
+                      {/* Bottom indicator */}
+                      <div className="w-20 h-1 bg-neutral-600 rounded-full mx-auto mt-2"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* History Tab */}
         <TabsContent value="history" className="mt-4 space-y-4">
           <Card>
@@ -804,6 +1051,14 @@ export function Messages() {
                               {n.title}
                             </h3>
                             {getAudienceBadge(n)}
+                            {n.notificationOnly && (
+                              <Badge
+                                variant="outline"
+                                className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/20 dark:text-yellow-400 dark:border-yellow-900/30"
+                              >
+                                Notification Only
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-sm text-muted-foreground line-clamp-2">
                             {n.body}

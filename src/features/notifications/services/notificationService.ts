@@ -33,6 +33,10 @@ export interface NotificationData {
     audience: 'public' | 'all' | 'specific';
     readBy?: string[];
     groupId?: string;
+    link?: string;
+    type?: string;
+    click_action?: string;
+    notificationOnly?: boolean;
 }
 
 export const uploadMessageImage = async (file: File): Promise<string> => {
@@ -47,7 +51,7 @@ export const uploadMessageImage = async (file: File): Promise<string> => {
     return await getDownloadURL(storageRef);
 };
 
-export const sendBroadcast = async (title: string, body: string, imageUrl?: string) => {
+export const sendBroadcast = async (title: string, body: string, imageUrl?: string, notificationOnly?: boolean) => {
     return await addDoc(collection(db, BROADCASTS_COLLECTION), {
         title,
         body,
@@ -58,10 +62,30 @@ export const sendBroadcast = async (title: string, body: string, imageUrl?: stri
         isRead: false,
         audience: 'public',
         readBy: [],
+        notificationOnly: notificationOnly || false,
     });
 };
 
-export const sendToAll = async (title: string, body: string, imageUrl?: string) => {
+export const sendUpdateNotification = async (title: string, body: string, imageUrl?: string, notificationOnly?: boolean) => {
+    const playStoreLink = "https://play.google.com/store/apps/details?id=com.lightsuvara.app";
+    return await addDoc(collection(db, BROADCASTS_COLLECTION), {
+        title,
+        body,
+        imageUrl: imageUrl || null,
+        timestamp: serverTimestamp(),
+        recipientId: 'public',
+        isBroadcast: true,
+        isRead: false,
+        audience: 'public',
+        readBy: [],
+        link: playStoreLink,
+        click_action: playStoreLink,
+        type: 'app_update',
+        notificationOnly: notificationOnly || false,
+    });
+};
+
+export const sendToAll = async (title: string, body: string, imageUrl?: string, notificationOnly?: boolean) => {
     return await addDoc(collection(db, NOTIFICATIONS_COLLECTION), {
         title,
         body,
@@ -72,10 +96,11 @@ export const sendToAll = async (title: string, body: string, imageUrl?: string) 
         isRead: false,
         audience: 'all',
         readBy: [],
+        notificationOnly: notificationOnly || false,
     });
 };
 
-export const sendToSpecific = async (title: string, body: string, schoolIds: string[], schoolNames?: string[], imageUrl?: string) => {
+export const sendToSpecific = async (title: string, body: string, schoolIds: string[], schoolNames?: string[], imageUrl?: string, notificationOnly?: boolean) => {
     const batch = writeBatch(db);
     // Generate a unique groupId locally (no network call) to link all batch documents
     const groupId = doc(collection(db, NOTIFICATIONS_COLLECTION)).id;
@@ -93,6 +118,7 @@ export const sendToSpecific = async (title: string, body: string, schoolIds: str
             audience: 'specific',
             readBy: [],
             groupId,
+            notificationOnly: notificationOnly || false,
         });
     });
     await batch.commit();
