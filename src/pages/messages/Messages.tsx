@@ -549,7 +549,8 @@ export function Messages() {
                     onValueChange={setAudience}
                     className="grid grid-cols-1 md:grid-cols-3 gap-4"
                   >
-                    <div
+                    <Label
+                      htmlFor="public"
                       className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${audience === "public" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
                     >
                       <RadioGroupItem
@@ -557,14 +558,11 @@ export function Messages() {
                         id="public"
                         className="mt-1"
                       />
-                      <div className="grid gap-1.5">
-                        <Label
-                          htmlFor="public"
-                          className="font-semibold cursor-pointer"
-                        >
+                      <div className="grid gap-1.5 flex-1">
+                        <span className="font-semibold text-foreground">
                           Public Broadcast
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
+                        </span>
+                        <p className="text-sm text-muted-foreground font-normal">
                           Visible to everyone, including guests without an
                           account.
                         </p>
@@ -572,29 +570,28 @@ export function Messages() {
                       <Globe
                         className={`absolute right-4 top-4 w-5 h-5 ${audience === "public" ? "text-primary" : "text-muted-foreground"}`}
                       />
-                    </div>
+                    </Label>
 
-                    <div
+                    <Label
+                      htmlFor="all"
                       className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${audience === "all" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
                     >
                       <RadioGroupItem value="all" id="all" className="mt-1" />
-                      <div className="grid gap-1.5">
-                        <Label
-                          htmlFor="all"
-                          className="font-semibold cursor-pointer"
-                        >
+                      <div className="grid gap-1.5 flex-1">
+                        <span className="font-semibold text-foreground">
                           All Users
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
+                        </span>
+                        <p className="text-sm text-muted-foreground font-normal">
                           Sent to all registered school accounts and admins.
                         </p>
                       </div>
                       <Users
                         className={`absolute right-4 top-4 w-5 h-5 ${audience === "all" ? "text-primary" : "text-muted-foreground"}`}
                       />
-                    </div>
+                    </Label>
 
-                    <div
+                    <Label
+                      htmlFor="specific"
                       className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${audience === "specific" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
                     >
                       <RadioGroupItem
@@ -602,21 +599,18 @@ export function Messages() {
                         id="specific"
                         className="mt-1"
                       />
-                      <div className="grid gap-1.5">
-                        <Label
-                          htmlFor="specific"
-                          className="font-semibold cursor-pointer"
-                        >
+                      <div className="grid gap-1.5 flex-1">
+                        <span className="font-semibold text-foreground">
                           Specific School
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
+                        </span>
+                        <p className="text-sm text-muted-foreground font-normal">
                           Select specific Sunday schools to receive this.
                         </p>
                       </div>
                       <School
                         className={`absolute right-4 top-4 w-5 h-5 ${audience === "specific" ? "text-primary" : "text-muted-foreground"}`}
                       />
-                    </div>
+                    </Label>
                   </RadioGroup>
                 </div>
 
@@ -713,6 +707,7 @@ export function Messages() {
                           className="hidden"
                           ref={imageInputRef}
                           onChange={handleImageSelect}
+                          onClick={(e) => e.stopPropagation()}
                         />
                         <ImagePlus className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                         <p className="text-sm font-medium text-foreground">
@@ -869,6 +864,7 @@ export function Messages() {
                           className="hidden"
                           ref={updateImageInputRef}
                           onChange={handleUpdateImageSelect}
+                          onClick={(e) => e.stopPropagation()}
                         />
                         <ImagePlus className="w-8 h-8 text-muted-foreground mx-auto mb-1" />
                         <p className="text-sm font-medium text-foreground">Click to upload custom banner image</p>
