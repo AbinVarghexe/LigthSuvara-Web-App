@@ -42,7 +42,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import { getUser } from "../../features/users/services/userService";
 import { useAuth } from "../../context/AuthContext";

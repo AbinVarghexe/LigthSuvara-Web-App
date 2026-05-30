@@ -244,7 +244,7 @@ function DateTimePicker({
 
 const getPredefinedFields = (): CustomField[] => [
     { id: "name", name: "Name", type: "text", isMandatory: true },
-    { id: "phone", name: "Phone Number", type: "phone", isMandatory: true },
+    { id: "phone", name: "Phone Number", type: "text", isMandatory: true },
     { id: "email", name: "Email", type: "text", isMandatory: false },
     { id: "qualification", name: "Qualification", type: "text", isMandatory: false },
     { id: "currentStatus", name: "Current Status / Occupation", type: "text", isMandatory: false },
@@ -468,7 +468,7 @@ export function PublicRegistration() {
                                                 updates.type = 'text';
                                             } else if (val === 'phone') {
                                                 updates.id = 'phone';
-                                                updates.type = 'phone';
+                                                updates.type = 'text';
                                             } else if (val === 'email') {
                                                 updates.id = 'email';
                                                 updates.type = 'text';
@@ -588,21 +588,14 @@ export function PublicRegistration() {
 
     const openProgramDialog = (program?: ProgramMetadata) => {
         if (program) {
-            const existingFields = program.customFields || [];
-            const predefinedFields = getPredefinedFields();
-            
-            // Merge predefined fields that are missing in the existing fields
-            const mergedFields = [...existingFields];
-            predefinedFields.forEach(prefField => {
-                const exists = existingFields.some(ef => ef.id === prefField.id);
-                if (!exists) {
-                    mergedFields.push(prefField);
-                }
-            });
+            // Use existing fields if present, else fallback to predefined fields
+            const existingFields = program.customFields !== undefined
+                ? program.customFields
+                : getPredefinedFields();
 
             setProgramForm({ 
                 ...program,
-                customFields: mergedFields
+                customFields: existingFields
             });
             setEditingProgramId(program.id);
         } else {
@@ -715,7 +708,7 @@ export function PublicRegistration() {
     }, [programs, selectedProgramId]);
 
     const tableFields = useMemo(() => {
-        if (activeProgram && activeProgram.customFields && activeProgram.customFields.length > 0) {
+        if (activeProgram && activeProgram.customFields !== undefined) {
             return activeProgram.customFields;
         }
         return getPredefinedFields();
@@ -731,7 +724,7 @@ export function PublicRegistration() {
     }, [selectedReg, programs]);
 
     const selectedRegFields = useMemo(() => {
-        if (selectedRegProgram && selectedRegProgram.customFields && selectedRegProgram.customFields.length > 0) {
+        if (selectedRegProgram && selectedRegProgram.customFields !== undefined) {
             return selectedRegProgram.customFields;
         }
         return getPredefinedFields();
@@ -743,7 +736,7 @@ export function PublicRegistration() {
     }, [regForm.programId, programs]);
 
     const editingRegFields = useMemo(() => {
-        if (editingRegProgram && editingRegProgram.customFields && editingRegProgram.customFields.length > 0) {
+        if (editingRegProgram && editingRegProgram.customFields !== undefined) {
             return editingRegProgram.customFields;
         }
         return getPredefinedFields();
@@ -907,11 +900,23 @@ export function PublicRegistration() {
                                             <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${status.className}`}>
                                                 {status.label}
                                             </div>
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openProgramDialog(program)}>
-                                                    <Edit2 className="w-4 h-4" />
+                                            <div className="flex gap-1.5">
+                                                <Button 
+                                                    size="icon" 
+                                                    variant="outline" 
+                                                    className="h-8 w-8 border-primary/10 hover:bg-primary/10 hover:text-primary transition-colors bg-background" 
+                                                    onClick={() => openProgramDialog(program)}
+                                                    title="Edit Program"
+                                                >
+                                                    <Edit2 className="w-4 h-4 text-muted-foreground" />
                                                 </Button>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteProgram(program.id!)}>
+                                                <Button 
+                                                    size="icon" 
+                                                    variant="outline" 
+                                                    className="h-8 w-8 text-destructive border-destructive/10 hover:bg-destructive/10 hover:text-destructive transition-colors bg-background" 
+                                                    onClick={() => handleDeleteProgram(program.id!)}
+                                                    title="Delete Program"
+                                                >
                                                     <Trash2 className="w-4 h-4" />
                                                 </Button>
                                             </div>
