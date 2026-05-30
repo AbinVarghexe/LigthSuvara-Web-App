@@ -8,6 +8,7 @@ import {
     Edit2,
     Type,
     Layout as LayoutIcon,
+    Phone,
 } from "lucide-react";
 import {
     Card,
@@ -412,6 +413,28 @@ export function AppControl() {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Contact Information Card */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Phone className="w-5 h-5 text-primary" />
+                            Contact Information
+                        </CardTitle>
+                        <CardDescription>Configure the administrator phone number for the mobile app</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Admin Phone Number</Label>
+                            <Input 
+                                type="tel"
+                                value={loginConfig?.contactPhone || ""} 
+                                onChange={(e) => setLoginConfig(prev => prev ? { ...prev, contactPhone: e.target.value } : null)}
+                                placeholder="e.g., +919447601251"
+                            />
                         </div>
                     </CardContent>
                 </Card>

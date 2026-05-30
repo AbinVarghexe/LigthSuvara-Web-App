@@ -18,6 +18,7 @@ export interface LoginScreenConfig {
     verseTitleBgColor?: "white" | "black" | "gold" | "blue" | null;
     hideVerseText?: boolean;
     carousel: CarouselItem[];
+    contactPhone?: string;
 }
 
 export interface AppThemeConfig {
@@ -47,6 +48,7 @@ export const getLoginScreenConfig = async (): Promise<LoginScreenConfig> => {
             verseTitleBgColor: "gold",
             hideVerseText: false,
             carousel: [],
+            contactPhone: "",
         };
     }
 };

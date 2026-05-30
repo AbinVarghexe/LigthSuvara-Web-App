@@ -151,9 +151,15 @@ function DateTimePicker({
                     className="w-[340px] p-0 shadow-2xl border-primary/20 bg-background overflow-hidden rounded-2xl" 
                     align="start" 
                     collisionPadding={16}
-                    onWheel={(e) => e.stopPropagation()}
                 >
-                    <div className="max-h-[400px] overflow-y-auto overflow-x-hidden scroll-smooth [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent] focus:outline-none" tabIndex={-1}>
+                    <div 
+                        className="max-h-[480px] overflow-y-auto overflow-x-hidden scroll-smooth [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent] focus:outline-none" 
+                        tabIndex={-1}
+                        onWheel={(e) => {
+                            e.stopPropagation();
+                            e.currentTarget.scrollTop += e.deltaY;
+                        }}
+                    >
                         <div className="p-2 flex justify-center translate-y-1">
                             <Calendar
                                 mode="single"
@@ -192,7 +198,7 @@ function DateTimePicker({
                                             <SelectTrigger className="w-15 h-10 text-sm font-bold border-primary/10 shadow-sm bg-background hover:border-primary/40 transition-all rounded-xl">
                                                 <SelectValue />
                                             </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectContent position="popper" className="max-h-60 overflow-y-auto">
                                                 {Array.from({ length: 12 }).map((_, i) => (
                                                     <SelectItem key={i + 1} value={(i + 1).toString()} className="text-sm font-medium">{ (i + 1).toString().padStart(2, '0') }</SelectItem>
                                                 ))}
@@ -207,7 +213,7 @@ function DateTimePicker({
                                             <SelectTrigger className="w-15 h-10 text-sm font-bold border-primary/10 shadow-sm bg-background hover:border-primary/40 transition-all rounded-xl">
                                                 <SelectValue />
                                             </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent position="popper" className="max-h-60 overflow-y-auto">
                                             {Array.from({ length: 60 }).map((_, i) => (
                                                 <SelectItem key={i} value={i.toString()} className="text-sm">{i.toString().padStart(2, '0')}</SelectItem>
                                             ))}
@@ -238,12 +244,28 @@ function DateTimePicker({
 
 const getPredefinedFields = (): CustomField[] => [
     { id: "name", name: "Name", type: "text", isMandatory: true },
-    { id: "phone", name: "Phone Number", type: "text", isMandatory: true },
+    { id: "phone", name: "Phone Number", type: "phone", isMandatory: true },
     { id: "email", name: "Email", type: "text", isMandatory: false },
     { id: "qualification", name: "Qualification", type: "text", isMandatory: false },
     { id: "currentStatus", name: "Current Status / Occupation", type: "text", isMandatory: false },
     { id: "address", name: "Address", type: "text", isMandatory: false },
 ];
+const getProgramStatus = (program: ProgramMetadata) => {
+    const now = new Date();
+    const startDate = program.startDate instanceof Timestamp ? program.startDate.toDate() : new Date(program.startDate);
+    const endDate = program.endDate instanceof Timestamp ? program.endDate.toDate() : new Date(program.endDate);
+
+    if (!program.isActive) {
+        return { label: "Inactive", className: "bg-gray-100 text-gray-500" };
+    }
+    if (now < startDate) {
+        return { label: "Upcoming", className: "bg-blue-100 text-blue-700" };
+    }
+    if (now > endDate) {
+        return { label: "Closed", className: "bg-red-100 text-red-700" };
+    }
+    return { label: "Active", className: "bg-green-100 text-green-700" };
+};
 
 export function PublicRegistration() {
     const [programs, setPrograms] = useState<ProgramMetadata[]>([]);
@@ -436,17 +458,53 @@ export function PublicRegistration() {
                                 <div className="w-32 space-y-1">
                                     <Label className="text-xs">Field Type</Label>
                                     <Select
-                                        value={field.type}
-                                        onValueChange={(val: any) => updateField(field.id, { type: val })}
+                                        value={['name', 'phone', 'email', 'qualification', 'currentStatus', 'address'].includes(field.id) ? field.id : field.type}
+                                        onValueChange={(val: any) => {
+                                            const updates: Partial<CustomField> = {};
+                                            const predefined = ['name', 'phone', 'email', 'qualification', 'currentStatus', 'address'];
+                                            
+                                            if (val === 'name') {
+                                                updates.id = 'name';
+                                                updates.type = 'text';
+                                            } else if (val === 'phone') {
+                                                updates.id = 'phone';
+                                                updates.type = 'phone';
+                                            } else if (val === 'email') {
+                                                updates.id = 'email';
+                                                updates.type = 'text';
+                                            } else if (val === 'qualification') {
+                                                updates.id = 'qualification';
+                                                updates.type = 'text';
+                                            } else if (val === 'currentStatus') {
+                                                updates.id = 'currentStatus';
+                                                updates.type = 'text';
+                                            } else if (val === 'address') {
+                                                updates.id = 'address';
+                                                updates.type = 'text';
+                                            } else {
+                                                updates.type = val;
+                                                // If switching away from a predefined ID, revert to random ID
+                                                if (predefined.includes(field.id)) {
+                                                    updates.id = "field_" + Math.random().toString(36).substring(2, 9);
+                                                }
+                                            }
+                                            updateField(field.id, updates);
+                                        }}
                                     >
                                         <SelectTrigger className="h-8 text-xs rounded-lg">
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent position="popper" className="max-h-60 overflow-y-auto">
                                             <SelectItem value="text">Text</SelectItem>
                                             <SelectItem value="number">Number</SelectItem>
                                             <SelectItem value="boolean">Yes/No</SelectItem>
                                             <SelectItem value="select">Dropdown</SelectItem>
+                                            <SelectItem value="name">Name Field (id: name)</SelectItem>
+                                            <SelectItem value="phone">Phone Number Field (id: phone)</SelectItem>
+                                            <SelectItem value="email">Email Field (id: email)</SelectItem>
+                                            <SelectItem value="qualification">Qualification Field (id: qualification)</SelectItem>
+                                            <SelectItem value="currentStatus">Current Status Field (id: currentStatus)</SelectItem>
+                                            <SelectItem value="address">Address Field (id: address)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -840,47 +898,50 @@ export function PublicRegistration() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {programs.map((program) => (
-                            <Card key={program.id} className="relative group overflow-hidden border-primary/10 hover:border-primary/30 transition-all">
-                                <CardHeader className="pb-2">
-                                    <div className="flex justify-between items-start">
-                                        <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${program.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                            {program.isActive ? 'Active' : 'Inactive'}
+                        {programs.map((program) => {
+                            const status = getProgramStatus(program);
+                            return (
+                                <Card key={program.id} className="relative group overflow-hidden border-primary/10 hover:border-primary/30 transition-all">
+                                    <CardHeader className="pb-2">
+                                        <div className="flex justify-between items-start">
+                                            <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${status.className}`}>
+                                                {status.label}
+                                            </div>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openProgramDialog(program)}>
+                                                    <Edit2 className="w-4 h-4" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteProgram(program.id!)}>
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openProgramDialog(program)}>
-                                                <Edit2 className="w-4 h-4" />
-                                            </Button>
-                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteProgram(program.id!)}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
+                                        <CardTitle className="text-xl mt-2">{program.name}</CardTitle>
+                                        <CardDescription className="line-clamp-2">{program.regInfo || "No additional information"}</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="pt-2 space-y-3">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <CalendarIcon className="w-4 h-4" />
+                                            <span>{format(program.startDate.toDate(), "PPP p")} - {format(program.endDate.toDate(), "PPP p")}</span>
                                         </div>
-                                    </div>
-                                    <CardTitle className="text-xl mt-2">{program.name}</CardTitle>
-                                    <CardDescription className="line-clamp-2">{program.regInfo || "No additional information"}</CardDescription>
-                                </CardHeader>
-                                <CardContent className="pt-2 space-y-3">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <CalendarIcon className="w-4 h-4" />
-                                        <span>{format(program.startDate.toDate(), "PPP p")} - {format(program.endDate.toDate(), "PPP p")}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Users className="w-4 h-4" />
-                                        <span>{registrations.filter(r => r.programId === program.id).length} Submissions</span>
-                                    </div>
-                                    <Button 
-                                        variant="outline" 
-                                        className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
-                                        onClick={() => {
-                                            setActiveTab("submissions");
-                                            setSearchTerm(program.name || "");
-                                        }}
-                                    >
-                                        View Registrations <ChevronRight className="w-4 h-4 ml-2" />
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        ))}
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Users className="w-4 h-4" />
+                                            <span>{registrations.filter(r => r.programId === program.id).length} Submissions</span>
+                                        </div>
+                                        <Button 
+                                            variant="outline" 
+                                            className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                                            onClick={() => {
+                                                setActiveTab("submissions");
+                                                setSearchTerm(program.name || "");
+                                            }}
+                                        >
+                                            View Registrations <ChevronRight className="w-4 h-4 ml-2" />
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
                     </div>
                 </TabsContent>
 
