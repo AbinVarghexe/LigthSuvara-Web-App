@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { Label } from "@/components/ui/label";
 import { createTeacherSchema, CreateTeacherInput, Teacher } from "../types";
 import { getCurrentAcademicYear, getAcademicYears } from "@/lib/academic-years";
 import { TeacherService } from "../services/teacherService";
@@ -65,10 +66,25 @@ export function CreateTeacherForm({
   const [schoolSearch, setSchoolSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingSchools, setLoadingSchools] = useState(true);
+  const [selectedForane, setSelectedForane] = useState<string>("all");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(
     initialData?.profilePicture || null,
   );
+
+  const uniqueForanes = Array.from(
+    new Set(schools.map((s) => s.forane).filter(Boolean))
+  ).sort();
+
+  useEffect(() => {
+    if (initialData && schools.length > 0) {
+      const schoolId = (initialData as any).schoolId || initialData.parishId;
+      const school = schools.find((s) => s.id === schoolId);
+      if (school?.forane) {
+        setSelectedForane(school.forane);
+      }
+    }
+  }, [initialData, schools]);
 
   // Helper to safely convert various date formats (ISO string, Date, or Firebase Timestamp) to ISO string
   const toIsoDate = (val: any) => {
@@ -295,6 +311,29 @@ export function CreateTeacherForm({
             )}
           />
 
+          <div className="space-y-2">
+            <Label>Forane</Label>
+            <Select
+              value={selectedForane}
+              onValueChange={(val) => {
+                setSelectedForane(val);
+                form.setValue("parishId", "");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Foranes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Foranes</SelectItem>
+                {uniqueForanes.map((forane) => (
+                  <SelectItem key={forane} value={forane}>
+                    {forane}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <FormField
             control={form.control}
             name="parishId"
@@ -306,7 +345,7 @@ export function CreateTeacherForm({
                     field.onChange(val);
                     setSchoolSearch("");
                   }}
-                  defaultValue={field.value}
+                  value={field.value}
                   disabled={loadingSchools}
                 >
                   <FormControl>
@@ -332,10 +371,12 @@ export function CreateTeacherForm({
                       />
                     </div>
                     {schools
-                      .filter((s) =>
-                        s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
-                        s.forane.toLowerCase().includes(schoolSearch.toLowerCase())
-                      )
+                      .filter((s) => {
+                        const matchesSearch = s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
+                          s.forane.toLowerCase().includes(schoolSearch.toLowerCase());
+                        const matchesForane = selectedForane === "all" || s.forane === selectedForane;
+                        return matchesSearch && matchesForane;
+                      })
                       .map((school) => (
                         <SelectItem key={school.id} value={school.id}>
                           {school.name}
@@ -346,10 +387,12 @@ export function CreateTeacherForm({
                           ) : null}
                         </SelectItem>
                       ))}
-                    {schools.filter((s) =>
-                      s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
-                      s.forane.toLowerCase().includes(schoolSearch.toLowerCase())
-                    ).length === 0 && (
+                    {schools.filter((s) => {
+                      const matchesSearch = s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
+                        s.forane.toLowerCase().includes(schoolSearch.toLowerCase());
+                      const matchesForane = selectedForane === "all" || s.forane === selectedForane;
+                      return matchesSearch && matchesForane;
+                    }).length === 0 && (
                         <div className="py-3 text-center text-sm text-muted-foreground italic">
                           No schools found
                         </div>

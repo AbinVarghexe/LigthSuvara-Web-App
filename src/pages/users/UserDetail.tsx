@@ -55,6 +55,52 @@ import { EventData } from "../../features/events/services/eventService";
 import { ImageWithFallback } from "../../components/figma/ImageWithFallback";
 import { useAuth } from "../../context/AuthContext";
 
+const toTitleCase = (str: string): string => {
+  if (!str) return str;
+  return str
+    .toLowerCase()
+    .replace(/(^|[\s.])([a-z])/g, (_, sep, char) => sep + char.toUpperCase());
+};
+
+const getFormattedParishUserName = (saintName: string, placeName: string, foraneName?: string): string => {
+  let saint = (saintName || "").trim();
+  let place = (placeName || "").trim();
+  const forane = (foraneName || "").trim();
+
+  saint = saint.replace(/\./g, " ").replace(/\s+/g, " ").trim();
+
+  const isForane = 
+    /forane/i.test(saint) || 
+    /forane/i.test(place) || 
+    (forane && (
+      place.toLowerCase() === forane.toLowerCase() || 
+      saint.toLowerCase().includes(forane.toLowerCase())
+    ));
+
+  let cleanSaint = toTitleCase(saint)
+    .replace(/forane\s+church/gi, "")
+    .replace(/forane/gi, "")
+    .replace(/church/gi, "")
+    .replace(/cathedral/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const formattedPlace = toTitleCase(place);
+  const suffix = isForane ? "Forane Church" : "Church";
+
+  if (cleanSaint && formattedPlace) {
+    if (cleanSaint.toLowerCase() === formattedPlace.toLowerCase()) {
+      return `${cleanSaint} ${suffix}`;
+    }
+    return `${cleanSaint} ${suffix} ${formattedPlace}`;
+  } else if (cleanSaint) {
+    return `${cleanSaint} ${suffix}`;
+  } else if (formattedPlace) {
+    return `${formattedPlace} ${suffix}`;
+  }
+  return "";
+};
+
 export function UserDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -275,10 +321,10 @@ export function UserDetail() {
             </div>
             <h2 className="text-xl font-bold text-foreground mb-1">
               {user.role === "parish"
-                ? (user.name || user.fullName || user.schoolname || user.schoolName || "Unnamed User")
+                ? (user.name || user.fullName || getFormattedParishUserName(user.parish || "", user.parish || "", user.forane))
                 : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
             </h2>
-            <div className="flex justify-center mb-6">
+            <div className="flex justify-center gap-2 mb-6 flex-wrap">
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${user.role === "admin"
                     ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
@@ -302,6 +348,11 @@ export function UserDetail() {
                       ? "Parish"
                       : "School Account"}
               </span>
+              {(user.parishCode || (user as any).code) && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border bg-gray-50 text-gray-700 border-gray-200 dark:bg-zinc-900 dark:text-gray-300 dark:border-zinc-800">
+                  Code: {user.parishCode || (user as any).code}
+                </span>
+              )}
             </div>
 
             <div className="space-y-4 text-left pt-6 border-t border-border">

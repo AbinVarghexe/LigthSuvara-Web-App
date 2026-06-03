@@ -15,6 +15,7 @@ import {
   Plus,
   Users as UsersIcon,
   ArrowLeft,
+  RefreshCw,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "../../components/ui/button";
@@ -67,6 +68,8 @@ import {
   getDocs,
   orderBy,
   query,
+  doc,
+  updateDoc,
 } from "firebase/firestore";
 import { ParishService } from "../../features/parishes/services/parishService";
 import * as XLSX from "xlsx";
@@ -109,6 +112,8 @@ export function Users() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [selectedForaneFilter, setSelectedForaneFilter] = useState<string>("all");
+  const [selectedParishFilter, setSelectedParishFilter] = useState<string>("all");
   const [newUsers, setNewUsers] = useState<NewUser[]>([{
     email: "",
     fullName: "",
@@ -188,12 +193,7 @@ export function Users() {
             const schoolNameCombined = formatSchoolName(saintName, parishPlace);
             const updatedWithAutofill = [...newUsers];
 
-            const cleanSaint = saintName.replace(/\./g, "").trim();
-            const normalizedSaint = normalizeSaintName(cleanSaint);
-            const formattedParishName = parishPlace
-              ? `${normalizedSaint} Church ${toTitleCase(parishPlace)}`
-              : `${normalizedSaint} Church`;
-            const finalParishName = formattedParishName.replace(/\s+/g, ' ').trim();
+            const finalParishName = getFormattedParishUserName(saintName, parishPlace);
 
             updatedWithAutofill[index] = {
               ...updatedWithAutofill[index],
@@ -301,6 +301,45 @@ export function Users() {
     return "";
   };
 
+  const getFormattedParishUserName = (saintName: string, placeName: string, foraneName?: string): string => {
+    let saint = (saintName || "").trim();
+    let place = (placeName || "").trim();
+    const forane = (foraneName || "").trim();
+
+    saint = saint.replace(/\./g, " ").replace(/\s+/g, " ").trim();
+
+    const isForane = 
+      /forane/i.test(saint) || 
+      /forane/i.test(place) || 
+      (forane && (
+        place.toLowerCase() === forane.toLowerCase() || 
+        saint.toLowerCase().includes(forane.toLowerCase())
+      ));
+
+    let cleanSaint = toTitleCase(saint)
+      .replace(/forane\s+church/gi, "")
+      .replace(/forane/gi, "")
+      .replace(/church/gi, "")
+      .replace(/cathedral/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const formattedPlace = toTitleCase(place);
+    const suffix = isForane ? "Forane Church" : "Church";
+
+    if (cleanSaint && formattedPlace) {
+      if (cleanSaint.toLowerCase() === formattedPlace.toLowerCase()) {
+        return `${cleanSaint} ${suffix}`;
+      }
+      return `${cleanSaint} ${suffix} ${formattedPlace}`;
+    } else if (cleanSaint) {
+      return `${cleanSaint} ${suffix}`;
+    } else if (formattedPlace) {
+      return `${formattedPlace} ${suffix}`;
+    }
+    return "";
+  };
+
   const handleCreateUser = async () => {
     const invalidUsers = newUsers.filter(u => !u.email || !u.role || !u.password);
     if (invalidUsers.length > 0) {
@@ -328,6 +367,7 @@ export function Users() {
           parishName: "",
           schoolId: "",
         }]);
+        await resolveUnlinkedParishes();
         fetchUsers();
       } else {
         const errMsg = result.errors?.[0]?.error || "Failed to create users";
@@ -417,9 +457,114 @@ export function Users() {
     fetchForanes();
   }, []);
 
+  useEffect(() => {
+    if (selectedForaneFilter && selectedForaneFilter !== "all") {
+      const foraneDoc = foranesData.find(
+        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+      );
+      if (foraneDoc && !parishesPerForane[foraneDoc.id]) {
+        fetchParishesForForane(foraneDoc.id);
+      }
+    }
+  }, [selectedForaneFilter, foranesData, parishesPerForane, fetchParishesForForane]);
+
+  const getAvailableParishes = (): string[] => {
+    if (selectedForaneFilter !== "all") {
+      const foraneDoc = foranesData.find(
+        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+      );
+      if (foraneDoc && parishesPerForane[foraneDoc.id]) {
+        return parishesPerForane[foraneDoc.id]
+          .map(p => p.place || p.saint || p.name)
+          .filter((p): p is string => !!p);
+      }
+      const filtered = users.filter(u => (u.forane || "").toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim());
+      return Array.from(new Set(filtered.map(u => u.parish)))
+        .filter((p): p is string => !!p)
+        .sort();
+    } else {
+      return Array.from(new Set(users.map(u => u.parish)))
+        .filter((p): p is string => !!p)
+        .sort();
+    }
+  };
+
+  const normalizeName = (name: string): string => {
+    if (!name) return '';
+    return name.toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .replace(/pp/g, 'p')
+      .replace(/tt/g, 't')
+      .replace(/th/g, 't')
+      .replace(/nn/g, 'n')
+      .replace(/mm/g, 'm')
+      .replace(/ll/g, 'l')
+      .replace(/y$/g, 'i')
+      .replace(/y/g, 'i')
+      .replace(/u$/g, '')
+      .replace(/o$/g, 'a')
+      .replace(/om$/g, 'am')
+      .replace(/c/g, 'k')
+      .replace(/church/gi, '')
+      .replace(/cathedral/gi, '')
+      .replace(/school/gi, '')
+      .replace(/st/gi, '')
+      .replace(/saint/gi, '')
+      .trim();
+  };
+
+  const isDuplicateParishName = (name1: string, name2: string): boolean => {
+    const n1 = normalizeName(name1);
+    const n2 = normalizeName(name2);
+    if (!n1 || !n2) return false;
+    return n1.includes(n2) || n2.includes(n1);
+  };
+
   const filteredUsers = users
     .filter((user) => {
       if (user.role !== activeTab) return false;
+      
+      // Forane filter check
+      if (selectedForaneFilter !== "all") {
+        const uForane = (user.forane || "").toLowerCase().trim();
+        const fFilter = selectedForaneFilter.toLowerCase().trim();
+        if (uForane !== fFilter) {
+          return false;
+        }
+      }
+      
+      // Parish filter check
+      if (selectedParishFilter !== "all") {
+        let isMatch = false;
+        
+        // 1. Try matching by code
+        const foraneDoc = foranesData.find(
+          f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+        );
+        if (foraneDoc && parishesPerForane[foraneDoc.id]) {
+          const selectedParishDoc = parishesPerForane[foraneDoc.id].find(
+            p => p.name === selectedParishFilter || p.place === selectedParishFilter || p.saint === selectedParishFilter
+          );
+          if (selectedParishDoc && selectedParishDoc.code) {
+            const uCode = String(user.parishCode || user.code || "").trim();
+            const sCode = String(selectedParishDoc.code).trim();
+            if (uCode && uCode === sCode) {
+              isMatch = true;
+            }
+          }
+        }
+        
+        // 2. Fallback to name similarity match
+        if (!isMatch) {
+          const uParish = user.parish || user.parishName || user.name || "";
+          isMatch = isDuplicateParishName(uParish, selectedParishFilter);
+        }
+        
+        if (!isMatch) {
+          return false;
+        }
+      }
+
       const name = user.schoolName || user.schoolname || user.fullName || "";
       return (
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -583,6 +728,132 @@ export function Users() {
     }
   };
 
+  const executeBulkCreation = async (newUsersList: Partial<UserData>[]) => {
+    const chunkSize = 50;
+    let totalCreated = 0;
+    let totalFailed = 0;
+    const allErrors: any[] = [];
+    
+    const toastId = toast.loading(`Starting bulk user creation...`);
+    
+    for (let i = 0; i < newUsersList.length; i += chunkSize) {
+      const chunk = newUsersList.slice(i, i + chunkSize);
+      toast.loading(`Creating users: ${i + 1} to ${Math.min(i + chunkSize, newUsersList.length)} of ${newUsersList.length}...`, { id: toastId });
+      
+      try {
+        const result = await bulkCreateUsers(chunk);
+        totalCreated += result.created;
+        totalFailed += result.failed;
+        if (result.errors) {
+          allErrors.push(...result.errors);
+        }
+      } catch (err: any) {
+        console.error(`Batch starting at ${i} failed:`, err);
+        totalFailed += chunk.length;
+        chunk.forEach(u => {
+          allErrors.push({
+            email: u.email || 'unknown',
+            error: err.message || 'Batch request failed/timed out'
+          });
+        });
+      }
+    }
+
+    toast.dismiss(toastId);
+    
+    if (totalFailed === 0) {
+      toast.success(`Successfully created all ${totalCreated} users!`);
+    } else if (totalCreated > 0) {
+      toast.warning(`Created ${totalCreated} users, ${totalFailed} failed. See console for details.`);
+      console.log("Bulk creation errors:", allErrors);
+    } else {
+      toast.error(`Failed to create users. All ${totalFailed} attempts failed.`);
+      console.log("Bulk creation errors:", allErrors);
+    }
+
+    // Post-sync user codes client-side to guarantee they are written in Firestore (bypassing old Cloud Function caches)
+    try {
+      const usersData = await getUsers();
+      const updatePromises = newUsersList.map(async (u) => {
+        if (!u.email) return;
+        const createdUser = usersData.find(ud => ud.email?.toLowerCase().trim() === u.email?.toLowerCase().trim());
+        if (createdUser && createdUser.id) {
+          const userDocRef = doc(db, "users", createdUser.id);
+          const updates: any = {};
+          const targetCode = u.parishCode || u.code || "";
+          if (targetCode) {
+            if (createdUser.parishCode !== targetCode) updates.parishCode = targetCode;
+            if (createdUser.code !== targetCode) updates.code = targetCode;
+          }
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(userDocRef, updates);
+          }
+        }
+      });
+      await Promise.all(updatePromises);
+    } catch (err) {
+      console.error("Failed to post-sync user codes:", err);
+    }
+
+    // Auto-link any newly created parishes that were created in the same batch as their schools
+    await resolveUnlinkedParishes();
+
+    setIsDialogOpen(false);
+    fetchUsers();
+  };
+
+  const resolveUnlinkedParishes = async () => {
+    try {
+      const usersData = await getUsers();
+      const schools = usersData.filter(u => u.role === "school");
+      const unlinkedParishes = usersData.filter(u => u.role === "parish" && !u.schoolId);
+      
+      if (unlinkedParishes.length === 0) return;
+      
+      console.log(`Found ${unlinkedParishes.length} unlinked parish users. Resolving links...`);
+      
+      const updatePromises = unlinkedParishes.map(async (parish) => {
+        // 1. Try matching by code
+        let matchingSchool = null;
+        const parishCode = parish.parishCode || (parish as any).code;
+        if (parishCode) {
+          const code = String(parishCode).trim();
+          matchingSchool = schools.find(s => {
+            const sCode = s.parishCode || (s as any).code;
+            return sCode && String(sCode).trim() === code;
+          });
+        }
+        
+        // 2. Fallback to matching by clean schoolName and forane
+        if (!matchingSchool) {
+          const cleanString = (val: string) => (val || "").toLowerCase().replace(/[^a-z0-9]/gi, "").trim();
+          const pSchoolName = cleanString(parish.schoolName || parish.schoolname || "");
+          const pForane = cleanString(parish.forane || "");
+          
+          matchingSchool = schools.find(s => {
+            const sSchoolName = cleanString(s.schoolName || s.schoolname || "");
+            const sForane = cleanString(s.forane || "");
+            return pSchoolName === sSchoolName && pForane === sForane;
+          });
+        }
+        
+        if (matchingSchool) {
+          const parishDocRef = doc(db, "users", parish.id || parish.uid);
+          await updateDoc(parishDocRef, {
+            schoolId: matchingSchool.uid || matchingSchool.id,
+            schoolName: matchingSchool.schoolName || matchingSchool.schoolname || "",
+            schoolname: matchingSchool.schoolName || matchingSchool.schoolname || ""
+          });
+          console.log(`Auto-linked parish ${parish.email} to school ${matchingSchool.email}`);
+        }
+      });
+      
+      await Promise.all(updatePromises);
+    } catch (err) {
+      console.error("Failed to resolve unlinked parishes:", err);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -653,8 +924,9 @@ export function Users() {
                   user.phoneNumber = val;
                 } else if (hLower === 'role') {
                   user.role = val;
-                } else if (hLower === 'parishcode') {
+                } else if (hLower === 'parishcode' || hLower === 'code') {
                   user.parishCode = val;
+                  user.code = val;
                 } else if (hLower === 'techsupporter') {
                   user.fullName = val;
                 }
@@ -678,15 +950,16 @@ export function Users() {
                 continue;
               }
 
-              if (!user.parishCode) {
+              const rawCode = user.parishCode || user.code;
+              if (!rawCode) {
                 console.warn(`Skipping user ${user.email}: Missing parishCode (school code is required to retrieve details from database)`);
                 continue;
               }
 
               try {
-                const parishDoc = parishCacheMap.get(user.parishCode.trim());
+                const parishDoc = parishCacheMap.get(String(rawCode).trim());
                 if (!parishDoc) {
-                  console.warn(`Skipping user ${user.email}: Parish/school code ${user.parishCode} not found in database`);
+                  console.warn(`Skipping user ${user.email}: Parish/school code ${rawCode} not found in database`);
                   continue;
                 }
 
@@ -705,11 +978,7 @@ export function Users() {
                 user.schoolName = combinedSchoolName;
 
                 if (user.role === "parish") {
-                  const cleanSaint = normalizedSaint.replace(/\./g, "").trim();
-                  const formattedParishName = parishPlace
-                    ? `${cleanSaint} Church ${toTitleCase(parishPlace)}`
-                    : `${cleanSaint} Church`;
-                  const finalParishName = formattedParishName.replace(/\s+/g, ' ').trim();
+                  const finalParishName = getFormattedParishUserName(saintName, parishPlace);
                   user.name = finalParishName;
                   user.fullName = finalParishName;
                 } else if (user.role === "school") {
@@ -726,19 +995,7 @@ export function Users() {
           }
 
           if (newUsers.length > 0) {
-            const result = await bulkCreateUsers(newUsers);
-
-            if (result.success) {
-              toast.success(`Successfully created ${result.created} users`);
-            } else {
-              toast.warning(
-                `Created ${result.created} users, ${result.failed} failed. See console for details.`
-              );
-              console.log("Bulk creation results:", result);
-            }
-
-            setIsDialogOpen(false);
-            fetchUsers();
+            await executeBulkCreation(newUsers);
           } else {
             toast.warning("No valid users (email and role required) found in Excel");
           }
@@ -784,8 +1041,9 @@ export function Users() {
                   user.phoneNumber = val;
                 } else if (hLower === 'role') {
                   user.role = val;
-                } else if (hLower === 'parishcode') {
+                } else if (hLower === 'parishcode' || hLower === 'code') {
                   user.parishCode = val;
+                  user.code = val;
                 } else if (hLower === 'techsupporter') {
                   user.fullName = val;
                 }
@@ -857,19 +1115,7 @@ export function Users() {
           }
 
           if (newUsers.length > 0) {
-            const result = await bulkCreateUsers(newUsers);
-
-            if (result.success) {
-              toast.success(`Successfully created ${result.created} users`);
-            } else {
-              toast.warning(
-                `Created ${result.created} users, ${result.failed} failed. See console for details.`
-              );
-              console.log("Bulk creation results:", result);
-            }
-
-            setIsDialogOpen(false);
-            fetchUsers();
+            await executeBulkCreation(newUsers);
           } else {
             toast.warning("No valid users (email and role required) found in CSV");
           }
@@ -910,9 +1156,19 @@ export function Users() {
             </Button>
             <h1 className="text-2xl font-bold text-foreground">All Registered Users</h1>
           </div>
-          <div className="text-sm text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border">
-            Total Database Users:{" "}
-            <span className="font-semibold text-foreground">{users.length}</span>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              className="border-border hover:bg-muted text-foreground"
+              onClick={fetchUsers}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+            <div className="text-sm text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border">
+              Total Database Users:{" "}
+              <span className="font-semibold text-foreground">{users.length}</span>
+            </div>
           </div>
         </div>
 
@@ -996,6 +1252,11 @@ export function Users() {
                         <p className="text-sm text-muted-foreground truncate max-w-[150px]">
                           {user.email}
                         </p>
+                        {(user.parishCode || user.code) && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Code: {user.parishCode || user.code}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <DropdownMenu>
@@ -1140,6 +1401,15 @@ export function Users() {
           >
             <UsersIcon className="w-4 h-4 mr-2" />
             All Users
+          </Button>
+
+          <Button
+            variant="outline"
+            className="border-border hover:bg-muted text-foreground"
+            onClick={fetchUsers}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
           </Button>
 
           {/* Create Individual User */}
@@ -1528,10 +1798,8 @@ export function Users() {
                                   }
 
                                   let formattedParishName = "";
-                                  if (saintName && parishPlace) {
-                                    const cleanSaint = saintName.replace(/\./g, "").trim();
-                                    const normalizedSaint = normalizeSaintName(cleanSaint);
-                                    formattedParishName = `${normalizedSaint} Church ${toTitleCase(parishPlace)}`;
+                                  if (saintName || parishPlace) {
+                                    formattedParishName = getFormattedParishUserName(saintName, parishPlace);
                                   } else {
                                     formattedParishName = getAutofilledName(schoolName, parishPlace || selectedSchool?.parish || "");
                                   }
@@ -1833,6 +2101,8 @@ export function Users() {
           setSearchParams({ tab: nextTab });
           setSelectedUserIds([]);
           setIsSelectMode(false);
+          setSelectedForaneFilter("all");
+          setSelectedParishFilter("all");
         }}
       >
         <TabsList className="grid w-full max-w-[400px] grid-cols-2">
@@ -1853,6 +2123,49 @@ export function Users() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+
+          <div className="w-full md:w-[220px]">
+            <Select
+              value={selectedForaneFilter}
+              onValueChange={(val) => {
+                setSelectedForaneFilter(val);
+                setSelectedParishFilter("all");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Foranes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Foranes</SelectItem>
+                {foranesData.map((f) => (
+                  <SelectItem key={f.id} value={f.name}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="w-full md:w-[220px]">
+            <Select
+              value={selectedParishFilter}
+              onValueChange={(val) => {
+                setSelectedParishFilter(val);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Parishes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Parishes</SelectItem>
+                {getAvailableParishes().map((pName) => (
+                  <SelectItem key={pName} value={pName}>
+                    {toTitleCase(pName)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -1981,14 +2294,21 @@ export function Users() {
                       )}
                     </div>
                     <div>
-                      <h3 className="font-medium text-foreground">
-                        {user.role === "parish"
-                          ? (user.name || user.fullName || user.schoolname || user.schoolName || "Unnamed User")
-                          : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
+                      <h3 className="font-medium text-foreground flex items-center gap-2 flex-wrap">
+                        <span>
+                          {user.role === "parish"
+                            ? (user.name || user.fullName || getFormattedParishUserName(user.parish || "", user.parish || "", user.forane))
+                            : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
+                        </span>
                       </h3>
                       <p className="text-sm text-muted-foreground truncate max-w-[150px]">
                         {user.email}
                       </p>
+                      {(user.parishCode || user.code) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Code: {user.parishCode || user.code}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <DropdownMenu>

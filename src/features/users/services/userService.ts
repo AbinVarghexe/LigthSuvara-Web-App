@@ -147,10 +147,41 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
             .trim();
     };
 
+    const normalizeName = (name: string): string => {
+        if (!name) return '';
+        return name.toLowerCase()
+            .replace(/[^a-z0-9]/g, '')
+            .replace(/pp/g, 'p')
+            .replace(/tt/g, 't')
+            .replace(/th/g, 't')
+            .replace(/nn/g, 'n')
+            .replace(/mm/g, 'm')
+            .replace(/ll/g, 'l')
+            .replace(/y$/g, 'i')
+            .replace(/y/g, 'i')
+            .replace(/u$/g, '')
+            .replace(/o$/g, 'a')
+            .replace(/om$/g, 'am')
+            .replace(/c/g, 'k')
+            .replace(/church/gi, '')
+            .replace(/cathedral/gi, '')
+            .replace(/school/gi, '')
+            .replace(/st/gi, '')
+            .replace(/saint/gi, '')
+            .trim();
+    };
+
+    const isDuplicateParishName = (name1: string, name2: string): boolean => {
+        const n1 = normalizeName(name1);
+        const n2 = normalizeName(name2);
+        if (!n1 || !n2) return false;
+        return n1.includes(n2) || n2.includes(n1);
+    };
+
     // 1. Internal duplicate checking (within the uploaded array)
     const seenEmails = new Set<string>();
-    const seenSchools = new Set<string>();
-    const seenParishes = new Set<string>(); // key format: `foraneName|parishName`
+    const seenSchoolsList: string[] = [];
+    const seenParishesList: Array<{ forane: string; parish: string }> = [];
     const seenSchoolParishCodes = new Set<string>();
     const seenParishParishCodes = new Set<string>();
 
@@ -195,7 +226,7 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
         }
         seenEmails.add(item.email);
 
-        const parishCodeNorm = (item.original.parishCode || '').trim();
+        const parishCodeNorm = String(item.original.parishCode || item.original.code || '').trim();
         if (parishCodeNorm) {
             if (item.role === 'school') {
                 if (seenSchoolParishCodes.has(parishCodeNorm)) {
@@ -213,19 +244,24 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
         }
 
         if (item.role === 'school' && item.schoolNameNorm) {
-            if (seenSchools.has(item.schoolNameNorm)) {
+            const isDuplicate = seenSchoolsList.some(s => isDuplicateParishName(s, item.rawSchoolName));
+            if (isDuplicate) {
                 errors.push({ email: item.original.email || 'unknown', error: `Duplicate Sunday School name in batch: ${item.rawSchoolName}` });
                 continue;
             }
-            seenSchools.add(item.schoolNameNorm);
+            seenSchoolsList.push(item.rawSchoolName);
         }
 
         if (item.role === 'parish' && item.parishNameNorm) {
-            if (seenParishes.has(item.parishKey)) {
+            const foraneNorm = cleanEntityName(item.original.forane || '');
+            const isDuplicate = seenParishesList.some(
+                p => cleanEntityName(p.forane) === foraneNorm && isDuplicateParishName(p.parish, item.rawParishName)
+            );
+            if (isDuplicate) {
                 errors.push({ email: item.original.email || 'unknown', error: `Duplicate Parish name in batch under same Forane: ${item.rawParishName}` });
                 continue;
             }
-            seenParishes.add(item.parishKey);
+            seenParishesList.push({ forane: item.original.forane || '', parish: item.rawParishName });
         }
 
         uniqueBatchUsers.push(item);
@@ -255,7 +291,7 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
     }
 
     // Fetch all existing school users to prevent duplicate schoolNames or parishCodes, and mapping parishCode to school IDs
-    const existingSchools = new Set<string>();
+    const existingSchoolsList: string[] = [];
     const existingSchoolParishCodes = new Set<string>();
     const schoolIdByCode = new Map<string, { id: string; name: string }>();
     if (uniqueBatchUsers.some(u => u.role === 'school' || u.role === 'parish')) {
@@ -264,15 +300,15 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
             const snap = await getDocs(q);
             snap.docs.forEach(doc => {
                 const data = doc.data();
-                const sName = data.schoolName || data.schoolname || '';
-                const norm = cleanEntityName(sName);
-                if (norm) {
-                    existingSchools.add(norm);
+                const sName = data.schoolName || data.schoolname || data.name || data.fullName || '';
+                if (sName) {
+                    existingSchoolsList.push(sName);
                 }
-                const pCode = data.parishCode || '';
+                const pCode = data.parishCode || data.code || '';
                 if (pCode) {
-                    existingSchoolParishCodes.add(pCode.trim());
-                    schoolIdByCode.set(pCode.trim(), { id: doc.id, name: sName });
+                    const pCodeStr = String(pCode).trim();
+                    existingSchoolParishCodes.add(pCodeStr);
+                    schoolIdByCode.set(pCodeStr, { id: doc.id, name: sName });
                 }
             });
         } catch (err) {
@@ -281,7 +317,7 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
     }
 
     // Fetch all existing parish users to prevent duplicate parishes under the same forane or duplicate parishCodes
-    const existingParishes = new Set<string>();
+    const existingParishesList: Array<{ forane: string; parish: string }> = [];
     const existingParishCodes = new Set<string>();
     if (uniqueBatchUsers.some(u => u.role === 'parish')) {
         try {
@@ -289,16 +325,14 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
             const snap = await getDocs(q);
             snap.docs.forEach(doc => {
                 const data = doc.data();
-                const pName = data.parish || data.parishName || '';
+                const pName = data.parish || data.parishName || data.name || data.fullName || data.schoolName || data.schoolname || '';
                 const fName = data.forane || '';
-                const normP = cleanEntityName(pName);
-                const normF = cleanEntityName(fName);
-                if (normP) {
-                    existingParishes.add(`${normF}|${normP}`);
+                if (pName) {
+                    existingParishesList.push({ forane: fName, parish: pName });
                 }
-                const pCode = data.parishCode || '';
+                const pCode = data.parishCode || data.code || '';
                 if (pCode) {
-                    existingParishCodes.add(pCode.trim());
+                    existingParishCodes.add(String(pCode).trim());
                 }
             });
         } catch (err) {
@@ -316,7 +350,8 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
             continue;
         }
 
-        const parishCodeNorm = (item.original.parishCode || '').trim();
+        const parishCodeNorm = String(item.original.parishCode || item.original.code || '').trim();
+        const foraneNorm = cleanEntityName(item.original.forane || '');
 
         if (item.role === 'school') {
             if (parishCodeNorm && existingSchoolParishCodes.has(parishCodeNorm)) {
@@ -326,7 +361,8 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
                 });
                 continue;
             }
-            if (item.schoolNameNorm && existingSchools.has(item.schoolNameNorm)) {
+            const duplicateByName = existingSchoolsList.some(es => isDuplicateParishName(es, item.rawSchoolName));
+            if (duplicateByName) {
                 errors.push({
                     email: item.original.email || 'unknown',
                     error: `A Sunday School named '${item.rawSchoolName}' is already registered`
@@ -343,7 +379,10 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
                 });
                 continue;
             }
-            if (item.parishNameNorm && existingParishes.has(item.parishKey)) {
+            const duplicateByName = existingParishesList.some(
+                ep => cleanEntityName(ep.forane) === foraneNorm && isDuplicateParishName(ep.parish, item.rawParishName)
+            );
+            if (duplicateByName) {
                 errors.push({
                     email: item.original.email || 'unknown',
                     error: `A Parish named '${item.rawParishName}' is already registered under Forane '${item.original.forane || ''}'`
