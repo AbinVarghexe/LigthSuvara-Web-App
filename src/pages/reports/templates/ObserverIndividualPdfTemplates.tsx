@@ -194,3 +194,124 @@ export const ObserverAdminPdfTemplate = ({ assignment, logoBase64, eventDate }: 
         </div>
     );
 };
+
+// --- Submission Report Template (For Observer Report Export) ---
+export const ObserverSubmissionReportPdfTemplate = ({ assignment, logoBase64 }: any) => {
+    const todayDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const submissionDate = assignment.remarksSubmittedAt
+        ? new Date((assignment.remarksSubmittedAt.seconds || assignment.remarksSubmittedAt) * 1000).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+        : 'N/A';
+
+    return (
+        <div id="observer-submission-pdf" style={{
+            padding: '40px 50px',
+            backgroundColor: '#ffffff',
+            width: '600px',
+            color: '#0f172a',
+            fontFamily: "'Inter', Arial, sans-serif",
+            boxSizing: 'border-box',
+            position: 'relative'
+        }}>
+            <style>
+                {`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}
+            </style>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', background: 'linear-gradient(90deg, #312e81, #4f46e5)' }}></div>
+
+            <CommonHeader logoBase64={logoBase64} title="Observer Submission Report" />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px' }}>
+                <div>
+                    <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Assignment ID</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>{assignment.id}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Generated On</div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{todayDate}</div>
+                </div>
+            </div>
+
+            {/* Section 1: Overview */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginBottom: '24px' }}>
+                <div style={{ backgroundColor: '#f8fafc', padding: '12px 20px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    General Information
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <tbody>
+                            <tr>
+                                <td style={{ padding: '8px 0', color: '#64748b', width: '140px', borderBottom: '1px dashed #e2e8f0' }}>Observer Name</td>
+                                <td style={{ padding: '8px 0', color: '#1e1b4b', fontWeight: 700, borderBottom: '1px dashed #e2e8f0', fontSize: '14px' }}>{assignment.teacherName}</td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '8px 0', color: '#64748b', borderBottom: '1px dashed #e2e8f0' }}>From (Home School)</td>
+                                <td style={{ padding: '8px 0', color: '#334155', fontWeight: 500, borderBottom: '1px dashed #e2e8f0' }}>{assignment.sourceSchoolName}</td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '8px 0', color: '#64748b', borderBottom: '1px dashed #e2e8f0' }}>Assigned School</td>
+                                <td style={{ padding: '8px 0', color: '#4f46e5', fontWeight: 700, borderBottom: '1px dashed #e2e8f0', fontSize: '14px' }}>{assignment.targetSchoolName}</td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '8px 0', color: '#64748b', borderBottom: '1px dashed #e2e8f0' }}>Academic Year</td>
+                                <td style={{ padding: '8px 0', color: '#334155', fontWeight: 600, borderBottom: '1px dashed #e2e8f0' }}>{assignment.academicYear}</td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '8px 0', color: '#64748b', borderBottom: '1px dashed #e2e8f0' }}>Submitted At</td>
+                                <td style={{ padding: '8px 0', color: '#16a34a', fontWeight: 700, borderBottom: '1px dashed #e2e8f0' }}>{submissionDate}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Section 2: Attendance Metrics */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginBottom: '24px' }}>
+                <div style={{ backgroundColor: '#f8fafc', padding: '12px 20px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Attendance Metrics
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Total Attendance</span>
+                        <span style={{ fontSize: '18px', fontWeight: 800, color: '#312e81' }}>{assignment.totalAttendance ?? 'N/A'}</span>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px' }}>Absentees</div>
+                        <div style={{ fontSize: '13px', color: '#1e293b', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 14px', minHeight: '36px', whiteSpace: 'pre-line', fontStyle: assignment.absentees ? 'normal' : 'italic' }}>
+                            {assignment.absentees || 'None reported'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Section 3: Remarks */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginBottom: '32px' }}>
+                <div style={{ backgroundColor: '#f8fafc', padding: '12px 20px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Observer Remarks
+                </div>
+                <div style={{ padding: '20px', backgroundColor: '#faf5ff' }}>
+                    <div style={{ fontSize: '13px', color: '#4c1d95', lineHeight: '1.6', whiteSpace: 'pre-line', fontStyle: assignment.remarks ? 'normal' : 'italic' }}>
+                        {assignment.remarks ? `"${assignment.remarks}"` : 'No remarks submitted.'}
+                    </div>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: '50px', borderTop: '1px solid #e2e8f0', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                        System generated observer report • Eparchy of Kanjirapally
+                    </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Director</div>
+                    <div style={{ fontSize: '10px', color: '#64748b' }}>Centre for Catechisis</div>
+                </div>
+            </div>
+        </div>
+    );
+};

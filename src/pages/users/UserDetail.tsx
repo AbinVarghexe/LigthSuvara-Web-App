@@ -149,7 +149,7 @@ export function UserDetail() {
     try {
       const updates: Partial<UserData> = {
         fullName: editForm.fullName,
-        phoneNumber: editForm.phoneNumber,
+        phoneNumber: user.role === "parish" ? "" : editForm.phoneNumber,
         address: user.role === "animator" ? editForm.address : undefined,
       };
 
@@ -204,7 +204,7 @@ export function UserDetail() {
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Link
-          to="/users"
+          to={`/users?tab=${user.role === "parish" ? "parish" : "school"}`}
           className="p-2 hover:bg-accent rounded-full transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-muted-foreground" />
@@ -274,10 +274,9 @@ export function UserDetail() {
               )}
             </div>
             <h2 className="text-xl font-bold text-foreground mb-1">
-              {user.schoolname ||
-                user.schoolName ||
-                user.fullName ||
-                "Unnamed User"}
+              {user.role === "parish"
+                ? (user.name || user.fullName || user.schoolname || user.schoolName || "Unnamed User")
+                : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
             </h2>
             <div className="flex justify-center mb-6">
               <span
@@ -310,16 +309,35 @@ export function UserDetail() {
                 <Mail className="w-4 h-4" />
                 <span className="text-sm">{user.email}</span>
               </div>
+              {user.role === "school" && user.fullName && (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase">Tech Supporter:</span>
+                  <span className="text-sm font-medium text-foreground">{user.fullName}</span>
+                </div>
+              )}
+              {(user.parishCode || (user as any).code) && (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase">School/Parish Code:</span>
+                  <span className="text-sm font-medium text-foreground">{user.parishCode || (user as any).code}</span>
+                </div>
+              )}
               {user.forane && (
                 <div className="flex items-center gap-3 text-muted-foreground">
                   <span className="text-xs font-semibold uppercase">Forane:</span>
                   <span className="text-sm">{user.forane}</span>
                 </div>
               )}
-              {user.parish && (
+              {(user.parish || user.role === "parish" || user.role === "school") && (
                 <div className="flex items-center gap-3 text-muted-foreground">
                   <span className="text-xs font-semibold uppercase">Parish:</span>
-                  <span className="text-sm">{user.parish}</span>
+                  <span className="text-sm">
+                    {(() => {
+                      if (user.parish) return user.parish;
+                      const nameStr = user.schoolName || user.schoolname || user.name || "";
+                      const words = nameStr.trim().split(/\s+/);
+                      return words.length > 0 ? words[words.length - 1] : "";
+                    })()}
+                  </span>
                 </div>
               )}
               {user.phoneNumber && (
@@ -500,17 +518,19 @@ export function UserDetail() {
               </>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Phone Number</Label>
-              <Input
-                id="phoneNumber"
-                value={editForm.phoneNumber}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, phoneNumber: e.target.value })
-                }
-                placeholder="+1 234 567 890"
-              />
-            </div>
+            {user.role !== "parish" && (
+              <div className="space-y-2">
+                <Label htmlFor="phoneNumber">Phone Number</Label>
+                <Input
+                  id="phoneNumber"
+                  value={editForm.phoneNumber}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, phoneNumber: e.target.value })
+                  }
+                  placeholder="+1 234 567 890"
+                />
+              </div>
+            )}
 
             {user.role === "animator" && (
               <div className="space-y-2">

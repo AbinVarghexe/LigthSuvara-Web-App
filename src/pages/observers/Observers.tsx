@@ -810,6 +810,22 @@ export function Observers() {
                                     >
                                       Assignment Record (Admin)
                                     </DropdownMenuItem>
+                                    {school.assignment.remarks && (
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          toast.info(
+                                            "Generating Observer Report PDF...",
+                                          );
+                                          IndividualObserverPdfService.generateObserverReportPdf(
+                                            school.assignment,
+                                          ).catch(() =>
+                                            toast.error("Failed to generate PDF"),
+                                          );
+                                        }}
+                                      >
+                                        Observer Report (Submission)
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                                 <Button
@@ -1540,14 +1556,27 @@ export function Observers() {
             </div>
           </div>
 
-          <DialogFooter className="px-6 pb-5">
+          <DialogFooter className="px-6 pb-5 flex gap-2 sm:space-x-0">
             <Button
               variant="outline"
               onClick={() => setViewSubmissionAssignment(null)}
-              className="w-full"
+              className="flex-1"
             >
               Close
             </Button>
+            {viewSubmissionAssignment?.remarks && (
+              <Button
+                className="flex-1 bg-indigo-900 hover:bg-indigo-800 text-white font-bold flex items-center justify-center gap-2"
+                onClick={() => {
+                  toast.info("Generating Observer Report PDF...");
+                  IndividualObserverPdfService.generateObserverReportPdf(
+                    viewSubmissionAssignment,
+                  ).catch(() => toast.error("Failed to generate PDF"));
+                }}
+              >
+                <FileDown className="h-4 w-4" /> Download PDF
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -19,6 +19,7 @@ export interface BulkUserData {
   parishId?: string;
   parishName?: string;
   schoolId?: string;
+  parishCode?: string;
 }
 
 export interface BulkCreateResponse {
@@ -126,21 +127,22 @@ export const bulkCreateUsers = onCall(
         }
 
         // Create Firebase Auth user
-        const userRecord = await admin.auth().createUser({
+        const authUserOptions: any = {
           email: userData.email,
           password: userData.password,
           displayName: userData.name || userData.fullName || "",
-          phoneNumber: userData.phoneNumber?.startsWith("+")
-            ? userData.phoneNumber
-            : undefined,
-        });
+        };
+        if (userData.role !== "parish" && userData.phoneNumber?.startsWith("+")) {
+          authUserOptions.phoneNumber = userData.phoneNumber;
+        }
+        const userRecord = await admin.auth().createUser(authUserOptions);
 
         // Create Firestore user profile (WITHOUT password)
         const userDoc: any = {
           uid: userRecord.uid,
           email: userData.email,
           role: userData.role,
-          phoneNumber: userData.phoneNumber || "",
+          phoneNumber: userData.role === "parish" ? "" : (userData.phoneNumber || ""),
           profileImageUrl: null,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           createdBy: callerUid,
@@ -156,12 +158,15 @@ export const bulkCreateUsers = onCall(
           userDoc.forane = userData.forane || "";
           userDoc.schoolId = userData.schoolId || "";
           userDoc.schoolName = userData.schoolName || userData.schoolname || "";
+          userDoc.parishCode = userData.parishCode || "";
           userDoc.status = "online";
+          userDoc.parish = userData.parish || "";
         } else {
           userDoc.fullName = userData.fullName || userData.name || "";
           userDoc.schoolname = userData.schoolname || userData.schoolName || "";
           userDoc.forane = userData.forane || "";
           userDoc.parish = userData.parish || "";
+          userDoc.parishCode = userData.parishCode || "";
         }
 
         await admin.firestore().collection("users").doc(userRecord.uid).set(userDoc);

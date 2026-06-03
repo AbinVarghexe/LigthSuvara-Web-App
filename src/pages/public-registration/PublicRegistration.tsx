@@ -20,6 +20,8 @@ import {
     FileText,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { PremiumPublicRegistrationPdfService } from "../../features/reports/services/publicRegistrationPdfService";
+import * as XLSX from "xlsx";
 import {
     Card,
     CardContent,
@@ -690,7 +692,8 @@ export function PublicRegistration() {
             
             const name = reg.name || reg.applicantName || "";
             const phone = reg.phone || reg.applicantMobile || "";
-            const title = reg.programTitle || "";
+            const program = programs.find(p => p.id === reg.programId);
+            const title = program?.name || reg.programTitle || "";
             const qualification = reg.qualification || "";
             const currentStatus = reg.currentStatus || "";
             const search = searchTerm.toLowerCase();
@@ -700,8 +703,14 @@ export function PublicRegistration() {
                    title.toLowerCase().includes(search) ||
                    qualification.toLowerCase().includes(search) ||
                    currentStatus.toLowerCase().includes(search);
+        }).map(reg => {
+            const program = programs.find(p => p.id === reg.programId);
+            return {
+                ...reg,
+                programTitle: program?.name || reg.programTitle
+            };
         });
-    }, [registrations, selectedProgramId, searchTerm]);
+    }, [registrations, selectedProgramId, searchTerm, programs]);
 
     const activeProgram = useMemo(() => {
         return programs.find(p => p.id === selectedProgramId);
@@ -805,7 +814,7 @@ export function PublicRegistration() {
         }
     };
 
-    const handleExportCSV = () => {
+    const handleExportExcel = () => {
         const regsToExport = filteredRegistrations;
         if (regsToExport.length === 0) {
             toast.error("No registrations to export");
@@ -820,8 +829,7 @@ export function PublicRegistration() {
             headers = [...fields.map(f => f.name), "Date"];
             rows = regsToExport.map(reg => {
                 const row = fields.map(field => {
-                    const val = getFieldValue(reg, field.id);
-                    return `"${val.replace(/"/g, '""')}"`;
+                    return getFieldValue(reg, field.id);
                 });
                 row.push(format(reg.timestamp.toDate(), "yyyy-MM-dd HH:mm"));
                 return row;
@@ -835,25 +843,71 @@ export function PublicRegistration() {
                 reg.email || "",
                 reg.qualification || "N/A",
                 reg.currentStatus || "N/A",
-                `"${(reg.address || reg.applicantPlace || "").replace(/"/g, '""')}"`,
+                reg.address || reg.applicantPlace || "",
                 reg.programTitle,
                 format(reg.timestamp.toDate(), "yyyy-MM-dd HH:mm")
             ]);
         }
 
-        const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
+        const sheetData = [headers, ...rows];
+        const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+        // Autofit columns by finding max length of contents
+        const colWidths = headers.map((_, colIndex) => {
+            let maxLen = 10; // minimum width
+            sheetData.forEach(row => {
+                const cellValue = row[colIndex];
+                if (cellValue !== null && cellValue !== undefined) {
+                    const len = String(cellValue).length;
+                    if (len > maxLen) {
+                        maxLen = len;
+                    }
+                }
+            });
+            return { wch: maxLen + 3 };
+        });
+        worksheet['!cols'] = colWidths;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Registrations");
+
         const fileNameSuffix = selectedProgramId !== "all" && activeProgram 
             ? activeProgram.name.replace(/\s+/g, "_") 
             : "all";
-        link.setAttribute("download", `registrations_${fileNameSuffix}_${format(new Date(), "yyyy-MM-dd")}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        
+        XLSX.writeFile(workbook, `registrations_${fileNameSuffix}_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    };
+
+    const [exportingPDF, setExportingPDF] = useState(false);
+
+    const handleExportPDF = async () => {
+        const regsToExport = filteredRegistrations;
+        if (regsToExport.length === 0) {
+            toast.error("No registrations to export");
+            return;
+        }
+
+        setExportingPDF(true);
+        toast.info("Generating registrations PDF...");
+
+        try {
+            const programName = selectedProgramId !== "all" && activeProgram
+                ? activeProgram.name
+                : "All Programs";
+
+            await PremiumPublicRegistrationPdfService.generateReport(
+                regsToExport,
+                programName,
+                tableFields,
+                selectedProgramId
+            );
+            toast.success("PDF generated successfully");
+        } catch (error) {
+            console.error("PDF generation error:", error);
+            toast.error("Failed to generate PDF");
+        } finally {
+            setExportingPDF(false);
+        }
     };
 
     if (loading) {
@@ -938,7 +992,8 @@ export function PublicRegistration() {
                                             className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
                                             onClick={() => {
                                                 setActiveTab("submissions");
-                                                setSearchTerm(program.name || "");
+                                                setSelectedProgramId(program.id || "all");
+                                                setSearchTerm("");
                                             }}
                                         >
                                             View Registrations <ChevronRight className="w-4 h-4 ml-2" />
@@ -1036,8 +1091,16 @@ export function PublicRegistration() {
                             </div>
                         </div>
                         <div className="flex gap-2 w-full md:w-auto">
-                            <Button variant="outline" className="flex-1 md:flex-none" onClick={handleExportCSV}>
-                                <Download className="w-4 h-4 mr-2" /> Export CSV
+                            <Button variant="outline" className="flex-1 md:flex-none" onClick={handleExportExcel}>
+                                <Download className="w-4 h-4 mr-2" /> Export Excel
+                            </Button>
+                            <Button variant="outline" className="flex-1 md:flex-none" onClick={handleExportPDF} disabled={exportingPDF}>
+                                {exportingPDF ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Download className="w-4 h-4 mr-2" />
+                                )}
+                                Export PDF
                             </Button>
                         </div>
                     </div>

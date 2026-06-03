@@ -16,7 +16,7 @@ import {
   Users as UsersIcon,
   ArrowLeft,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -69,6 +69,7 @@ import {
   query,
 } from "firebase/firestore";
 import { ParishService } from "../../features/parishes/services/parishService";
+import * as XLSX from "xlsx";
 
 interface NewUser extends Partial<UserData> {
   password?: string;
@@ -78,6 +79,7 @@ interface NewUser extends Partial<UserData> {
 interface ForaneParish {
   id: string;
   name: string;
+  saint?: string;
   place?: string;
   code?: string;
 }
@@ -94,12 +96,19 @@ export function Users() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"school" | "parish">("school");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const initialTab = tabParam === "parish" ? "parish" : "school";
+  const [activeTab, setActiveTab] = useState<"school" | "parish">(initialTab);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isAdminDeleting, setIsAdminDeleting] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [newUsers, setNewUsers] = useState<NewUser[]>([{
     email: "",
     fullName: "",
@@ -124,8 +133,35 @@ export function Users() {
   const [foranesData, setForanesData] = useState<ForaneData[]>([]);
   const [parishesPerForane, setParishesPerForane] = useState<Record<string, ForaneParish[]>>({});
 
+  const normalizeSaintName = (saint: string): string => {
+    let s = (saint || "").trim();
+    if (/^christ(u)?\s*raj$/i.test(s) || /^christ\s*raj$/i.test(s)) {
+      return "Christu Raj";
+    }
+    return toTitleCase(s);
+  };
+
+  const getParishDetails = (docData: any) => {
+    let saintName = "";
+    let parishPlace = "";
+
+    if (docData.place) {
+      saintName = docData.name || "";
+      parishPlace = docData.place || "";
+    } else if (docData.saint) {
+      saintName = docData.saint || "";
+      parishPlace = docData.name || "";
+    } else {
+      saintName = docData.name || "";
+      parishPlace = "";
+    }
+
+    return { saintName, parishPlace };
+  };
+
   const formatSchoolName = (churchName: string, placeName: string): string => {
-    const cleanChurch = (churchName || "")
+    const normalizedChurch = normalizeSaintName(churchName);
+    const cleanChurch = normalizedChurch
       .replace(/\./g, "")
       .replace(/'s/gi, "")
       .trim();
@@ -147,15 +183,29 @@ export function Users() {
             // Fetch parishes list for this forane to populate the dropdown
             await fetchParishesForForane(foraneDoc.id);
 
-            const schoolNameCombined = formatSchoolName(foundParish.name, foundParish.place || "");
+            const { saintName, parishPlace } = getParishDetails(foundParish);
+
+            const schoolNameCombined = formatSchoolName(saintName, parishPlace);
             const updatedWithAutofill = [...newUsers];
+
+            const cleanSaint = saintName.replace(/\./g, "").trim();
+            const normalizedSaint = normalizeSaintName(cleanSaint);
+            const formattedParishName = parishPlace
+              ? `${normalizedSaint} Church ${toTitleCase(parishPlace)}`
+              : `${normalizedSaint} Church`;
+            const finalParishName = formattedParishName.replace(/\s+/g, ' ').trim();
+
             updatedWithAutofill[index] = {
               ...updatedWithAutofill[index],
               forane: foraneDoc.name,
-              parish: foundParish.place || foundParish.name,
+              parish: parishPlace || saintName,
               parishCode: val.trim(),
               schoolname: schoolNameCombined,
               schoolName: schoolNameCombined,
+              ...(updatedWithAutofill[index].role === "parish" ? {
+                name: finalParishName,
+                fullName: finalParishName,
+              } : {}),
             };
             setNewUsers(updatedWithAutofill);
             toast.success(`Autofilled: ${foundParish.name} (${foraneDoc.name})`);
@@ -192,6 +242,7 @@ export function Users() {
       const parishes: ForaneParish[] = snap.docs.map(d => ({
         id: d.id,
         name: d.data().name as string,
+        saint: d.data().saint as string | undefined,
         place: d.data().place as string | undefined,
         code: d.data().code as string | undefined,
       }));
@@ -229,17 +280,23 @@ export function Users() {
     if (baseName && parish) {
       const formattedBase = toTitleCase(baseName);
       const formattedParish = toTitleCase(parish);
-      if (formattedBase.toLowerCase() === formattedParish.toLowerCase()) {
-        return formattedBase;
-      } else if (formattedBase.toLowerCase().includes(formattedParish.toLowerCase())) {
-        return formattedBase;
+
+      const cleanBase = formattedBase.toLowerCase();
+      const cleanParish = formattedParish.toLowerCase();
+
+      if (cleanBase === cleanParish) {
+        return `${formattedBase} Church`;
+      } else if (cleanBase.endsWith(cleanParish)) {
+        // e.g. "St Joseph Koovapally" -> "St Joseph Church Koovapally"
+        const prefix = formattedBase.slice(0, cleanBase.length - cleanParish.length).trim();
+        return `${prefix} Church ${formattedParish}`;
       } else {
-        return `${formattedBase} ${formattedParish}`;
+        return `${formattedBase} Church ${formattedParish}`;
       }
     } else if (baseName) {
-      return toTitleCase(baseName);
+      return `${toTitleCase(baseName)} Church`;
     } else if (parish) {
-      return toTitleCase(parish);
+      return `${toTitleCase(parish)} Church`;
     }
     return "";
   };
@@ -306,10 +363,48 @@ export function Users() {
     }
   };
 
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUserIds.length === 0) return;
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    const toastId = toast.loading(`Deleting ${selectedUserIds.length} user accounts...`);
+
+    for (const userId of selectedUserIds) {
+      try {
+        const result = await deleteUser(userId);
+        if (result.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (err) {
+        console.error(`Failed to delete user ${userId}:`, err);
+        failCount++;
+      }
+    }
+
+    toast.dismiss(toastId);
+    if (successCount > 0) {
+      toast.success(`Successfully deleted ${successCount} user(s)`);
+    }
+    if (failCount > 0) {
+      toast.error(`Failed to delete ${failCount} user(s)`);
+    }
+
+    setIsBulkDeleteConfirmOpen(false);
+    setIsSelectMode(false);
+    setSelectedUserIds([]);
+    fetchUsers();
+    setIsBulkDeleting(false);
+  };
+
   const fetchUsers = async () => {
     try {
       const usersData = await getUsers();
       setUsers(usersData);
+      setSelectedUserIds([]);
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
@@ -358,29 +453,134 @@ export function Users() {
   const downloadTemplate = () => {
     const headers = [
       "email",
-      "fullName",
+      "techsupporter",
       "role",
-      "schoolname",
+      "name",
       "phoneNumber",
       "password",
       "forane",
       "parish",
+      "parishCode",
     ];
     const sample = [
-      "stdominicsschool@test.com,Akhil,school,St Dominics Kanjirapally,9061782311,Password123,Kanjirapally,Kanjirapally",
+      ["stdominicsschool@test.com", "Joseph Jose", "school", "St Dominics Kanjirapally", "1111111111", "Password123", "Kanjirapally", "Kanjirapally", "35"],
     ];
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      headers.join(",") +
-      "\n" +
-      sample.join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "school_user_upload_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const sheetData = [headers, ...sample];
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // Autofit columns by finding max length of contents
+    const colWidths = headers.map((_, colIndex) => {
+      let maxLen = 10; // minimum width
+      sheetData.forEach(row => {
+        const cellValue = row[colIndex];
+        if (cellValue !== null && cellValue !== undefined) {
+          const len = String(cellValue).length;
+          if (len > maxLen) {
+            maxLen = len;
+          }
+        }
+      });
+      return { wch: maxLen + 3 };
+    });
+    worksheet['!cols'] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    XLSX.writeFile(workbook, "school_user_upload_template.xlsx");
+  };
+
+  const downloadPrefilledTemplate = async () => {
+    const toastId = toast.loading("Fetching database records to generate template...");
+    try {
+      const headers = [
+        "email",
+        "techsupporter",
+        "role",
+        "name",
+        "phoneNumber",
+        "password",
+        "forane",
+        "parish",
+        "parishCode",
+      ];
+      
+      const sheetData: any[][] = [headers];
+
+      for (const forane of foranesData) {
+        const parishesRef = collection(db, "foranes", forane.id, "parishes");
+        const snap = await getDocs(parishesRef);
+        
+        for (const d of snap.docs) {
+          const parishData = d.data();
+          const code = parishData.code || "";
+          if (!code) continue;
+
+          const { saintName, parishPlace } = getParishDetails({ id: d.id, ...parishData });
+          const schoolNameCombined = formatSchoolName(saintName, parishPlace);
+
+          // 1. School Row
+          sheetData.push([
+            "", // email
+            "", // techsupporter
+            "school",
+            schoolNameCombined,
+            "", // phoneNumber
+            "", // password
+            forane.name,
+            parishPlace || saintName,
+            code
+          ]);
+
+          // 2. Parish Row
+          sheetData.push([
+            "", // email
+            "DO NOT FILL", // techsupporter
+            "parish",
+            "DO NOT FILL", // name
+            "DO NOT FILL", // phoneNumber
+            "", // password
+            forane.name,
+            parishPlace || saintName,
+            code
+          ]);
+        }
+      }
+
+      if (sheetData.length <= 1) {
+        toast.dismiss(toastId);
+        toast.warning("No parishes found in database to prefill");
+        return;
+      }
+
+      const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Autofit columns by finding max length of contents
+      const colWidths = headers.map((_, colIndex) => {
+        let maxLen = 10; // minimum width
+        sheetData.forEach(row => {
+          const cellValue = row[colIndex];
+          if (cellValue !== null && cellValue !== undefined) {
+            const len = String(cellValue).length;
+            if (len > maxLen) {
+              maxLen = len;
+            }
+          }
+        });
+        return { wch: maxLen + 3 };
+      });
+      worksheet['!cols'] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+      XLSX.writeFile(workbook, "prefilled_school_parish_users.xlsx");
+
+      toast.dismiss(toastId);
+      toast.success(`Generated prefilled template containing ${sheetData.length - 1} rows`);
+    } catch (e) {
+      console.error("Failed to generate prefilled template:", e);
+      toast.dismiss(toastId);
+      toast.error("Failed to generate prefilled template");
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -388,82 +588,300 @@ export function Users() {
     if (!file) return;
 
     setIsUploading(true);
+
+    // Pre-cache all parishes across all foranes to avoid repeated queries inside loops
+    const parishCacheMap = new Map<string, any>();
+    try {
+      const foranesSnap = await getDocs(collection(db, "foranes"));
+      const fetchAllParishesPromises = foranesSnap.docs.map(async (foraneDoc) => {
+        const parishesRef = collection(db, "foranes", foraneDoc.id, "parishes");
+        const snap = await getDocs(parishesRef);
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          const code = (data.code || "").trim();
+          if (code) {
+            parishCacheMap.set(code, {
+              id: d.id,
+              ...data,
+              foraneId: foraneDoc.id
+            });
+          }
+        });
+      });
+      await Promise.all(fetchAllParishesPromises);
+    } catch (err) {
+      console.error("Failed to pre-fetch parish cache:", err);
+      toast.error("Failed to connect to database. Please check your network.");
+      setIsUploading(false);
+      return;
+    }
+
     const reader = new FileReader();
 
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        const rows = text.split("\n").filter(row => row.trim());
-        if (rows.length < 2) {
-          toast.warning("CSV file is empty or only contains headers");
-          setIsUploading(false);
-          return;
-        }
-
-        const headers = rows[0].split(",").map((h) => h.trim());
-        const newUsers: Partial<UserData>[] = [];
-
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i].trim();
-          if (!row) continue;
-
-          // Robust split by comma that ignores commas inside double quotes
-          const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim());
-          const user: any = {};
-
-          headers.forEach((header, index) => {
-            let val = values[index]?.replace(/^"|"$/g, '').trim();
-            if (val) {
-              user[header] = val;
-            }
-          });
-
-          // Basic validation for required fields before adding to import list
-          if (user.email) {
-            if (!user.role) user.role = "school";
-            
-            // Password is required for new accounts
-            if (!user.password) {
-              console.warn(`Skipping user ${user.email}: Missing password`);
-              continue;
-            }
-            
-            if (user.password.length < 6) {
-              console.warn(`Skipping user ${user.email}: Password too short`);
-              continue;
-            }
-
-            newUsers.push(user);
+    if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+      reader.readAsArrayBuffer(file);
+      reader.onload = async (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          
+          if (jsonData.length < 2) {
+            toast.warning("Excel file is empty or only contains headers");
+            setIsUploading(false);
+            return;
           }
-        }
 
-        if (newUsers.length > 0) {
-          const result = await bulkCreateUsers(newUsers);
+          const headers = jsonData[0].map(h => String(h || "").trim());
+          const newUsers: Partial<UserData>[] = [];
 
-          if (result.success) {
-            toast.success(`Successfully created ${result.created} users`);
+          for (let i = 1; i < jsonData.length; i++) {
+            const values = jsonData[i];
+            if (!values || values.length === 0) continue;
+            
+            const user: any = {};
+            headers.forEach((header, index) => {
+              let val = String(values[index] ?? "").trim();
+              if (val) {
+                const hLower = header.toLowerCase();
+                if (hLower === 'email') {
+                  user.email = val;
+                } else if (hLower === 'password') {
+                  user.password = val;
+                } else if (hLower === 'phonenumber') {
+                  user.phoneNumber = val;
+                } else if (hLower === 'role') {
+                  user.role = val;
+                } else if (hLower === 'parishcode') {
+                  user.parishCode = val;
+                } else if (hLower === 'techsupporter') {
+                  user.fullName = val;
+                }
+              }
+            });
+
+            if (user.email) {
+              if (!user.role) user.role = "school";
+
+              if (user.role === "parish") {
+                user.phoneNumber = "";
+              }
+
+              if (!user.password) {
+                console.warn(`Skipping user ${user.email}: Missing password`);
+                continue;
+              }
+
+              if (user.password.length < 6) {
+                console.warn(`Skipping user ${user.email}: Password too short`);
+                continue;
+              }
+
+              if (!user.parishCode) {
+                console.warn(`Skipping user ${user.email}: Missing parishCode (school code is required to retrieve details from database)`);
+                continue;
+              }
+
+              try {
+                const parishDoc = parishCacheMap.get(user.parishCode.trim());
+                if (!parishDoc) {
+                  console.warn(`Skipping user ${user.email}: Parish/school code ${user.parishCode} not found in database`);
+                  continue;
+                }
+
+                const foraneDoc = foranesData.find(f => f.id === parishDoc.foraneId);
+                if (foraneDoc) {
+                  user.forane = foraneDoc.name;
+                }
+
+                const { saintName, parishPlace } = getParishDetails(parishDoc);
+                const normalizedSaint = normalizeSaintName(saintName);
+
+                user.parish = parishPlace || normalizedSaint;
+
+                const combinedSchoolName = formatSchoolName(normalizedSaint, parishPlace);
+                user.schoolname = combinedSchoolName;
+                user.schoolName = combinedSchoolName;
+
+                if (user.role === "parish") {
+                  const cleanSaint = normalizedSaint.replace(/\./g, "").trim();
+                  const formattedParishName = parishPlace
+                    ? `${cleanSaint} Church ${toTitleCase(parishPlace)}`
+                    : `${cleanSaint} Church`;
+                  const finalParishName = formattedParishName.replace(/\s+/g, ' ').trim();
+                  user.name = finalParishName;
+                  user.fullName = finalParishName;
+                } else if (user.role === "school") {
+                  if (!user.fullName) {
+                    user.fullName = "";
+                  }
+                }
+
+                newUsers.push(user);
+              } catch (e) {
+                console.error(`Failed to resolve parishCode ${user.parishCode} for ${user.email}:`, e);
+              }
+            }
+          }
+
+          if (newUsers.length > 0) {
+            const result = await bulkCreateUsers(newUsers);
+
+            if (result.success) {
+              toast.success(`Successfully created ${result.created} users`);
+            } else {
+              toast.warning(
+                `Created ${result.created} users, ${result.failed} failed. See console for details.`
+              );
+              console.log("Bulk creation results:", result);
+            }
+
+            setIsDialogOpen(false);
+            fetchUsers();
           } else {
-            toast.warning(
-              `Created ${result.created} users, ${result.failed} failed. See console for details.`
-            );
-            console.log("Bulk creation results:", result);
+            toast.warning("No valid users (email and role required) found in Excel");
+          }
+        } catch (error) {
+          console.error("Error parsing Excel:", error);
+          toast.error("Failed to process Excel file. Ensure it's in the correct format.");
+        } finally {
+          setIsUploading(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      };
+    } else {
+      reader.readAsText(file);
+      reader.onload = async (event) => {
+        try {
+          const text = event.target?.result as string;
+          const rows = text.split("\n").filter(row => row.trim());
+          if (rows.length < 2) {
+            toast.warning("CSV file is empty or only contains headers");
+            setIsUploading(false);
+            return;
           }
 
-          setIsDialogOpen(false);
-          fetchUsers();
-        } else {
-          toast.warning("No valid users (email and role required) found in CSV");
-        }
-      } catch (error) {
-        console.error("Error parsing CSV:", error);
-        toast.error("Failed to process CSV file. Ensure it's in the correct format.");
-      } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    };
+          const headers = rows[0].split(",").map((h) => h.trim());
+          const newUsers: Partial<UserData>[] = [];
 
-    reader.readAsText(file);
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i].trim();
+            if (!row) continue;
+
+            const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim());
+            const user: any = {};
+
+            headers.forEach((header, index) => {
+              let val = values[index]?.replace(/^"|"$/g, '').trim();
+              if (val) {
+                const hLower = header.toLowerCase();
+                if (hLower === 'email') {
+                  user.email = val;
+                } else if (hLower === 'password') {
+                  user.password = val;
+                } else if (hLower === 'phonenumber') {
+                  user.phoneNumber = val;
+                } else if (hLower === 'role') {
+                  user.role = val;
+                } else if (hLower === 'parishcode') {
+                  user.parishCode = val;
+                } else if (hLower === 'techsupporter') {
+                  user.fullName = val;
+                }
+              }
+            });
+
+            if (user.email) {
+              if (!user.role) user.role = "school";
+
+              if (user.role === "parish") {
+                user.phoneNumber = "";
+              }
+
+              if (!user.password) {
+                console.warn(`Skipping user ${user.email}: Missing password`);
+                continue;
+              }
+
+              if (user.password.length < 6) {
+                console.warn(`Skipping user ${user.email}: Password too short`);
+                continue;
+              }
+
+              if (!user.parishCode) {
+                console.warn(`Skipping user ${user.email}: Missing parishCode (school code is required to retrieve details from database)`);
+                continue;
+              }
+
+              try {
+                const parishDoc = parishCacheMap.get(user.parishCode.trim());
+                if (!parishDoc) {
+                  console.warn(`Skipping user ${user.email}: Parish/school code ${user.parishCode} not found in database`);
+                  continue;
+                }
+
+                const foraneDoc = foranesData.find(f => f.id === parishDoc.foraneId);
+                if (foraneDoc) {
+                  user.forane = foraneDoc.name;
+                }
+
+                const { saintName, parishPlace } = getParishDetails(parishDoc);
+                const normalizedSaint = normalizeSaintName(saintName);
+
+                user.parish = parishPlace || normalizedSaint;
+
+                const combinedSchoolName = formatSchoolName(normalizedSaint, parishPlace);
+                user.schoolname = combinedSchoolName;
+                user.schoolName = combinedSchoolName;
+
+                if (user.role === "parish") {
+                  const cleanSaint = normalizedSaint.replace(/\./g, "").trim();
+                  const formattedParishName = parishPlace
+                    ? `${cleanSaint} Church ${toTitleCase(parishPlace)}`
+                    : `${cleanSaint} Church`;
+                  const finalParishName = formattedParishName.replace(/\s+/g, ' ').trim();
+                  user.name = finalParishName;
+                  user.fullName = finalParishName;
+                } else if (user.role === "school") {
+                  if (!user.fullName) {
+                    user.fullName = "";
+                  }
+                }
+
+                newUsers.push(user);
+              } catch (e) {
+                console.error(`Failed to resolve parishCode ${user.parishCode} for ${user.email}:`, e);
+              }
+            }
+          }
+
+          if (newUsers.length > 0) {
+            const result = await bulkCreateUsers(newUsers);
+
+            if (result.success) {
+              toast.success(`Successfully created ${result.created} users`);
+            } else {
+              toast.warning(
+                `Created ${result.created} users, ${result.failed} failed. See console for details.`
+              );
+              console.log("Bulk creation results:", result);
+            }
+
+            setIsDialogOpen(false);
+            fetchUsers();
+          } else {
+            toast.warning("No valid users (email and role required) found in CSV");
+          }
+        } catch (error) {
+          console.error("Error parsing CSV:", error);
+          toast.error("Failed to process CSV file. Ensure it's in the correct format.");
+        } finally {
+          setIsUploading(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      };
+    }
   };
 
   if (loading) {
@@ -511,7 +929,7 @@ export function Users() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            
+
             <div className="w-full md:w-64">
               <Select
                 value={allUsersRoleFilter}
@@ -571,10 +989,9 @@ export function Users() {
                       </div>
                       <div>
                         <h3 className="font-medium text-foreground">
-                          {user.schoolname ||
-                            user.schoolName ||
-                            user.fullName ||
-                            "Unnamed User"}
+                          {user.role === "parish"
+                            ? (user.name || user.fullName || user.schoolname || user.schoolName || "Unnamed User")
+                            : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
                         </h3>
                         <p className="text-sm text-muted-foreground truncate max-w-[150px]">
                           {user.email}
@@ -611,10 +1028,10 @@ export function Users() {
                       className={`gap-1.5 ${user.role === "admin"
                         ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
                         : user.role === "animator"
-                        ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
-                        : user.role === "parish"
-                          ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400"
-                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                          ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                          : user.role === "parish"
+                            ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400"
+                            : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
                         }`}
                     >
                       {user.role === "admin" ? (
@@ -812,10 +1229,19 @@ export function Users() {
                       <div className="space-y-2">
                         <Label htmlFor={`role-${index}`}>Role *</Label>
                         <Select
-                          value={user.role}
                           onValueChange={(val) => {
                             const updated = [...newUsers];
-                            updated[index] = { ...user, role: val as any, forane: "", parish: "", schoolname: "", schoolName: "", schoolId: "", name: "" };
+                            updated[index] = {
+                              ...user,
+                              role: val as any,
+                              forane: "",
+                              parish: "",
+                              schoolname: "",
+                              schoolName: "",
+                              schoolId: "",
+                              name: "",
+                              phoneNumber: val === "parish" ? "" : (user.phoneNumber || ""),
+                            };
                             setNewUsers(updated);
                           }}
                         >
@@ -861,11 +1287,25 @@ export function Users() {
                         const foraneDoc = foranesData.find(f => f.name === user.forane);
                         const foraneId = foraneDoc?.id ?? "";
                         const availableParishes = foraneId ? (parishesPerForane[foraneId] ?? []) : [];
-                        const usedParishNames = new Set(
-                          users
-                            .filter(u => u.role === "school" && u.parish)
-                            .map(u => (u.parish ?? "").toLowerCase().trim())
-                        );
+
+                        const isParishAlreadyRegistered = (p: ForaneParish) => {
+                          const computedSchoolName = formatSchoolName(p.name, p.place || "").trim().toLowerCase().replace(/\s+/g, ' ');
+                          const pNameLower = p.name.trim().toLowerCase();
+                          const pPlaceLower = (p.place || "").trim().toLowerCase();
+
+                          return users.some(u => {
+                            if (u.role !== "school") return false;
+
+                            const uSchoolName = (u.schoolName || u.schoolname || "").trim().toLowerCase().replace(/\s+/g, ' ');
+                            if (uSchoolName === computedSchoolName) return true;
+
+                            const uParish = (u.parish || "").trim().toLowerCase();
+                            if (uParish === pPlaceLower || uParish === pNameLower) return true;
+
+                            return false;
+                          });
+                        };
+
                         const isLoadingP = loadingParishes[foraneId] ?? false;
                         return (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -882,16 +1322,18 @@ export function Users() {
                             <div className="space-y-2">
                               <Label htmlFor={`parish-select-${index}`}>Parish *</Label>
                               <Select
-                                value={availableParishes.find(p => p.place === user.parish || p.name === user.parish)?.name || ""}
+                                value={availableParishes.find(p => p.name === user.parish || p.place === user.parish)?.name || ""}
                                 disabled={!user.forane}
                                 onValueChange={(val) => {
                                   const selectedParish = availableParishes.find(p => p.name === val);
                                   const code = selectedParish?.code || "";
-                                  const schoolNameCombined = selectedParish ? formatSchoolName(selectedParish.name, selectedParish.place || "") : "";
+                                  const saintName = selectedParish?.saint || selectedParish?.name || "";
+                                  const parishPlace = selectedParish?.saint ? (selectedParish.name || "") : (selectedParish?.place || "");
+                                  const schoolNameCombined = selectedParish ? formatSchoolName(saintName, parishPlace) : "";
                                   const updated = [...newUsers];
                                   updated[index] = {
                                     ...user,
-                                    parish: selectedParish?.place || val,
+                                    parish: parishPlace || saintName,
                                     parishCode: code,
                                     schoolname: schoolNameCombined,
                                     schoolName: schoolNameCombined,
@@ -911,7 +1353,7 @@ export function Users() {
                                     </div>
                                   )}
                                   {availableParishes.map((p) => {
-                                    const alreadyUsed = usedParishNames.has(p.name.toLowerCase().trim());
+                                    const alreadyUsed = isParishAlreadyRegistered(p);
                                     return (
                                       <SelectItem key={p.id} value={p.name} disabled={alreadyUsed}>
                                         <span className={alreadyUsed ? "text-muted-foreground line-through" : ""}>
@@ -970,10 +1412,10 @@ export function Users() {
                             onValueChange={(val) => {
                               const selectedParish = users.find(u => u.id === val || u.uid === val);
                               const updated = [...newUsers];
-                              updated[index] = { 
-                                ...user, 
-                                parishId: val, 
-                                parishName: selectedParish?.schoolname || selectedParish?.schoolName || selectedParish?.fullName || "" 
+                              updated[index] = {
+                                ...user,
+                                parishId: val,
+                                parishName: selectedParish?.schoolname || selectedParish?.schoolName || selectedParish?.fullName || ""
                               };
                               setNewUsers(updated);
                             }}
@@ -1036,32 +1478,62 @@ export function Users() {
                                 onValueChange={async (val) => {
                                   const selectedSchool = users.find(u => u.id === val || u.uid === val);
                                   const schoolName = selectedSchool?.schoolname || selectedSchool?.schoolName || "";
-                                  const parishPlace = selectedSchool?.parish || "";
                                   const schoolForane = selectedSchool?.forane || user.forane || "";
-                                  
-                                  let parishCode = "";
+
+                                  let parishCode = selectedSchool?.parishCode || selectedSchool?.code || "";
                                   let saintName = "";
-                                  
-                                  const foraneDoc = foranesData.find(f => f.name === schoolForane);
-                                  if (foraneDoc) {
-                                    const parishesRef = collection(db, 'foranes', foraneDoc.id, 'parishes');
-                                    const snap = await getDocs(parishesRef);
-                                    const matchedParish = snap.docs.find(d => 
-                                      (d.data().place || "").toLowerCase().trim() === parishPlace.toLowerCase().trim() ||
-                                      (d.data().name || "").toLowerCase().trim() === parishPlace.toLowerCase().trim()
-                                    );
-                                    if (matchedParish) {
-                                      parishCode = matchedParish.data().code || "";
-                                      saintName = matchedParish.data().name || "";
+                                  let parishPlace = "";
+
+                                  // Fetch parish details by code first to prevent typos/old incorrect records
+                                  if (parishCode) {
+                                    try {
+                                      const foundParish = await ParishService.getParishByCode(parishCode.trim());
+                                      if (foundParish) {
+                                        const details = getParishDetails(foundParish);
+                                        saintName = details.saintName;
+                                        parishPlace = details.parishPlace;
+                                      }
+                                    } catch (e) {
+                                      console.error("Failed to query parish by code:", e);
+                                    }
+                                  }
+
+                                  // Fallback to name search if code failed/missing
+                                  if (!parishPlace) {
+                                    const foraneDoc = foranesData.find(f => f.name === schoolForane);
+                                    if (foraneDoc) {
+                                      const parishesRef = collection(db, 'foranes', foraneDoc.id, 'parishes');
+                                      const snap = await getDocs(parishesRef);
+                                      const matchedParish = snap.docs.find(d =>
+                                        (d.data().place || "").toLowerCase().trim() === (selectedSchool?.parish || "").toLowerCase().trim() ||
+                                        (d.data().name || "").toLowerCase().trim() === (selectedSchool?.parish || "").toLowerCase().trim()
+                                      );
+                                      if (matchedParish) {
+                                        parishCode = matchedParish.data().code || parishCode;
+                                        const details = getParishDetails(matchedParish.data());
+                                        saintName = details.saintName;
+                                        parishPlace = details.parishPlace;
+                                      }
+                                    }
+                                  }
+
+                                  // Fallback to extracting from name words
+                                  if (!parishPlace && schoolName) {
+                                    const words = schoolName.trim().split(/\s+/);
+                                    const lastWord = words.length > 0 ? words[words.length - 1] : "";
+                                    const lowerWord = lastWord.toLowerCase();
+                                    if (lowerWord !== "school" && lowerWord !== "church" && !lowerWord.startsWith("st") && lowerWord !== "joseph" && lowerWord !== "dominic" && lowerWord !== "christ") {
+                                      parishPlace = lastWord;
                                     }
                                   }
 
                                   let formattedParishName = "";
                                   if (saintName && parishPlace) {
                                     const cleanSaint = saintName.replace(/\./g, "").trim();
-                                    formattedParishName = `${cleanSaint} Church ${toTitleCase(parishPlace)}`;
+                                    const normalizedSaint = normalizeSaintName(cleanSaint);
+                                    formattedParishName = `${normalizedSaint} Church ${toTitleCase(parishPlace)}`;
                                   } else {
-                                    formattedParishName = getAutofilledName(schoolName, parishPlace);
+                                    formattedParishName = getAutofilledName(schoolName, parishPlace || selectedSchool?.parish || "");
                                   }
 
                                   const updated = [...newUsers];
@@ -1070,7 +1542,7 @@ export function Users() {
                                     schoolId: val,
                                     schoolName: schoolName,
                                     forane: schoolForane,
-                                    parish: parishPlace,
+                                    parish: parishPlace || selectedSchool?.parish || "",
                                     parishCode: parishCode,
                                     code: parishCode,
                                     name: formattedParishName,
@@ -1083,11 +1555,42 @@ export function Users() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   {(() => {
+                                    const cleanName = (name: string): string => {
+                                      return (name || "")
+                                        .toLowerCase()
+                                        .replace(/\./g, "")
+                                        .replace(/'s/gi, "")
+                                        .replace(/[^a-z0-9]/gi, "")
+                                        .trim();
+                                    };
                                     const assignedSchoolIds = new Set(
                                       users.filter(u => u.role === "parish" && u.schoolId).map(u => u.schoolId)
                                     );
+                                    const assignedParishCodes = new Set(
+                                      users.filter(u => u.role === "parish" && u.parishCode).map(u => u.parishCode)
+                                    );
+                                    const assignedSchoolNames = new Set(
+                                      users
+                                        .filter(u => u.role === "parish")
+                                        .map(u => cleanName(u.schoolName || u.schoolname || u.name || ""))
+                                        .filter(Boolean)
+                                    );
                                     return users
-                                      .filter(u => u.role === "school" && (!user.forane || u.forane === user.forane) && !assignedSchoolIds.has(u.id || u.uid))
+                                      .filter(u => {
+                                        if (u.role !== "school") return false;
+                                        if (user.forane && u.forane !== user.forane) return false;
+
+                                        const schoolId = u.id || u.uid;
+                                        if (assignedSchoolIds.has(schoolId)) return false;
+
+                                        const schoolCode = u.parishCode || "";
+                                        if (schoolCode && assignedParishCodes.has(schoolCode)) return false;
+
+                                        const sNameCleaned = cleanName(u.schoolname || u.schoolName || "");
+                                        if (sNameCleaned && assignedSchoolNames.has(sNameCleaned)) return false;
+
+                                        return true;
+                                      })
                                       .map(s => (
                                         <SelectItem key={s.id} value={s.id || ""}>
                                           {s.schoolname || s.schoolName || s.email}
@@ -1143,19 +1646,21 @@ export function Users() {
 
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor={`phone-${index}`}>Phone Number</Label>
-                        <Input
-                          id={`phone-${index}`}
-                          placeholder="Phone Number"
-                          value={user.phoneNumber}
-                          onChange={(e) => {
-                            const updated = [...newUsers];
-                            updated[index] = { ...user, phoneNumber: e.target.value };
-                            setNewUsers(updated);
-                          }}
-                        />
-                      </div>
+                      {user.role !== "parish" && (
+                        <div className="space-y-2">
+                          <Label htmlFor={`phone-${index}`}>Phone Number</Label>
+                          <Input
+                            id={`phone-${index}`}
+                            placeholder="Phone Number"
+                            value={user.phoneNumber}
+                            onChange={(e) => {
+                              const updated = [...newUsers];
+                              updated[index] = { ...user, phoneNumber: e.target.value };
+                              setNewUsers(updated);
+                            }}
+                          />
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label htmlFor={`password-${index}`}>Password *</Label>
                         <Input
@@ -1173,7 +1678,7 @@ export function Users() {
                     </div>
                   </div>
                 ))}
-                
+
                 <Button
                   type="button"
                   variant="outline"
@@ -1230,7 +1735,7 @@ export function Users() {
               <DialogHeader>
                 <DialogTitle>Bulk Upload Users</DialogTitle>
                 <DialogDescription>
-                  Upload a CSV file to add multiple users at once.
+                  Upload an Excel or CSV file to add multiple users at once.
                 </DialogDescription>
               </DialogHeader>
 
@@ -1242,7 +1747,7 @@ export function Users() {
                     </div>
                     <div>
                       <p className="font-medium text-sm text-foreground">
-                        CSV Template
+                        Excel Template
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Download format guide
@@ -1259,13 +1764,37 @@ export function Users() {
                   </Button>
                 </div>
 
+                <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                      <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm text-foreground">
+                        Prefilled Excel Template
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Includes all database schools & parishes
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={downloadPrefilledTemplate}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
+
                 <div
                   className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv, .xlsx, .xls"
                     className="hidden"
                     ref={fileInputRef}
                     onChange={handleFileUpload}
@@ -1281,7 +1810,7 @@ export function Users() {
                     <div className="flex flex-col items-center">
                       <Upload className="w-8 h-8 text-muted-foreground mb-2" />
                       <p className="text-sm font-medium text-foreground">
-                        Click to upload CSV
+                        Click to upload Excel or CSV
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Max file size: 5MB
@@ -1296,9 +1825,15 @@ export function Users() {
       </div>
 
       <Tabs
-        defaultValue="school"
+        value={activeTab}
         className="w-full"
-        onValueChange={(val) => setActiveTab(val as "school" | "parish")}
+        onValueChange={(val) => {
+          const nextTab = val as "school" | "parish";
+          setActiveTab(nextTab);
+          setSearchParams({ tab: nextTab });
+          setSelectedUserIds([]);
+          setIsSelectMode(false);
+        }}
       >
         <TabsList className="grid w-full max-w-[400px] grid-cols-2">
           <TabsTrigger value="school">Sunday Schools</TabsTrigger>
@@ -1322,19 +1857,71 @@ export function Users() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-2 px-1 text-sm font-medium">
-        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-        <span className="text-muted-foreground">
-          Total {activeTab === "school" ? "Sunday Schools" : "Parishes"}:
-        </span>
-        <span className="text-foreground font-semibold">
-          {activeTab === "school" ? schoolCount : parishCount}
-        </span>
-        {searchTerm && (
-          <span className="text-xs text-muted-foreground ml-2">
-            ({filteredUsers.length} matching search)
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+          <span className="text-muted-foreground">
+            Total {activeTab === "school" ? "Sunday Schools" : "Parishes"}:
           </span>
-        )}
+          <span className="text-foreground font-semibold">
+            {activeTab === "school" ? schoolCount : parishCount}
+          </span>
+          {searchTerm && (
+            <span className="text-xs text-muted-foreground ml-2">
+              ({filteredUsers.length} matching search)
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isSelectMode ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const allIds = filteredUsers.map(u => u.id || u.uid).filter(Boolean);
+                  if (selectedUserIds.length === allIds.length) {
+                    setSelectedUserIds([]);
+                  } else {
+                    setSelectedUserIds(allIds);
+                  }
+                }}
+              >
+                {selectedUserIds.length === filteredUsers.length ? "Deselect All" : "Select All"}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="bg-red-600 hover:bg-red-700"
+                disabled={selectedUserIds.length === 0}
+                onClick={() => setIsBulkDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Selected ({selectedUserIds.length})
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setIsSelectMode(false);
+                  setSelectedUserIds([]);
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSelectMode(true)}
+              disabled={filteredUsers.length === 0}
+            >
+              Select Users
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Users List */}
@@ -1343,12 +1930,39 @@ export function Users() {
           // Check if user was active in the last 5 mins (300000 ms)
           const lastActiveDate = user.lastActiveAt?.seconds ? new Date(user.lastActiveAt.seconds * 1000) : null;
           const isOnline = lastActiveDate && (new Date().getTime() - lastActiveDate.getTime()) < 300000;
+          const userId = user.id || user.uid;
+          const isSelected = selectedUserIds.includes(userId);
 
           return (
-            <Card key={user.id} className="hover:shadow-md transition-shadow">
+            <Card
+              key={user.id}
+              className={`hover:shadow-md transition-all relative ${
+                isSelectMode
+                  ? "cursor-pointer border-2 " + (isSelected ? "border-blue-500 bg-blue-50/10 dark:bg-blue-900/5 ring-1 ring-blue-500" : "border-border hover:border-gray-400")
+                  : "transition-shadow"
+              }`}
+              onClick={() => {
+                if (isSelectMode) {
+                  if (isSelected) {
+                    setSelectedUserIds(prev => prev.filter(id => id !== userId));
+                  } else {
+                    setSelectedUserIds(prev => [...prev, userId]);
+                  }
+                }
+              }}
+            >
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-4">
+                    {isSelectMode && (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}} // parent onClick handles toggle
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
                     <div className="relative">
                       <Avatar className="h-12 w-12">
                         <AvatarImage
@@ -1368,10 +1982,9 @@ export function Users() {
                     </div>
                     <div>
                       <h3 className="font-medium text-foreground">
-                        {user.schoolname ||
-                          user.schoolName ||
-                          user.fullName ||
-                          "Unnamed User"}
+                        {user.role === "parish"
+                          ? (user.name || user.fullName || user.schoolname || user.schoolName || "Unnamed User")
+                          : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
                       </h3>
                       <p className="text-sm text-muted-foreground truncate max-w-[150px]">
                         {user.email}
@@ -1380,7 +1993,7 @@ export function Users() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
                         <MoreVertical className="w-4 h-4 text-muted-foreground" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -1408,10 +2021,10 @@ export function Users() {
                     className={`gap-1.5 ${user.role === "admin"
                       ? "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400"
                       : user.role === "animator"
-                      ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
-                      : user.role === "parish"
-                        ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400"
-                        : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                        ? "bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                        : user.role === "parish"
+                          ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400"
+                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
                       }`}
                   >
                     {user.role === "admin" ? (
@@ -1433,7 +2046,7 @@ export function Users() {
                   </Badge>
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-end text-sm text-muted-foreground">
+                <div className="pt-4 border-t border-border flex items-center justify-end text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
                   <Link
                     to={`/users/${user.id}`}
                     className="text-blue-600 hover:text-blue-700 font-medium"
@@ -1491,6 +2104,51 @@ export function Users() {
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting...</>
               ) : (
                 "Delete Account"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={isBulkDeleteConfirmOpen} onOpenChange={setIsBulkDeleteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Confirm Bulk Deletion
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Are you sure you want to delete the accounts of{" "}
+              <span className="font-semibold text-foreground">
+                {selectedUserIds.length} selected user(s)
+              </span>
+              ?
+              <br />
+              <br />
+              <span className="text-red-500 font-medium italic text-xs">
+                This will permanently delete these accounts from Firebase Authentication and all profile data from Firestore. This action cannot be undone.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsBulkDeleteConfirmOpen(false)}
+              disabled={isBulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDeleteUsers}
+              disabled={isBulkDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isBulkDeleting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting...</>
+              ) : (
+                "Delete Selected Accounts"
               )}
             </Button>
           </DialogFooter>
