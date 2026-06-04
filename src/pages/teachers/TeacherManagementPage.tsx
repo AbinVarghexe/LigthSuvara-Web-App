@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 
 import { CreateTeacherForm } from "@/features/teachers/components/CreateTeacherForm";
 import { TeacherAssignment } from "@/features/teachers/components/TeacherAssignment";
@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ExcelTeacherUpload } from "@/features/teachers/components/ExcelTeacherUpload";
 
 export default function TeacherManagementPage() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -37,6 +38,8 @@ export default function TeacherManagementPage() {
     if (!open) setEditingTeacher(undefined);
   };
 
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -50,6 +53,11 @@ export default function TeacherManagementPage() {
         </div>
 
         <div className="flex gap-2">
+          <Button onClick={() => setIsUploadDialogOpen(true)} variant="outline">
+            <Upload className="mr-2 h-4 w-4" />
+            Import Excel/CSV
+          </Button>
+
           <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingTeacher(undefined)}>
@@ -64,8 +72,8 @@ export default function TeacherManagementPage() {
                 </DialogTitle>
                 <DialogDescription>
                   {editingTeacher
-                    ? "Update teacher details."
-                    : "Fill in the details to register a new teacher."}
+                     ? "Update teacher details."
+                     : "Fill in the details to register a new teacher."}
                 </DialogDescription>
               </DialogHeader>
               <CreateTeacherForm
@@ -76,6 +84,12 @@ export default function TeacherManagementPage() {
               />
             </DialogContent>
           </Dialog>
+
+          <ExcelTeacherUpload
+            isOpen={isUploadDialogOpen}
+            onClose={() => setIsUploadDialogOpen(false)}
+            onUploadComplete={handleTeacherAdded}
+          />
         </div>
       </div>
 

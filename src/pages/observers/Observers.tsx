@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Trash2,
   FileDown,
-  MessageSquarePlus,
   Calendar,
   History,
   Eye,
@@ -840,17 +839,6 @@ export function Observers() {
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-indigo-700 hover:bg-indigo-50"
-                                  onClick={() => {
-                                    setRemarkAssignment(school.assignment);
-                                    setRemarkText("");
-                                  }}
-                                >
-                                  <MessageSquarePlus className="h-4 w-4" />
-                                </Button>
                                 {isEditable && (
                                   <Button
                                     variant="ghost"
@@ -1344,10 +1332,15 @@ export function Observers() {
                             schools.find(
                               (s) => s.id === (teacher as any).schoolId,
                             )?.name}{" "}
-                          • Class{" "}
-                          {Array.isArray(teacher.classes)
-                            ? teacher.classes.join(", ")
-                            : teacher.classes || "N/A"}
+                           • Class{" "}
+                          {(() => {
+                            const classesVal = Array.isArray(teacher.classes)
+                              ? teacher.classes.join(", ")
+                              : teacher.classes || "N/A";
+                            return classesVal.toLowerCase().startsWith("class ")
+                              ? classesVal.substring(6)
+                              : classesVal;
+                          })()}
                         </p>
                       </div>
                       <Button

@@ -30,11 +30,12 @@ import {
 } from "@/components/ui/select";
 
 import { Label } from "@/components/ui/label";
-import { createTeacherSchema, CreateTeacherInput, Teacher } from "../types";
+import { CreateTeacherInput, Teacher } from "../types";
 import { getCurrentAcademicYear, getAcademicYears } from "@/lib/academic-years";
 import { TeacherService } from "../services/teacherService";
 import { getUsers, UserData } from "@/features/users/services/userService";
 import { uploadFile } from "@/lib/upload";
+import { z } from "zod";
 
 const ACADEMIC_CLASSES = [
   "Class 1", "Class 2", "Class 3", "Class 4",
@@ -42,6 +43,20 @@ const ACADEMIC_CLASSES = [
   "Class 9", "Class 10", "Class 11", "Class 12",
 ];
 const ACADEMIC_YEARS = getAcademicYears();
+
+const getDynamicSchema = (mandatory: Record<string, boolean>) => {
+  return z.object({
+    name: mandatory.name ? z.string().min(2, "Name is required") : z.string().optional().or(z.literal("")),
+    phone: mandatory.phone ? z.string().min(10, "Valid phone number required") : z.string().optional().or(z.literal("")),
+    email: mandatory.email ? z.string().email("Invalid email address") : z.string().email("Invalid email address").optional().or(z.literal("")),
+    parishId: mandatory.parishId ? z.string().min(1, "Sunday School is required") : z.string().optional().or(z.literal("")),
+    classes: mandatory.classes ? z.array(z.string()).min(1, "Class is required").max(1, "Only one class can be selected") : z.array(z.string()).optional(),
+    academicYear: mandatory.academicYear ? z.string().min(1, "Academic Year is required") : z.string().optional().or(z.literal("")),
+    dob: mandatory.dob ? z.string().min(1, "Date of Birth is required") : z.string().optional().or(z.literal("")),
+    qualification: mandatory.qualification ? z.string().min(1, "Qualification is required") : z.string().optional().or(z.literal("")),
+    profilePicture: z.string().optional(),
+  });
+};
 
 interface School {
   id: string;
@@ -71,6 +86,26 @@ export function CreateTeacherForm({
   const [imagePreview, setImagePreview] = useState<string | null>(
     initialData?.profilePicture || null,
   );
+
+  const [mandatoryFields, setMandatoryFields] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem("teacher_mandatory_fields");
+    return saved ? JSON.parse(saved) : {
+      name: true,
+      dob: true,
+      parishId: true,
+      phone: true,
+      email: false,
+      academicYear: true,
+      qualification: true,
+      classes: true,
+    };
+  });
+
+  const toggleMandatory = (field: string) => {
+    const updated = { ...mandatoryFields, [field]: !mandatoryFields[field] };
+    setMandatoryFields(updated);
+    localStorage.setItem("teacher_mandatory_fields", JSON.stringify(updated));
+  };
 
   const uniqueForanes = Array.from(
     new Set(schools.map((s) => s.forane).filter(Boolean))
@@ -108,7 +143,7 @@ export function CreateTeacherForm({
 
   // Initialize form — parishId field is reused as schoolId internally for schema compat
   const form = useForm<CreateTeacherInput>({
-    resolver: zodResolver(createTeacherSchema),
+    resolver: zodResolver(getDynamicSchema(mandatoryFields)) as any,
     defaultValues: {
       name: initialData?.name || "",
       phone: initialData?.phone || "",
@@ -253,7 +288,23 @@ export function CreateTeacherForm({
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name *</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Name {mandatoryFields.name && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("name")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.name
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.name ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <FormControl>
                   <Input placeholder="John Doe" {...field} />
                 </FormControl>
@@ -267,7 +318,23 @@ export function CreateTeacherForm({
             name="dob"
             render={({ field }) => (
               <FormItem className="flex flex-col">
-                <FormLabel>Date of Birth *</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Date of Birth {mandatoryFields.dob && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("dob")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.dob
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.dob ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <FormControl>
@@ -339,7 +406,23 @@ export function CreateTeacherForm({
             name="parishId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Sunday School *</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Sunday School {mandatoryFields.parishId && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("parishId")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.parishId
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.parishId ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <Select
                   onValueChange={(val) => {
                     field.onChange(val);
@@ -409,7 +492,23 @@ export function CreateTeacherForm({
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone *</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Phone {mandatoryFields.phone && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("phone")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.phone
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.phone ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <FormControl>
                   <Input placeholder="9876543210" type="tel" {...field} />
                 </FormControl>
@@ -423,7 +522,23 @@ export function CreateTeacherForm({
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Email {mandatoryFields.email && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("email")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.email
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.email ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <FormControl>
                   <Input
                     placeholder="teacher@example.com"
@@ -441,7 +556,23 @@ export function CreateTeacherForm({
             name="academicYear"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Academic Year *</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Academic Year {mandatoryFields.academicYear && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("academicYear")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.academicYear
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.academicYear ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <Select
                   onValueChange={field.onChange}
                   defaultValue={field.value}
@@ -469,7 +600,23 @@ export function CreateTeacherForm({
             name="qualification"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Qualification *</FormLabel>
+                <div className="flex items-center justify-between mb-1">
+                  <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                    Qualification {mandatoryFields.qualification && <span className="text-red-500 font-bold">*</span>}
+                  </FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => toggleMandatory("qualification")}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                      mandatoryFields.qualification
+                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                        : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                    )}
+                  >
+                    {mandatoryFields.qualification ? "Mandatory" : "Optional"}
+                  </button>
+                </div>
                 <FormControl>
                   <Input placeholder="e.g. B.Ed, MA" {...field} />
                 </FormControl>
@@ -484,7 +631,23 @@ export function CreateTeacherForm({
           name="classes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Class *</FormLabel>
+              <div className="flex items-center justify-between mb-1">
+                <FormLabel className="flex items-center gap-1 font-semibold text-sm">
+                  Class {mandatoryFields.classes && <span className="text-red-500 font-bold">*</span>}
+                </FormLabel>
+                <button
+                  type="button"
+                  onClick={() => toggleMandatory("classes")}
+                  className={cn(
+                    "text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer",
+                    mandatoryFields.classes
+                      ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                      : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                  )}
+                >
+                  {mandatoryFields.classes ? "Mandatory" : "Optional"}
+                </button>
+              </div>
               <Select
                 onValueChange={(val) => field.onChange([val])}
                 defaultValue={field.value?.[0] || ""}

@@ -17,7 +17,7 @@ export const TeacherService = {
    * Add a new teacher to Firestore
    */
   addTeacher: async (data: CreateTeacherInput, schoolId: string, schoolName: string): Promise<string> => {
-    // Check for duplicates (Email + Academic Year) - Only if email is provided
+    // Check for duplicates (Email + Academic Year) - Only if email is provided and teacher is not deleted
     if (data.email) {
       const q = query(
         collection(db, TEACHERS_COLLECTION),
@@ -25,8 +25,10 @@ export const TeacherService = {
         where("academicYear", "==", data.academicYear)
       );
       const querySnapshot = await getDocs(q);
+      
+      const activeDuplicate = querySnapshot.docs.find(doc => doc.data().deleted !== true);
 
-      if (!querySnapshot.empty) {
+      if (activeDuplicate) {
         throw new Error("A teacher with this email already exists for the selected academic year.");
       }
     }
