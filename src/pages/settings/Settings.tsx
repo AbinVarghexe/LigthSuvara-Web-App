@@ -12,6 +12,9 @@ import { updateUserProfile, uploadProfileImage } from '../../features/users/serv
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { RecaptchaVerifier, updatePassword } from 'firebase/auth';
+import { auth } from '../../config/firebase';
 
 export function Settings() {
     const { currentUser } = useAuth();
@@ -20,6 +23,18 @@ export function Settings() {
     const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+    // SMS verification states
+    const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
+    const [otpSent, setOtpSent] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [smsLoading, setSmsLoading] = useState(false);
+    const [verifying, setVerifying] = useState(false);
+    const [confirmationResult, setConfirmationResult] = useState<any>(null);
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [recaptchaVerifier, setRecaptchaVerifier] = useState<any>(null);
 
     const { register, handleSubmit, setValue } = useForm({
         defaultValues: {
@@ -50,6 +65,7 @@ export function Settings() {
                     if (userData) {
                         if (userData.phoneNumber) {
                             setValue('phoneNumber', userData.phoneNumber);
+                            setPhoneNumber(userData.phoneNumber);
                         }
                         if (userData.fullName) {
                             setValue('fullName', userData.fullName);
@@ -77,6 +93,118 @@ export function Settings() {
             toast.error("Failed to send password reset email");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleSendSmsOtp = async () => {
+        if (!phoneNumber) {
+            toast.error("Please provide a phone number in your profile and save it first.");
+            return;
+        }
+
+        if (!phoneNumber.startsWith('+')) {
+            toast.error("Phone number must include country code starting with '+' (e.g. +919876543210)");
+            return;
+        }
+
+        setSmsLoading(true);
+        try {
+            // Clean up old verifier if it exists
+            if (recaptchaVerifier) {
+                try {
+                    recaptchaVerifier.clear();
+                } catch (clearErr) {
+                    console.error("Error clearing old verifier:", clearErr);
+                }
+            }
+
+            // Completely recreate the recaptcha-container element to prevent "already rendered" issues
+            let container = document.getElementById('recaptcha-container');
+            if (container) {
+                container.remove();
+            }
+            container = document.createElement('div');
+            container.id = 'recaptcha-container';
+            document.body.appendChild(container);
+
+            // Disable app verification for testing in development environments (helps bypass recaptcha on localhost)
+            // Note: In development mode, only fictional test phone numbers (set up in Firebase console) will work.
+            if (import.meta.env.DEV) {
+                auth.settings.appVerificationDisabledForTesting = true;
+            } else {
+                auth.settings.appVerificationDisabledForTesting = false;
+            }
+
+            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                size: 'invisible'
+            });
+            setRecaptchaVerifier(verifier);
+
+            const { linkWithPhoneNumber } = await import('firebase/auth');
+            
+            if (!auth.currentUser) {
+                throw new Error("No active user session found");
+            }
+
+            const result = await linkWithPhoneNumber(auth.currentUser, phoneNumber, verifier);
+            setConfirmationResult(result);
+            setOtpSent(true);
+            toast.success("OTP verification code sent to your phone number!");
+        } catch (error: any) {
+            console.error("Error sending SMS OTP:", error);
+            toast.error(error?.message || "Failed to send SMS OTP code");
+        } finally {
+            setSmsLoading(false);
+        }
+    };
+
+    const handleVerifyOtpAndChangePassword = async () => {
+        if (!otpCode || otpCode.length !== 6) {
+            toast.error("Please enter a valid 6-digit OTP code");
+            return;
+        }
+        if (!newPassword || newPassword.length < 6) {
+            toast.error("New password must be at least 6 characters");
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            toast.error("Passwords do not match");
+            return;
+        }
+
+        setVerifying(true);
+        try {
+            await confirmationResult.confirm(otpCode);
+
+            if (auth.currentUser) {
+                await updatePassword(auth.currentUser, newPassword);
+                
+                try {
+                    const { unlink } = await import('firebase/auth');
+                    await unlink(auth.currentUser, 'phone');
+                } catch (unlinkErr) {
+                    console.error("Optional phone unlink failed:", unlinkErr);
+                }
+
+                toast.success("Password updated successfully!");
+                setIsSmsModalOpen(false);
+                setOtpSent(false);
+                setOtpCode('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setConfirmationResult(null);
+                if (recaptchaVerifier) {
+                    recaptchaVerifier.clear();
+                    setRecaptchaVerifier(null);
+                }
+            } else {
+                throw new Error("No active user session found");
+            }
+        } catch (error: any) {
+            console.error("Error changing password:", error);
+            toast.error(error?.message || "Failed to verify OTP or update password");
+        } finally {
+            setVerifying(false);
         }
     };
 
@@ -274,27 +402,151 @@ export function Settings() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                <p className="text-sm text-muted-foreground">
-                                    To change your password, we will send a password reset link to your email address.
-                                </p>
-                                <Button
-                                    onClick={handlePasswordReset}
-                                    variant="outline"
-                                    disabled={isLoading}
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                            Sending...
-                                        </>
-                                    ) : (
-                                        'Send Password Reset Email'
+                            <div className="space-y-6">
+                                <div className="space-y-2 border-b border-border pb-4">
+                                    <h4 className="font-medium text-sm text-foreground">Option 1: Verify via Email</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        We will send a password reset link to your email address. Follow the instructions in the email to complete the reset.
+                                    </p>
+                                    <Button
+                                        onClick={handlePasswordReset}
+                                        variant="outline"
+                                        disabled={isLoading}
+                                        className="mt-2"
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            'Send Password Reset Email'
+                                        )}
+                                    </Button>
+                                </div>
+
+                                <div className="space-y-2 pt-2">
+                                    <h4 className="font-medium text-sm text-foreground">Option 2: Verify via SMS OTP</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        We will send a verification code to your phone number ({phoneNumber || 'No phone number set'}). Enter the code and set your new password directly.
+                                    </p>
+                                    <Button
+                                        onClick={() => setIsSmsModalOpen(true)}
+                                        variant="outline"
+                                        disabled={!phoneNumber}
+                                        className="mt-2"
+                                    >
+                                        Verify & Reset via SMS
+                                    </Button>
+                                    {!phoneNumber && (
+                                        <p className="text-[11px] text-destructive bg-destructive/10 p-2 rounded-md border border-destructive/20 mt-2">
+                                            Please set and save your Phone Number (starting with country code, e.g. +91...) in the profile section first.
+                                        </p>
                                     )}
-                                </Button>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* SMS OTP verification dialog */}
+                    <Dialog open={isSmsModalOpen} onOpenChange={(open) => !verifying && !smsLoading && setIsSmsModalOpen(open)}>
+                        <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                                <DialogTitle>Verify via SMS OTP</DialogTitle>
+                                <DialogDescription>
+                                    Reset your password by verifying ownership of the registered phone number.
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="grid gap-4 py-4">
+                                {!otpSent ? (
+                                    <div className="space-y-3 text-center py-2">
+                                        <p className="text-sm">
+                                            We will send a 6-digit code to <strong>{phoneNumber}</strong>.
+                                        </p>
+                                        <Button onClick={handleSendSmsOtp} disabled={smsLoading} className="w-full">
+                                            {smsLoading ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                    Sending OTP...
+                                                </>
+                                            ) : (
+                                                'Send Verification Code'
+                                            )}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="otpCode">Verification Code</Label>
+                                            <Input
+                                                id="otpCode"
+                                                type="text"
+                                                maxLength={6}
+                                                placeholder="Enter 6-digit code"
+                                                value={otpCode}
+                                                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                                disabled={verifying}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="newPassword">New Password</Label>
+                                            <Input
+                                                id="newPassword"
+                                                type="password"
+                                                placeholder="Enter new password"
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                disabled={verifying}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                            <Input
+                                                id="confirmPassword"
+                                                type="password"
+                                                placeholder="Confirm new password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                disabled={verifying}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setIsSmsModalOpen(false);
+                                        setOtpSent(false);
+                                        setOtpCode('');
+                                        setNewPassword('');
+                                        setConfirmPassword('');
+                                        setConfirmationResult(null);
+                                    }}
+                                    disabled={verifying || smsLoading}
+                                >
+                                    Cancel
+                                </Button>
+                                {otpSent && (
+                                    <Button onClick={handleVerifyOtpAndChangePassword} disabled={verifying}>
+                                        {verifying ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Verifying...
+                                            </>
+                                        ) : (
+                                            'Verify & Update'
+                                        )}
+                                    </Button>
+                                )}
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
 
                     {/* Logout Section */}
                     <Card>

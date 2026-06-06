@@ -19,6 +19,7 @@ import {
   UserPlus,
   ShieldCheck,
   Video,
+  Sparkles,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -79,6 +80,7 @@ const navigation: NavItem[] = [
     adminOnly: true,
   },
   { name: "Video Resources", href: "/video-resources", icon: Video },
+  { name: "Saints", href: "/saints", icon: Sparkles },
   {
     name: "Theme & Programs",
     href: "/theme",
