@@ -258,3 +258,122 @@ export const deleteUser = onCall(
     }
   }
 );
+
+/**
+ * Cloud Function to securely reset a user's password by an admin.
+ */
+export const resetUserPasswordByAdmin = onCall(
+  async (request: CallableRequest<{ uid: string; newPassword: string }>): Promise<{ success: boolean }> => {
+    // Verify the caller is authenticated
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "User must be authenticated to reset user passwords"
+      );
+    }
+
+    // Check if the caller has admin role
+    const callerUid = request.auth.uid;
+    const callerDoc = await admin.firestore()
+      .collection("users")
+      .doc(callerUid)
+      .get();
+
+    if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admins can reset user passwords"
+      );
+    }
+
+    const { uid, newPassword } = request.data;
+    if (!uid || !newPassword) {
+      throw new HttpsError(
+        "invalid-argument",
+        "UID and new password are required"
+      );
+    }
+
+    if (newPassword.length < 6) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Password must be at least 6 characters"
+      );
+    }
+
+    try {
+      // Update password using admin SDK
+      await admin.auth().updateUser(uid, {
+        password: newPassword,
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error(`Failed to reset password for user ${uid}:`, error);
+      throw new HttpsError("internal", error.message || "Failed to reset password");
+    }
+  }
+);
+
+/**
+ * Cloud Function to securely disable or enable a user.
+ */
+export const toggleUserDisabledStatus = onCall(
+  async (request: CallableRequest<{ uid: string; disabled: boolean }>): Promise<{ success: boolean }> => {
+    // Verify the caller is authenticated
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "User must be authenticated to toggle user status"
+      );
+    }
+
+    // Check if the caller has admin role
+    const callerUid = request.auth.uid;
+    const callerDoc = await admin.firestore()
+      .collection("users")
+      .doc(callerUid)
+      .get();
+
+    if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admins can disable/enable user accounts"
+      );
+    }
+
+    const { uid, disabled } = request.data;
+    if (!uid) {
+      throw new HttpsError(
+        "invalid-argument",
+        "UID is required"
+      );
+    }
+
+    // Prevent self-disabling
+    if (uid === callerUid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Admins cannot disable their own account"
+      );
+    }
+
+    try {
+      // 1. Update status in Firebase Auth
+      await admin.auth().updateUser(uid, {
+        disabled: disabled,
+      });
+
+      // 2. Update status in Firestore users collection
+      await admin.firestore().collection("users").doc(uid).update({
+        disabled: disabled,
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error(`Failed to toggle status for user ${uid}:`, error);
+      throw new HttpsError("internal", error.message || "Failed to toggle user status");
+    }
+  }
+);
+

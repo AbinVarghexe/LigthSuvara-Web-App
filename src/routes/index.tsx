@@ -27,6 +27,7 @@ import { ThemePrograms } from "../pages/theme/ThemePrograms";
 import { Logs } from "../pages/logs/Logs";
 import { PublicRegistration } from "../pages/public-registration/PublicRegistration";
 import { AppControl } from "../pages/app-control/AppControl";
+import { LiveVideo } from "../pages/live-video/LiveVideo";
 import { VideoResources } from "../pages/video-resources/VideoResources";
 import { Saints } from "../pages/saints/Saints";
 import { Calendar } from "../pages/calendar/Calendar";
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
           { path: "theme", Component: ThemePrograms },
           { path: "public-registration", Component: PublicRegistration },
           { path: "app-control", Component: AppControl },
+          { path: "live-video", Component: LiveVideo },
           { path: "logs", Component: Logs },
           { path: "video-resources", Component: VideoResources },
           { path: "saints", Component: Saints },

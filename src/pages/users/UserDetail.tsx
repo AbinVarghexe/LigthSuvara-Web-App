@@ -13,6 +13,9 @@ import {
   Trash2,
   Edit,
   Sparkles,
+  KeyRound,
+  UserX,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { StatusBadge } from "../../components/common/StatusBadge";
@@ -45,10 +48,11 @@ import {
 import { toast } from "sonner";
 import {
   getUser,
-  updateUserRole,
   deleteUser,
   getEventsByUser,
   updateUserProfile,
+  resetUserPasswordByAdmin,
+  toggleUserDisabledStatus,
   UserData,
 } from "../../features/users/services/userService";
 import { EventData } from "../../features/events/services/eventService";
@@ -110,6 +114,9 @@ export function UserDetail() {
   const [loading, setLoading] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showDisableDialog, setShowDisableDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
   // Edit Form State
@@ -156,16 +163,39 @@ export function UserDetail() {
     fetchUserAndEvents();
   }, [id, navigate]);
 
-  const handleRoleChange = async (newRole: "admin" | "school" | "animator") => {
+  const handleToggleDisabled = async () => {
     if (!user || !user.id) return;
     setActionLoading(true);
+    const newDisabledState = !user.disabled;
     try {
-      await updateUserRole(user.id, newRole);
-      setUser({ ...user, role: newRole });
-      toast.success(`User role updated to ${newRole}`);
-    } catch (error) {
-      console.error("Error updating user role:", error);
-      toast.error("Failed to update user role");
+      await toggleUserDisabledStatus(user.id, newDisabledState);
+      setUser({ ...user, disabled: newDisabledState });
+      toast.success(newDisabledState ? "User has been disabled" : "User has been enabled");
+      setShowDisableDialog(false);
+    } catch (error: any) {
+      console.error("Error toggling user disabled status:", error);
+      toast.error(error.message || "Failed to update user status");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !user.id) return;
+    if (newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters long");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await resetUserPasswordByAdmin(user.id, newPassword);
+      toast.success("User password updated successfully!");
+      setShowResetDialog(false);
+      setNewPassword("");
+    } catch (error: any) {
+      console.error("Error resetting user password:", error);
+      toast.error(error.message || "Failed to reset user password");
     } finally {
       setActionLoading(false);
     }
@@ -274,22 +304,23 @@ export function UserDetail() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {user.role !== "admin" && (
-                <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
-                  <Shield className="w-4 h-4 mr-2" />
-                  Promote to Admin
-                </DropdownMenuItem>
-              )}
-              {user.role !== "animator" && (
-                <DropdownMenuItem onClick={() => handleRoleChange("animator")}>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Set as Animator
-                </DropdownMenuItem>
-              )}
-              {user.role !== "school" && (
-                <DropdownMenuItem onClick={() => handleRoleChange("school")}>
-                  <School className="w-4 h-4 mr-2" />
-                  Set as School
+              <DropdownMenuItem onClick={() => setShowResetDialog(true)}>
+                <KeyRound className="w-4 h-4 mr-2" />
+                Reset Password
+              </DropdownMenuItem>
+              {user.id !== currentUser?.uid && (
+                <DropdownMenuItem onClick={() => setShowDisableDialog(true)}>
+                  {user.disabled ? (
+                    <>
+                      <UserCheck className="w-4 h-4 mr-2 text-green-600" />
+                      Enable User
+                    </>
+                  ) : (
+                    <>
+                      <UserX className="w-4 h-4 mr-2 text-amber-600" />
+                      Disable User
+                    </>
+                  )}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
@@ -348,6 +379,12 @@ export function UserDetail() {
                       ? "Parish"
                       : "School Account"}
               </span>
+              {user.disabled && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400">
+                  <UserX className="w-3 h-3" />
+                  Disabled
+                </span>
+              )}
               {(user.parishCode || (user as any).code) && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border bg-gray-50 text-gray-700 border-gray-200 dark:bg-zinc-900 dark:text-gray-300 dark:border-zinc-800">
                   Code: {user.parishCode || (user as any).code}
@@ -652,6 +689,90 @@ export function UserDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Disable Confirmation Dialog */}
+      <AlertDialog open={showDisableDialog} onOpenChange={setShowDisableDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{user.disabled ? "Enable User Account" : "Disable User Account"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {user.disabled
+                ? "This will enable the user account and allow them to log in to the system again."
+                : "This will temporarily disable the user account, preventing them from logging in or using the system."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleToggleDisabled}
+              className={user.disabled ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : user.disabled ? (
+                "Enable User"
+              ) : (
+                "Disable User"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset User Password</DialogTitle>
+            <DialogDescription>
+              Assign a new password for this user. The password must be at least 6 characters long.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                minLength={6}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowResetDialog(false);
+                  setNewPassword("");
+                }}
+                disabled={actionLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={actionLoading}>
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  "Reset Password"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

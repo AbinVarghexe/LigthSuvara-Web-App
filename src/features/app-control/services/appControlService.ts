@@ -78,3 +78,40 @@ export const saveAppThemeConfig = async (config: AppThemeConfig): Promise<void> 
     const docRef = doc(db, SETTINGS_COLLECTION, APP_THEME_DOC);
     await setDoc(docRef, config, { merge: true });
 };
+
+export interface LiveVideoConfig {
+    isLive: boolean;
+    title: string;
+    url: string;
+    startDate?: string;
+    startTime?: string;
+    endDate?: string;
+    endTime?: string;
+}
+
+const LIVE_VIDEO_DOC = "live_video_config";
+
+export const getLiveVideoConfig = async (): Promise<LiveVideoConfig> => {
+    const docRef = doc(db, SETTINGS_COLLECTION, LIVE_VIDEO_DOC);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+        return docSnap.data() as LiveVideoConfig;
+    } else {
+        return {
+            isLive: false,
+            title: "Live Stream",
+            url: "",
+            startDate: "",
+            startTime: "",
+            endDate: "",
+            endTime: "",
+        };
+    }
+};
+
+export const saveLiveVideoConfig = async (config: LiveVideoConfig): Promise<void> => {
+    const docRef = doc(db, SETTINGS_COLLECTION, LIVE_VIDEO_DOC);
+    await setDoc(docRef, config, { merge: true });
+};
+

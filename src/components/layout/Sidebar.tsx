@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Video,
   Sparkles,
+  Radio,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -91,6 +92,12 @@ const navigation: NavItem[] = [
     name: "App Control",
     href: "/app-control",
     icon: ShieldCheck,
+    adminOnly: true,
+  },
+  {
+    name: "Live Video",
+    href: "/live-video",
+    icon: Radio,
     adminOnly: true,
   },
   {

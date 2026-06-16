@@ -265,3 +265,22 @@ export const subscribeToNotifications = (
         unsubNotifications();
     };
 };
+
+export const sendLiveStreamNotification = async (title: string, body: string, url?: string) => {
+    return await addDoc(collection(db, BROADCASTS_COLLECTION), {
+        title,
+        body,
+        imageUrl: null,
+        timestamp: serverTimestamp(),
+        recipientId: 'public',
+        isBroadcast: true,
+        isRead: false,
+        audience: 'public',
+        readBy: [],
+        link: url || null,
+        click_action: url || null,
+        type: 'live_stream',
+        notificationOnly: true,
+    });
+};
+

@@ -33,6 +33,7 @@ export interface UserData {
     parishCode?: string;
     code?: string;
     lastActiveAt?: any; // Firestore Timestamp
+    disabled?: boolean;
 }
 
 export const getUsers = async () => {
@@ -447,4 +448,33 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
         errors
     };
 };
+
+export const resetUserPasswordByAdmin = async (userId: string, newPassword: string): Promise<{ success: boolean }> => {
+    const resetPasswordFunction = httpsCallable<{ uid: string; newPassword: string }, { success: boolean }>(
+        functions,
+        'resetUserPasswordByAdmin'
+    );
+    try {
+        const result = await resetPasswordFunction({ uid: userId, newPassword });
+        return result.data;
+    } catch (error: any) {
+        console.error('Error calling resetUserPasswordByAdmin function:', error);
+        throw new Error(error.message || 'Failed to reset password');
+    }
+};
+
+export const toggleUserDisabledStatus = async (userId: string, disabled: boolean): Promise<{ success: boolean }> => {
+    const toggleDisabledFunction = httpsCallable<{ uid: string; disabled: boolean }, { success: boolean }>(
+        functions,
+        'toggleUserDisabledStatus'
+    );
+    try {
+        const result = await toggleDisabledFunction({ uid: userId, disabled });
+        return result.data;
+    } catch (error: any) {
+        console.error('Error calling toggleUserDisabledStatus function:', error);
+        throw new Error(error.message || 'Failed to toggle user status');
+    }
+};
+
 

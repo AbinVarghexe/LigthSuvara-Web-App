@@ -5,7 +5,8 @@ export interface ResourceItem {
   id: string;
   title: string;
   url: string;
-  type: "document" | "youtube" | "drive" | "link";
+  type: "document" | "youtube" | "drive" | "link" | "video" | "audio" | "pdf" | "ppt" | "image" | "quiz";
+  customColor?: string;
 }
 
 export interface Chapter {
@@ -245,35 +246,100 @@ const SEED_DATA: Record<number, Chapter[]> = {
   ],
 };
 
-// Fetch resources for a specific class (1-12)
-export const getClassResources = async (classNum: number): Promise<ClassResources> => {
-  const docId = `class_${classNum}`;
-  const docRef = doc(db, RESOURCES_COLLECTION, docId);
+export interface ResourceSection {
+  id: string;
+  title: string;
+  icon: string; // e.g. "GraduationCap", "BookOpen", "Youtube", "Music", "Video", "FileText", "FolderDot", "HelpCircle", "ExternalLink", "Heart"
+  customColor: string;
+  order: number;
+}
+
+export interface SectionResources {
+  sectionId: string;
+  chapters: Chapter[];
+}
+
+const SECTIONS_DOC_ID = "sections_config";
+
+// Fetch all dynamic resource sections
+export const getResourceSections = async (): Promise<ResourceSection[]> => {
+  const docRef = doc(db, RESOURCES_COLLECTION, SECTIONS_DOC_ID);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    return (data.sections || []).sort((a: ResourceSection, b: ResourceSection) => a.order - b.order);
+  } else {
+    // Return default sections (Class 1 to Class 12)
+    const defaults: ResourceSection[] = [];
+    // Seed Class 1-12
+    for (let i = 1; i <= 12; i++) {
+      defaults.push({
+        id: `class_${i}`,
+        title: `Class ${i}`,
+        icon: "GraduationCap",
+        customColor: "#3B82F6",
+        order: i,
+      });
+    }
+
+    await setDoc(docRef, { sections: defaults });
+    return defaults;
+  }
+};
+
+// Save all dynamic resource sections
+export const saveResourceSections = async (sections: ResourceSection[]): Promise<void> => {
+  const docRef = doc(db, RESOURCES_COLLECTION, SECTIONS_DOC_ID);
+  await setDoc(docRef, { sections }, { merge: true });
+};
+
+// Fetch resources for a specific section (by sectionId)
+export const getSectionResources = async (sectionId: string): Promise<SectionResources> => {
+  const docRef = doc(db, RESOURCES_COLLECTION, sectionId);
   const docSnap = await getDoc(docRef);
 
   if (docSnap.exists()) {
     const data = docSnap.data();
     return {
-      classNum,
+      sectionId,
       chapters: data.chapters || [],
     };
   } else {
     // If not exists in Firestore, check if we have seed data.
-    const defaultChapters = SEED_DATA[classNum] || [];
+    let defaultChapters: Chapter[] = [];
+    if (sectionId.startsWith("class_")) {
+      const classNum = parseInt(sectionId.replace("class_", ""));
+      defaultChapters = SEED_DATA[classNum] || [];
+    }
     // Seed it to Firestore so it is stored
     await setDoc(docRef, { chapters: defaultChapters });
     return {
-      classNum,
+      sectionId,
       chapters: defaultChapters,
     };
   }
 };
 
-// Save resources for a specific class
+// Save resources for a specific section
+export const saveSectionResources = async (sectionResources: SectionResources): Promise<void> => {
+  const docRef = doc(db, RESOURCES_COLLECTION, sectionResources.sectionId);
+  await setDoc(docRef, { chapters: sectionResources.chapters }, { merge: true });
+};
+
+// Fetch resources for a specific class (1-12) - Deprecated, use getSectionResources
+export const getClassResources = async (classNum: number): Promise<ClassResources> => {
+  const sectionId = `class_${classNum}`;
+  const res = await getSectionResources(sectionId);
+  return {
+    classNum,
+    chapters: res.chapters,
+  };
+};
+
+// Save resources for a specific class - Deprecated, use saveSectionResources
 export const saveClassResources = async (classResources: ClassResources): Promise<void> => {
-  const docId = `class_${classResources.classNum}`;
-  const docRef = doc(db, RESOURCES_COLLECTION, docId);
-  await setDoc(docRef, { chapters: classResources.chapters }, { merge: true });
+  const sectionId = `class_${classResources.classNum}`;
+  await saveSectionResources({ sectionId, chapters: classResources.chapters });
 };
 
 // Initialize seeding for all classes (to make sure all seed data is written at once if needed)
@@ -288,3 +354,4 @@ export const seedAllClassResources = async (): Promise<void> => {
     }
   }
 };
+
