@@ -92,7 +92,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { collection, getDocs, query, orderBy, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "../../config/firebase";
 
 interface SchoolData {
@@ -101,6 +101,20 @@ interface SchoolData {
   schoolName?: string;
   parish?: string;
   forane?: string;
+}
+
+interface ForaneParish {
+  id: string;
+  name: string;
+  saint?: string;
+  place?: string;
+  code?: string;
+}
+
+interface ForaneData {
+  id: string;
+  name: string;
+  parishes: ForaneParish[];
 }
 
 export function AnimatorsList() {
