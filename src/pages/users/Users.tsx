@@ -565,15 +565,15 @@ export function Users() {
         }
       }
 
-      const name = user.schoolName || user.schoolname || user.fullName || "";
+      const name = user.schoolName || user.schoolname || user.fullName || user.name || "";
       return (
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     })
     .sort((a, b) => {
-      const nameA = (a.schoolName || a.schoolname || a.fullName || "").toLowerCase();
-      const nameB = (b.schoolName || b.schoolname || b.fullName || "").toLowerCase();
+      const nameA = (a.schoolName || a.schoolname || a.fullName || a.name || "").toLowerCase();
+      const nameB = (b.schoolName || b.schoolname || b.fullName || b.name || "").toLowerCase();
       return nameA.localeCompare(nameB);
     });
 
@@ -583,15 +583,15 @@ export function Users() {
   const allUsersFilteredList = users
     .filter((user) => {
       if (allUsersRoleFilter !== "all" && user.role !== allUsersRoleFilter) return false;
-      const name = user.schoolName || user.schoolname || user.fullName || "";
+      const name = user.schoolName || user.schoolname || user.fullName || user.name || "";
       return (
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     })
     .sort((a, b) => {
-      const nameA = (a.schoolName || a.schoolname || a.fullName || "").toLowerCase();
-      const nameB = (b.schoolName || b.schoolname || b.fullName || "").toLowerCase();
+      const nameA = (a.schoolName || a.schoolname || a.fullName || a.name || "").toLowerCase();
+      const nameB = (b.schoolName || b.schoolname || b.fullName || b.name || "").toLowerCase();
       return nameA.localeCompare(nameB);
     });
 
@@ -1247,7 +1247,9 @@ export function Users() {
                         <h3 className="font-medium text-foreground">
                           {user.role === "parish"
                             ? (user.name || user.fullName || user.schoolname || user.schoolName || "Unnamed User")
-                            : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
+                            : user.role === "animator"
+                              ? (user.name || user.fullName || "Unnamed User")
+                              : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
                         </h3>
                         <p className="text-sm text-muted-foreground truncate max-w-[150px]">
                           {user.email}
@@ -2298,7 +2300,9 @@ export function Users() {
                         <span>
                           {user.role === "parish"
                             ? (user.name || user.fullName || getFormattedParishUserName(user.parish || "", user.parish || "", user.forane))
-                            : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
+                            : user.role === "animator"
+                              ? (user.name || user.fullName || "Unnamed User")
+                              : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
                         </span>
                       </h3>
                       <p className="text-sm text-muted-foreground truncate max-w-[150px]">

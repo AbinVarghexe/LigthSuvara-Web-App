@@ -353,7 +353,9 @@ export function UserDetail() {
             <h2 className="text-xl font-bold text-foreground mb-1">
               {user.role === "parish"
                 ? (user.name || user.fullName || getFormattedParishUserName(user.parish || "", user.parish || "", user.forane))
-                : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
+                : user.role === "animator"
+                  ? (user.name || user.fullName || "Unnamed User")
+                  : (user.schoolname || user.schoolName || user.fullName || "Unnamed User")}
             </h2>
             <div className="flex justify-center gap-2 mb-6 flex-wrap">
               <span

@@ -12,6 +12,12 @@ import {
   HelpCircle,
   BarChart2,
   Edit2,
+  MoreVertical,
+  KeyRound,
+  UserX,
+  UserCheck,
+  Eye,
+  Sparkles,
 } from "lucide-react";
 import {
   Card,
@@ -55,6 +61,12 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "../../components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
   getAnimators,
@@ -72,13 +84,16 @@ import {
 } from "../../features/animators/services/animatorService";
 import { Marks } from "../marks/Marks";
 import { Questions } from "../questions/Questions";
-import { UserData, getUsers } from "../../features/users/services/userService";
+import { UserData, getUsers, resetUserPasswordByAdmin, toggleUserDisabledStatus } from "../../features/users/services/userService";
+import { Link } from "react-router";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
+import { collection, getDocs, query, orderBy, doc, getDoc } from "firebase/firestore";
+import { db } from "../../config/firebase";
 
 interface SchoolData {
   id: string;
@@ -105,6 +120,10 @@ export function AnimatorsList() {
     unassigned: 0,
     fullyAssigned: 0,
   });
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [isDisableDialogOpen, setIsDisableDialogOpen] = useState(false);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   const [selectedYear, setSelectedYear] = useState(getAcademicYear());
   const [allAnimatorsLoaded, setAllAnimatorsLoaded] = useState<string[]>([]);
@@ -312,6 +331,46 @@ export function AnimatorsList() {
     } catch (error) {
       console.error("Error deleting animator:", error);
       toast.error("Failed to delete animator");
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAnimator) return;
+    if (resetNewPassword.length < 6) {
+      toast.error("Password must be at least 6 characters long");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await resetUserPasswordByAdmin(selectedAnimator.id, resetNewPassword);
+      toast.success("Animator password updated successfully!");
+      setIsResetDialogOpen(false);
+      setResetNewPassword("");
+      setSelectedAnimator(null);
+    } catch (error: any) {
+      console.error("Error resetting animator password:", error);
+      toast.error(error.message || "Failed to reset password");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleDisabled = async () => {
+    if (!selectedAnimator) return;
+    setActionLoading(true);
+    const newDisabledState = !selectedAnimator.disabled;
+    try {
+      await toggleUserDisabledStatus(selectedAnimator.id, newDisabledState);
+      toast.success(newDisabledState ? "Animator has been disabled" : "Animator has been enabled");
+      setIsDisableDialogOpen(false);
+      setSelectedAnimator(null);
+      fetchData();
+    } catch (error: any) {
+      console.error("Error toggling animator disabled status:", error);
+      toast.error(error.message || "Failed to update animator status");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -577,15 +636,22 @@ export function AnimatorsList() {
                         )}
                       </div>
                     </div>
-                    <Badge
-                      variant={
-                        assignmentsForYear.length === 0
-                          ? "secondary"
-                          : "outline"
-                      }
-                    >
-                      {selectedYear === "All" ? assignmentsForYear.length : `${assignmentsForYear.length}/7`}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <Badge
+                        variant={
+                          assignmentsForYear.length === 0
+                            ? "secondary"
+                            : "outline"
+                        }
+                      >
+                        {selectedYear === "All" ? assignmentsForYear.length : `${assignmentsForYear.length}/7`}
+                      </Badge>
+                      {animator.disabled && (
+                        <Badge variant="destructive" className="bg-red-600 hover:bg-red-700 text-xs font-semibold px-2 py-0.5">
+                          Disabled
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -647,39 +713,74 @@ export function AnimatorsList() {
                         Assign School
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 border-gray-200"
-                      onClick={() => openEditDialog(animator)}
-                    >
-                      <Edit2 className="h-4 w-4 text-blue-500" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9">
-                          <Trash2 className="h-4 w-4 text-red-500" />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-9 w-9">
+                          <MoreVertical className="h-4 w-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Animator</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete {animator.name}?
-                            This will also remove all their assignments.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDeleteAnimator(animator.id)}
-                            className="bg-red-600 hover:bg-red-700"
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link to={`/users/${animator.id}`} className="flex items-center w-full">
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Profile
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEditDialog(animator)}>
+                          <Edit2 className="w-4 h-4 mr-2 text-blue-500" />
+                          Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedAnimator(animator);
+                          setIsResetDialogOpen(true);
+                        }}>
+                          <KeyRound className="w-4 h-4 mr-2 text-purple-500" />
+                          Reset Password
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedAnimator(animator);
+                          setIsDisableDialogOpen(true);
+                        }}>
+                          {animator.disabled ? (
+                            <>
+                              <UserCheck className="w-4 h-4 mr-2 text-green-600" />
+                              Enable Animator
+                            </>
+                          ) : (
+                            <>
+                              <UserX className="w-4 h-4 mr-2 text-amber-600" />
+                              Disable Animator
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-500 focus:text-red-500 focus:bg-red-50">
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Animator
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Animator</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete {animator.name}?
+                                This will also remove all their assignments.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteAnimator(animator.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardContent>
               </Card>
@@ -850,6 +951,549 @@ export function AnimatorsList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Disable Confirmation Dialog */}
+      <AlertDialog open={isDisableDialogOpen} onOpenChange={setIsDisableDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{selectedAnimator?.disabled ? "Enable Animator Account" : "Disable Animator Account"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedAnimator?.disabled
+                ? `This will enable the animator account for ${selectedAnimator?.name} and allow them to log in again.`
+                : `This will temporarily disable the animator account for ${selectedAnimator?.name}, preventing them from logging in or entering marks.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedAnimator(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleToggleDisabled}
+              className={selectedAnimator?.disabled ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : selectedAnimator?.disabled ? (
+                "Enable Animator"
+              ) : (
+                "Disable Animator"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={isResetDialogOpen} onOpenChange={(open) => {
+        setIsResetDialogOpen(open);
+        if (!open) {
+          setResetNewPassword("");
+          setSelectedAnimator(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Animator Password</DialogTitle>
+            <DialogDescription>
+              Assign a new password for {selectedAnimator?.name}. The password must be at least 6 characters long.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="resetPassword">New Password</Label>
+              <Input
+                id="resetPassword"
+                type="password"
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                minLength={6}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsResetDialogOpen(false);
+                  setResetNewPassword("");
+                  setSelectedAnimator(null);
+                }}
+                disabled={actionLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={actionLoading}>
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  "Reset Password"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export function AnimatorProfilesView() {
+  const [animators, setAnimators] = useState<AnimatorWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedAnimator, setSelectedAnimator] = useState<AnimatorWithUser | null>(null);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [isDisableDialogOpen, setIsDisableDialogOpen] = useState(false);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Forane & Parish Filters
+  const [foranesData, setForanesData] = useState<ForaneData[]>([]);
+  const [parishesPerForane, setParishesPerForane] = useState<Record<string, ForaneParish[]>>({});
+  const [loadingParishes, setLoadingParishes] = useState<Record<string, boolean>>({});
+  const [selectedForaneFilter, setSelectedForaneFilter] = useState<string>("all");
+  const [selectedParishFilter, setSelectedParishFilter] = useState<string>("all");
+
+  const toTitleCase = (str: string): string => {
+    if (!str) return str;
+    return str
+      .toLowerCase()
+      .replace(/(^|[\s.])([a-z])/g, (_, sep, char) => sep + char.toUpperCase());
+  };
+
+  const fetchForanes = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'foranes'), orderBy('name')));
+      const foranes: ForaneData[] = snap.docs.map(d => ({
+        id: d.id,
+        name: d.data().name as string,
+        parishes: [],
+      }));
+      setForanesData(foranes);
+    } catch (e) {
+      console.error('Failed to load foranes', e);
+    }
+  };
+
+  const fetchParishesForForane = async (foraneId: string) => {
+    if (parishesPerForane[foraneId] || loadingParishes[foraneId]) return;
+    setLoadingParishes(prev => ({ ...prev, [foraneId]: true }));
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'foranes', foraneId, 'parishes'), orderBy('name'))
+      );
+      const parishes: ForaneParish[] = snap.docs.map(d => ({
+        id: d.id,
+        name: d.data().name as string,
+        saint: d.data().saint as string | undefined,
+        place: d.data().place as string | undefined,
+        code: d.data().code as string | undefined,
+      }));
+      setParishesPerForane(prev => ({ ...prev, [foraneId]: parishes }));
+    } catch (e) {
+      console.error('Failed to load parishes for forane', foraneId, e);
+    } finally {
+      setLoadingParishes(prev => ({ ...prev, [foraneId]: false }));
+    }
+  };
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const data = await getAnimators();
+      setAnimators(data);
+      await fetchForanes();
+    } catch (error) {
+      console.error("Error loading animator profiles:", error);
+      toast.error("Failed to load animator profiles");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedForaneFilter && selectedForaneFilter !== "all") {
+      const foraneDoc = foranesData.find(
+        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+      );
+      if (foraneDoc && !parishesPerForane[foraneDoc.id]) {
+        fetchParishesForForane(foraneDoc.id);
+      }
+    }
+  }, [selectedForaneFilter, foranesData]);
+
+  const getAvailableParishes = (): string[] => {
+    if (selectedForaneFilter !== "all") {
+      const foraneDoc = foranesData.find(
+        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+      );
+      if (foraneDoc && parishesPerForane[foraneDoc.id]) {
+        return parishesPerForane[foraneDoc.id]
+          .map(p => p.place || p.saint || p.name)
+          .filter((p): p is string => !!p);
+      }
+      const filtered = animators.filter(u => (u.parishName || u.parish || "").toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim());
+      return Array.from(new Set(filtered.map(u => u.parishName || u.parish || "")))
+        .filter(Boolean)
+        .sort();
+    } else {
+      return Array.from(new Set(animators.map(u => u.parishName || u.parish || "")))
+        .filter(Boolean)
+        .sort();
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAnimator) return;
+    if (resetNewPassword.length < 6) {
+      toast.error("Password must be at least 6 characters long");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await resetUserPasswordByAdmin(selectedAnimator.id, resetNewPassword);
+      toast.success("Animator password updated successfully!");
+      setIsResetDialogOpen(false);
+      setResetNewPassword("");
+      setSelectedAnimator(null);
+    } catch (error: any) {
+      console.error("Error resetting password:", error);
+      toast.error(error.message || "Failed to reset password");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleDisabled = async () => {
+    if (!selectedAnimator) return;
+    setActionLoading(true);
+    const newDisabledState = !selectedAnimator.disabled;
+    try {
+      await toggleUserDisabledStatus(selectedAnimator.id, newDisabledState);
+      toast.success(newDisabledState ? "Animator has been disabled" : "Animator has been enabled");
+      setIsDisableDialogOpen(false);
+      setSelectedAnimator(null);
+      fetchData();
+    } catch (error: any) {
+      console.error("Error toggling disabled status:", error);
+      toast.error(error.message || "Failed to update animator status");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const filteredAnimators = animators.filter((animator) => {
+    // Search term check
+    const name = animator.name || "";
+    const matchesSearch = animator.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      name.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+
+    // Forane check
+    if (selectedForaneFilter !== "all") {
+      const animatorParish = (animator.parishName || animator.parish || "").toLowerCase().trim();
+      const foraneDoc = foranesData.find(
+        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+      );
+      if (foraneDoc) {
+        const hasParishInForane = parishesPerForane[foraneDoc.id]?.some(
+          p => {
+            const pName = (p.place || p.saint || p.name || "").toLowerCase().trim();
+            return animatorParish.includes(pName) || pName.includes(animatorParish);
+          }
+        ) || false;
+        if (!hasParishInForane) return false;
+      }
+    }
+
+    // Parish check
+    if (selectedParishFilter !== "all") {
+      const animatorParish = (animator.parishName || animator.parish || "").toLowerCase().trim();
+      const filterParish = selectedParishFilter.toLowerCase().trim();
+      if (!animatorParish.includes(filterParish) && !filterParish.includes(animatorParish)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Filters and Search Bar */}
+      <Card>
+        <CardContent className="p-4 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search animators by email or name..."
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="w-full md:w-[220px]">
+            <Select
+              value={selectedForaneFilter}
+              onValueChange={(val) => {
+                setSelectedForaneFilter(val);
+                setSelectedParishFilter("all");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Foranes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Foranes</SelectItem>
+                {foranesData.map((f) => (
+                  <SelectItem key={f.id} value={f.name}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="w-full md:w-[220px]">
+            <Select
+              value={selectedParishFilter}
+              onValueChange={(val) => {
+                setSelectedParishFilter(val);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Parishes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Parishes</SelectItem>
+                {getAvailableParishes().map((pName) => (
+                  <SelectItem key={pName} value={pName}>
+                    {toTitleCase(pName)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Grid of Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredAnimators.map((user) => {
+          return (
+            <Card key={user.id} className="hover:shadow-md transition-shadow relative">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage
+                          src={user.profileImageUrl}
+                          alt={user.name || "User"}
+                          loading="lazy"
+                        />
+                        <AvatarFallback>
+                          {(user.name || user.email || "U")
+                            .charAt(0)
+                            .toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-foreground flex items-center gap-2 flex-wrap">
+                        <span>{user.name || "Unnamed User"}</span>
+                      </h3>
+                      <p className="text-sm text-muted-foreground truncate max-w-[180px]">
+                        {user.email}
+                      </p>
+                      {(user.parishName || user.parish) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Parish: {user.parishName || user.parish}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => {
+                        setSelectedAnimator(user);
+                        setIsResetDialogOpen(true);
+                      }}>
+                        <KeyRound className="w-4 h-4 mr-2 text-purple-500" />
+                        Reset Password
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        setSelectedAnimator(user);
+                        setIsDisableDialogOpen(true);
+                      }}>
+                        {user.disabled ? (
+                          <>
+                            <UserCheck className="w-4 h-4 mr-2 text-green-600" />
+                            Enable Animator
+                          </>
+                        ) : (
+                          <>
+                            <UserX className="w-4 h-4 mr-2 text-amber-600" />
+                            Disable Animator
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/20 dark:text-orange-400">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Animator
+                    </Badge>
+                    {user.disabled && (
+                      <Badge variant="destructive" className="bg-red-600 hover:bg-red-700 text-xs font-semibold px-2 py-0.5">
+                        Disabled
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-border flex items-center justify-end text-sm text-muted-foreground">
+                  <Link
+                    to={`/users/${user.id}`}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    View Profile
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+        {filteredAnimators.length === 0 && (
+          <div className="col-span-full py-12 text-center text-muted-foreground bg-card rounded-xl border border-border animate-in fade-in duration-200">
+            No animators found matching the filters or search.
+          </div>
+        )}
+      </div>
+
+      {/* Disable Confirmation Dialog */}
+      <AlertDialog open={isDisableDialogOpen} onOpenChange={setIsDisableDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{selectedAnimator?.disabled ? "Enable Animator Account" : "Disable Animator Account"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedAnimator?.disabled
+                ? `This will enable the animator account for ${selectedAnimator?.name} and allow them to log in again.`
+                : `This will temporarily disable the animator account for ${selectedAnimator?.name}, preventing them from logging in or entering marks.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedAnimator(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleToggleDisabled}
+              className={selectedAnimator?.disabled ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : selectedAnimator?.disabled ? (
+                "Enable Animator"
+              ) : (
+                "Disable Animator"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={isResetDialogOpen} onOpenChange={(open) => {
+        setIsResetDialogOpen(open);
+        if (!open) {
+          setResetNewPassword("");
+          setSelectedAnimator(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Animator Password</DialogTitle>
+            <DialogDescription>
+              Assign a new password for {selectedAnimator?.name}. The password must be at least 6 characters long.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="resetPasswordView">New Password</Label>
+              <Input
+                id="resetPasswordView"
+                type="password"
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                minLength={6}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsResetDialogOpen(false);
+                  setResetNewPassword("");
+                  setSelectedAnimator(null);
+                }}
+                disabled={actionLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={actionLoading}>
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  "Reset Password"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -863,6 +1507,10 @@ export function Animators() {
             <Users className="h-4 w-4" />
             Animators
           </TabsTrigger>
+          <TabsTrigger value="profiles" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Animator Profiles
+          </TabsTrigger>
           <TabsTrigger value="questions" className="flex items-center gap-2">
             <HelpCircle className="h-4 w-4" />
             Questions
@@ -874,6 +1522,9 @@ export function Animators() {
         </TabsList>
         <TabsContent value="animators" className="space-y-4">
           <AnimatorsList />
+        </TabsContent>
+        <TabsContent value="profiles" className="space-y-4">
+          <AnimatorProfilesView />
         </TabsContent>
         <TabsContent value="questions" className="space-y-4">
           <Questions />

@@ -56,6 +56,7 @@ export interface AnimatorWithUser {
     parishId?: string;
     parishName?: string;
     address?: string;
+    disabled?: boolean;
     assignments: AnimatorAssignment[];
 }
 
@@ -91,6 +92,7 @@ export const getAnimators = async (): Promise<AnimatorWithUser[]> => {
             address: userData.address,
             profileImageUrl: userData.profileImageUrl,
             role: userData.role || 'animator',
+            disabled: userData.disabled || false,
             assignments
         });
     }
@@ -123,6 +125,7 @@ export const getAnimator = async (animatorId: string): Promise<AnimatorWithUser 
         address: userData.address,
         profileImageUrl: userData.profileImageUrl,
         role: userData.role || 'animator',
+        disabled: userData.disabled || false,
         assignments
     };
 };
