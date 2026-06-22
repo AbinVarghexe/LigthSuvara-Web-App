@@ -61,6 +61,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "../../components/ui/avatar";
+import { Checkbox } from "../../components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1069,6 +1070,8 @@ export function AnimatorProfilesView() {
   const [isDisableDialogOpen, setIsDisableDialogOpen] = useState(false);
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
 
   // Forane & Parish Filters
   const [foranesData, setForanesData] = useState<ForaneData[]>([]);
@@ -1076,6 +1079,58 @@ export function AnimatorProfilesView() {
   const [loadingParishes, setLoadingParishes] = useState<Record<string, boolean>>({});
   const [selectedForaneFilter, setSelectedForaneFilter] = useState<string>("all");
   const [selectedParishFilter, setSelectedParishFilter] = useState<string>("all");
+  const [selectedYearFilter, setSelectedYearFilter] = useState<string>("all");
+
+  const filteredAnimators = animators.filter((animator) => {
+    // Search term check
+    const name = animator.name || "";
+    const matchesSearch = animator.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      name.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+
+    // Year check
+    if (selectedYearFilter !== "all") {
+      const hasAssignmentInYear = animator.assignments?.some(a => a.year === selectedYearFilter);
+      if (!hasAssignmentInYear) return false;
+    }
+
+    // Forane check
+    if (selectedForaneFilter !== "all") {
+      const animatorParish = (animator.parishName || animator.parish || "").toLowerCase().trim();
+      const foraneDoc = foranesData.find(
+        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
+      );
+      if (foraneDoc) {
+        const hasParishInForane = parishesPerForane[foraneDoc.id]?.some(
+          p => {
+            const pName = (p.place || p.saint || p.name || "").toLowerCase().trim();
+            return animatorParish.includes(pName) || pName.includes(animatorParish);
+          }
+        ) || false;
+        if (!hasParishInForane) return false;
+      }
+    }
+
+    // Parish check
+    if (selectedParishFilter !== "all") {
+      const animatorParish = (animator.parishName || animator.parish || "").toLowerCase().trim();
+      const filterParish = selectedParishFilter.toLowerCase().trim();
+      if (!animatorParish.includes(filterParish) && !filterParish.includes(animatorParish)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const years = useMemo(() => {
+    const yearsSet = new Set<string>();
+    animators.forEach(a => a.assignments?.forEach(asg => {
+      if (asg.year) yearsSet.add(asg.year);
+    }));
+    yearsSet.add(getAcademicYear());
+    return Array.from(yearsSet).sort((a, b) => parseInt(b) - parseInt(a));
+  }, [animators]);
 
   const toTitleCase = (str: string): string => {
     if (!str) return str;
@@ -1210,41 +1265,49 @@ export function AnimatorProfilesView() {
     }
   };
 
-  const filteredAnimators = animators.filter((animator) => {
-    // Search term check
-    const name = animator.name || "";
-    const matchesSearch = animator.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      name.toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchesSearch) return false;
 
-    // Forane check
-    if (selectedForaneFilter !== "all") {
-      const animatorParish = (animator.parishName || animator.parish || "").toLowerCase().trim();
-      const foraneDoc = foranesData.find(
-        f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
-      );
-      if (foraneDoc) {
-        const hasParishInForane = parishesPerForane[foraneDoc.id]?.some(
-          p => {
-            const pName = (p.place || p.saint || p.name || "").toLowerCase().trim();
-            return animatorParish.includes(pName) || pName.includes(animatorParish);
-          }
-        ) || false;
-        if (!hasParishInForane) return false;
+
+  // Clean up selected IDs if they are filtered out
+  useEffect(() => {
+    setSelectedIds(prev => prev.filter(id => filteredAnimators.some(a => a.id === id)));
+  }, [filteredAnimators]);
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(filteredAnimators.map(a => a.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setActionLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const id of selectedIds) {
+      try {
+        await deleteAnimator(id);
+        successCount++;
+      } catch (error) {
+        console.error("Error deleting animator:", id, error);
+        failCount++;
       }
     }
-
-    // Parish check
-    if (selectedParishFilter !== "all") {
-      const animatorParish = (animator.parishName || animator.parish || "").toLowerCase().trim();
-      const filterParish = selectedParishFilter.toLowerCase().trim();
-      if (!animatorParish.includes(filterParish) && !filterParish.includes(animatorParish)) {
-        return false;
-      }
+    toast.success(`Successfully deleted ${successCount} animator(s).`);
+    if (failCount > 0) {
+      toast.error(`Failed to delete ${failCount} animator(s).`);
     }
-
-    return true;
-  });
+    setSelectedIds([]);
+    setIsBulkDeleteDialogOpen(false);
+    fetchData();
+    setActionLoading(false);
+  };
 
   if (loading) {
     return (
@@ -1268,6 +1331,25 @@ export function AnimatorProfilesView() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+
+          <div className="w-full md:w-[180px]">
+            <Select
+              value={selectedYearFilter}
+              onValueChange={setSelectedYearFilter}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Years" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Years</SelectItem>
+                {years.map((yr) => (
+                  <SelectItem key={yr} value={yr}>
+                    Academic Year {formatAcademicYear(yr)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="w-full md:w-[220px]">
@@ -1315,6 +1397,33 @@ export function AnimatorProfilesView() {
         </CardContent>
       </Card>
 
+      {/* Select All and Bulk Actions */}
+      {filteredAnimators.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 rounded-lg border border-border">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedIds.length === filteredAnimators.length && filteredAnimators.length > 0}
+              onCheckedChange={(checked) => handleSelectAll(!!checked)}
+              id="select-all-animators"
+            />
+            <label htmlFor="select-all-animators" className="text-sm font-medium cursor-pointer">
+              Select All ({filteredAnimators.length} profiles)
+            </label>
+          </div>
+          {selectedIds.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsBulkDeleteDialogOpen(true)}
+              className="flex items-center gap-2 animate-in slide-in-from-right-2 duration-200"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Selected ({selectedIds.length})
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Grid of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredAnimators.map((user) => {
@@ -1323,6 +1432,10 @@ export function AnimatorProfilesView() {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-4">
+                    <Checkbox
+                      checked={selectedIds.includes(user.id)}
+                      onCheckedChange={() => handleToggleSelect(user.id)}
+                    />
                     <div className="relative">
                       <Avatar className="h-12 w-12">
                         <AvatarImage
@@ -1508,6 +1621,31 @@ export function AnimatorProfilesView() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Multiple Animators</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedIds.length} selected animator(s)?
+              This action is permanent and will remove all their assignments and profiles.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsBulkDeleteDialogOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={actionLoading}
+            >
+              Delete Permanent
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

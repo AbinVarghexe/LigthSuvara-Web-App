@@ -1,6 +1,18 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import {
   Select,
@@ -38,6 +50,8 @@ export function TeacherAssignment({
   const [dirFilterForane, setDirFilterForane] = useState<string>("All");
   const [dirFilterSchoolId, setDirFilterSchoolId] = useState<string>("All");
   const [loading, setLoading] = useState(false);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -97,6 +111,11 @@ export function TeacherAssignment({
     setDirFilteredTeachers(result);
   }, [dirFilterForane, dirFilterSchoolId, dirFilterClass, allTeachers, schools]);
 
+  // Clean up selected IDs if they are filtered out
+  useEffect(() => {
+    setSelectedTeacherIds(prev => prev.filter(id => dirFilteredTeachers.some(t => t.id === id)));
+  }, [dirFilteredTeachers]);
+
   const handleDelete = async (teacher: Teacher) => {
     if (!window.confirm(`Are you sure you want to delete ${teacher.name}?`))
       return;
@@ -107,6 +126,29 @@ export function TeacherAssignment({
     } catch (error) {
       toast.error("Failed to delete teacher");
     }
+  };
+
+  const handleBulkDelete = async () => {
+    setLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const id of selectedTeacherIds) {
+      try {
+        await TeacherService.deleteTeacher(id);
+        successCount++;
+      } catch (error) {
+        console.error("Error deleting teacher:", id, error);
+        failCount++;
+      }
+    }
+    toast.success(`Successfully deleted ${successCount} teacher(s).`);
+    if (failCount > 0) {
+      toast.error(`Failed to delete ${failCount} teacher(s).`);
+    }
+    setSelectedTeacherIds([]);
+    setIsBulkDeleteDialogOpen(false);
+    setAllTeachers((prev) => prev.filter((t) => !selectedTeacherIds.includes(t.id)));
+    setLoading(false);
   };
 
   if (loading) {
@@ -206,6 +248,38 @@ export function TeacherAssignment({
         </div>
 
         <div className="pt-2">
+          {dirFilteredTeachers.length > 0 && (
+            <div className="flex items-center justify-between px-3 py-2.5 mb-4 bg-muted/30 rounded-lg border border-border">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={selectedTeacherIds.length === dirFilteredTeachers.length && dirFilteredTeachers.length > 0}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedTeacherIds(dirFilteredTeachers.map(t => t.id));
+                    } else {
+                      setSelectedTeacherIds([]);
+                    }
+                  }}
+                  id="select-all-teachers"
+                />
+                <label htmlFor="select-all-teachers" className="text-sm font-medium cursor-pointer">
+                  Select All ({dirFilteredTeachers.length} profiles)
+                </label>
+              </div>
+              {selectedTeacherIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setIsBulkDeleteDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete Selected ({selectedTeacherIds.length})
+                </Button>
+              )}
+            </div>
+          )}
+
           <h3 className="text-sm font-medium mb-4 text-muted-foreground">
             Showing {dirFilteredTeachers.length} Teachers
           </h3>
@@ -215,8 +289,37 @@ export function TeacherAssignment({
             showStatus={false}
             onDeleteClick={handleDelete}
             onEditClick={onEditTeacher}
+            selectedIds={selectedTeacherIds}
+            onToggleSelect={(id) => {
+              setSelectedTeacherIds(prev =>
+                prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+              );
+            }}
           />
         </div>
+
+        <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Multiple Teachers</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete {selectedTeacherIds.length} selected teacher(s)?
+                This action is permanent and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setIsBulkDeleteDialogOpen(false)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleBulkDelete}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Permanent
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

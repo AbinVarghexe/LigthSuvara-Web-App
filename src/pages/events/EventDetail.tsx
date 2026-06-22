@@ -206,13 +206,13 @@ export function EventDetail() {
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {isAdminUser && (
             <>
-              {(event.status === "pending" || event.status === "rejected") && (
+              {!event.isPublic && (
                 <Button variant="outline" size="sm" onClick={handleApprove} disabled={actionLoading}
                   className="text-green-600 hover:text-green-700 hover:bg-green-50">
                   <CheckCircle className="w-4 h-4 mr-1" /> Publish
                 </Button>
               )}
-              {(event.status === "pending" || event.status === "approved") && (
+              {event.isPublic && (
                 <Button variant="outline" size="sm" onClick={handleReject} disabled={actionLoading}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50">
                   <XCircle className="w-4 h-4 mr-1" /> Make Private

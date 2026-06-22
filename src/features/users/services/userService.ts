@@ -176,7 +176,7 @@ export const bulkCreateUsers = async (users: Partial<UserData>[]): Promise<BulkC
         const n1 = normalizeName(name1);
         const n2 = normalizeName(name2);
         if (!n1 || !n2) return false;
-        return n1.includes(n2) || n2.includes(n1);
+        return n1 === n2;
     };
 
     // 1. Internal duplicate checking (within the uploaded array)

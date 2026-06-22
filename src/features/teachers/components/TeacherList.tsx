@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle,
   School,
@@ -24,6 +25,8 @@ interface TeacherListProps {
   onDeleteClick?: (teacher: Teacher) => void;
   onEditClick?: (teacher: Teacher) => void;
   showStatus?: boolean;
+  selectedIds?: string[];
+  onToggleSelect?: (id: string) => void;
 }
 
 export function TeacherList({
@@ -34,6 +37,8 @@ export function TeacherList({
   onDeleteClick,
   onEditClick,
   showStatus = true,
+  selectedIds = [],
+  onToggleSelect,
 }: TeacherListProps) {
   if (teachers.length === 0) {
     return (
@@ -57,6 +62,12 @@ export function TeacherList({
           <CardContent className="p-6">
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-3">
+                {onToggleSelect && (
+                  <Checkbox
+                    checked={selectedIds.includes(teacher.id)}
+                    onCheckedChange={() => onToggleSelect(teacher.id)}
+                  />
+                )}
                 <Avatar className="h-12 w-12 border">
                   <AvatarImage
                     src={teacher.profilePicture}

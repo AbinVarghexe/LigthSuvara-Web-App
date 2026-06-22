@@ -31,6 +31,8 @@ import { LiveVideo } from "../pages/live-video/LiveVideo";
 import { VideoResources } from "../pages/video-resources/VideoResources";
 import { Saints } from "../pages/saints/Saints";
 import { Calendar } from "../pages/calendar/Calendar";
+import { Catechism } from "../pages/catechism/Catechism";
+import { WordOfLife } from "../pages/word-of-life/WordOfLife";
 
 export const router = createBrowserRouter([
   {
@@ -89,6 +91,8 @@ export const router = createBrowserRouter([
           { path: "video-resources", Component: VideoResources },
           { path: "saints", Component: Saints },
           { path: "calendar", Component: Calendar },
+          { path: "catechism", Component: Catechism },
+          { path: "word-of-life", Component: WordOfLife },
         ],
       },
     ],

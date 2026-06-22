@@ -16,6 +16,7 @@ import {
   Users as UsersIcon,
   ArrowLeft,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "../../components/ui/button";
@@ -138,6 +139,19 @@ export function Users() {
   const [foranesData, setForanesData] = useState<ForaneData[]>([]);
   const [parishesPerForane, setParishesPerForane] = useState<Record<string, ForaneParish[]>>({});
 
+  // Add Forane / Parish unified popup states
+  const [isAddForaneParishOpen, setIsAddForaneParishOpen] = useState(false);
+  const [activeCreationTab, setActiveCreationTab] = useState<"forane" | "parish">("forane");
+
+  const [newForaneName, setNewForaneName] = useState("");
+  const [isSubmittingNewForane, setIsSubmittingNewForane] = useState(false);
+
+  const [selectedForaneIdForParish, setSelectedForaneIdForParish] = useState("");
+  const [newParishSaint, setNewParishSaint] = useState(""); // Labeled as Parish Name, maps to saint in database
+  const [newParishPlace, setNewParishPlace] = useState(""); // Labeled as Place, maps to name/place in database
+  const [newParishCode, setNewParishCode] = useState(""); // Labeled as Code, maps to code in database
+  const [isSubmittingNewParish, setIsSubmittingNewParish] = useState(false);
+
   const normalizeSaintName = (saint: string): string => {
     let s = (saint || "").trim();
     if (/^christ(u)?\s*raj$/i.test(s) || /^christ\s*raj$/i.test(s)) {
@@ -191,6 +205,7 @@ export function Users() {
             const { saintName, parishPlace } = getParishDetails(foundParish);
 
             const schoolNameCombined = formatSchoolName(saintName, parishPlace);
+            console.log("handleCodeChange debug:", { foundParish, saintName, parishPlace, schoolNameCombined });
             const updatedWithAutofill = [...newUsers];
 
             const finalParishName = getFormattedParishUserName(saintName, parishPlace);
@@ -254,6 +269,114 @@ export function Users() {
     }
   }, [parishesPerForane, loadingParishes]);
 
+  const handleCreateNewForane = async () => {
+    if (!newForaneName.trim()) {
+      toast.error("Forane name cannot be empty");
+      return;
+    }
+    setIsSubmittingNewForane(true);
+    try {
+      const exists = foranesData.some(f => f.name.toLowerCase() === newForaneName.trim().toLowerCase());
+      if (exists) {
+        toast.error("A forane with this name already exists");
+        setIsSubmittingNewForane(false);
+        return;
+      }
+
+      const created = await ParishService.addForane(newForaneName.trim());
+      toast.success(`Forane "${newForaneName}" created successfully`);
+
+      const updatedForanes = [...foranesData, { id: created.id, name: created.name, parishes: [] }];
+      updatedForanes.sort((a, b) => a.name.localeCompare(b.name));
+      setForanesData(updatedForanes);
+
+      setNewForaneName("");
+      setIsAddForaneParishOpen(false);
+    } catch (e: any) {
+      console.error("Failed to create forane", e);
+      toast.error(e.message || "Failed to create forane");
+    } finally {
+      setIsSubmittingNewForane(false);
+    }
+  };
+
+  const handleCreateNewParish = async () => {
+    if (!selectedForaneIdForParish) {
+      toast.error("Please select a Forane");
+      return;
+    }
+    if (!newParishSaint.trim()) {
+      toast.error("Parish Name cannot be empty");
+      return;
+    }
+    if (!newParishPlace.trim()) {
+      toast.error("Place cannot be empty");
+      return;
+    }
+    if (!newParishCode.trim()) {
+      toast.error("Code cannot be empty");
+      return;
+    }
+
+    setIsSubmittingNewParish(true);
+    try {
+      const foraneDoc = foranesData.find(f => f.id === selectedForaneIdForParish);
+      if (!foraneDoc) {
+        toast.error("Selected Forane not found");
+        setIsSubmittingNewParish(false);
+        return;
+      }
+
+      // Check if code already exists in users list to avoid user account code clashes
+      const codeExists = users.some(u => (u.parishCode === newParishCode.trim() || u.code === newParishCode.trim()));
+      if (codeExists) {
+        toast.error("This school/parish code is already registered with another account");
+        setIsSubmittingNewParish(false);
+        return;
+      }
+
+      // Check if code already exists among parishes in the database
+      const existingParish = await ParishService.getParishByCode(newParishCode.trim());
+      if (existingParish) {
+        toast.error("A parish/school with this code already exists in the database");
+        setIsSubmittingNewParish(false);
+        return;
+      }
+
+      const parishData = {
+        saint: newParishSaint.trim(), // e.g. "St. Mary"
+        name: newParishSaint.trim(),  // Store Parish Name/Saint in name field
+        place: newParishPlace.trim(), // Store Place in place field
+        code: newParishCode.trim()
+      };
+
+      await ParishService.addParish(foraneDoc.id, parishData);
+      toast.success(`Parish "${newParishSaint} ${newParishPlace}" created successfully under ${foraneDoc.name}`);
+
+      // Clear cached parishes list for this forane to force refresh
+      setParishesPerForane(prev => {
+        const copy = { ...prev };
+        delete copy[foraneDoc.id];
+        return copy;
+      });
+
+      // Refetch
+      await fetchParishesForForane(foraneDoc.id);
+
+      // Reset fields
+      setNewParishSaint("");
+      setNewParishPlace("");
+      setNewParishCode("");
+      setSelectedForaneIdForParish("");
+      setIsAddForaneParishOpen(false);
+    } catch (e: any) {
+      console.error("Failed to create parish", e);
+      toast.error(e.message || "Failed to create parish");
+    } finally {
+      setIsSubmittingNewParish(false);
+    }
+  };
+
   // Standardize names: convert ALL-CAPS to Title Case (e.g. "ST.GEORGE CHURCH" → "St.George Church")
   const toTitleCase = (str: string): string => {
     if (!str) return str;
@@ -308,11 +431,11 @@ export function Users() {
 
     saint = saint.replace(/\./g, " ").replace(/\s+/g, " ").trim();
 
-    const isForane = 
-      /forane/i.test(saint) || 
-      /forane/i.test(place) || 
+    const isForane =
+      /forane/i.test(saint) ||
+      /forane/i.test(place) ||
       (forane && (
-        place.toLowerCase() === forane.toLowerCase() || 
+        place.toLowerCase() === forane.toLowerCase() ||
         saint.toLowerCase().includes(forane.toLowerCase())
       ));
 
@@ -517,13 +640,13 @@ export function Users() {
     const n1 = normalizeName(name1);
     const n2 = normalizeName(name2);
     if (!n1 || !n2) return false;
-    return n1.includes(n2) || n2.includes(n1);
+    return n1 === n2;
   };
 
   const filteredUsers = users
     .filter((user) => {
       if (user.role !== activeTab) return false;
-      
+
       // Forane filter check
       if (selectedForaneFilter !== "all") {
         const uForane = (user.forane || "").toLowerCase().trim();
@@ -532,11 +655,11 @@ export function Users() {
           return false;
         }
       }
-      
+
       // Parish filter check
       if (selectedParishFilter !== "all") {
         let isMatch = false;
-        
+
         // 1. Try matching by code
         const foraneDoc = foranesData.find(
           f => f.name.toLowerCase().trim() === selectedForaneFilter.toLowerCase().trim()
@@ -553,13 +676,13 @@ export function Users() {
             }
           }
         }
-        
+
         // 2. Fallback to name similarity match
         if (!isMatch) {
           const uParish = user.parish || user.parishName || user.name || "";
           isMatch = isDuplicateParishName(uParish, selectedParishFilter);
         }
-        
+
         if (!isMatch) {
           return false;
         }
@@ -648,13 +771,13 @@ export function Users() {
         "parish",
         "parishCode",
       ];
-      
+
       const sheetData: any[][] = [headers];
 
       for (const forane of foranesData) {
         const parishesRef = collection(db, "foranes", forane.id, "parishes");
         const snap = await getDocs(parishesRef);
-        
+
         for (const d of snap.docs) {
           const parishData = d.data();
           const code = parishData.code || "";
@@ -733,13 +856,13 @@ export function Users() {
     let totalCreated = 0;
     let totalFailed = 0;
     const allErrors: any[] = [];
-    
+
     const toastId = toast.loading(`Starting bulk user creation...`);
-    
+
     for (let i = 0; i < newUsersList.length; i += chunkSize) {
       const chunk = newUsersList.slice(i, i + chunkSize);
       toast.loading(`Creating users: ${i + 1} to ${Math.min(i + chunkSize, newUsersList.length)} of ${newUsersList.length}...`, { id: toastId });
-      
+
       try {
         const result = await bulkCreateUsers(chunk);
         totalCreated += result.created;
@@ -760,7 +883,7 @@ export function Users() {
     }
 
     toast.dismiss(toastId);
-    
+
     if (totalFailed === 0) {
       toast.success(`Successfully created all ${totalCreated} users!`);
     } else if (totalCreated > 0) {
@@ -807,11 +930,11 @@ export function Users() {
       const usersData = await getUsers();
       const schools = usersData.filter(u => u.role === "school");
       const unlinkedParishes = usersData.filter(u => u.role === "parish" && !u.schoolId);
-      
+
       if (unlinkedParishes.length === 0) return;
-      
+
       console.log(`Found ${unlinkedParishes.length} unlinked parish users. Resolving links...`);
-      
+
       const updatePromises = unlinkedParishes.map(async (parish) => {
         // 1. Try matching by code
         let matchingSchool = null;
@@ -823,20 +946,20 @@ export function Users() {
             return sCode && String(sCode).trim() === code;
           });
         }
-        
+
         // 2. Fallback to matching by clean schoolName and forane
         if (!matchingSchool) {
           const cleanString = (val: string) => (val || "").toLowerCase().replace(/[^a-z0-9]/gi, "").trim();
           const pSchoolName = cleanString(parish.schoolName || parish.schoolname || "");
           const pForane = cleanString(parish.forane || "");
-          
+
           matchingSchool = schools.find(s => {
             const sSchoolName = cleanString(s.schoolName || s.schoolname || "");
             const sForane = cleanString(s.forane || "");
             return pSchoolName === sSchoolName && pForane === sForane;
           });
         }
-        
+
         if (matchingSchool) {
           const parishDocRef = doc(db, "users", parish.id || parish.uid);
           await updateDoc(parishDocRef, {
@@ -847,7 +970,7 @@ export function Users() {
           console.log(`Auto-linked parish ${parish.email} to school ${matchingSchool.email}`);
         }
       });
-      
+
       await Promise.all(updatePromises);
     } catch (err) {
       console.error("Failed to resolve unlinked parishes:", err);
@@ -897,7 +1020,7 @@ export function Users() {
           const workbook = XLSX.read(data, { type: "array" });
           const worksheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-          
+
           if (jsonData.length < 2) {
             toast.warning("Excel file is empty or only contains headers");
             setIsUploading(false);
@@ -910,7 +1033,7 @@ export function Users() {
           for (let i = 1; i < jsonData.length; i++) {
             const values = jsonData[i];
             if (!values || values.length === 0) continue;
-            
+
             const user: any = {};
             headers.forEach((header, index) => {
               let val = String(values[index] ?? "").trim();
@@ -1561,7 +1684,8 @@ export function Users() {
                         const availableParishes = foraneId ? (parishesPerForane[foraneId] ?? []) : [];
 
                         const isParishAlreadyRegistered = (p: ForaneParish) => {
-                          const computedSchoolName = formatSchoolName(p.name, p.place || "").trim().toLowerCase().replace(/\s+/g, ' ');
+                          const { saintName, parishPlace } = getParishDetails(p);
+                          const computedSchoolName = formatSchoolName(saintName, parishPlace).trim().toLowerCase().replace(/\s+/g, ' ');
                           const pNameLower = p.name.trim().toLowerCase();
                           const pPlaceLower = (p.place || "").trim().toLowerCase();
 
@@ -1594,19 +1718,19 @@ export function Users() {
                             <div className="space-y-2">
                               <Label htmlFor={`parish-select-${index}`}>Parish *</Label>
                               <Select
-                                value={availableParishes.find(p => p.name === user.parish || p.place === user.parish)?.name || ""}
+                                value={availableParishes.find(p => p.id === user.parishId || p.code === user.parishCode || p.name === user.parish || p.place === user.parish)?.id || ""}
                                 disabled={!user.forane}
                                 onValueChange={(val) => {
-                                  const selectedParish = availableParishes.find(p => p.name === val);
+                                  const selectedParish = availableParishes.find(p => p.id === val);
                                   const code = selectedParish?.code || "";
-                                  const saintName = selectedParish?.saint || selectedParish?.name || "";
-                                  const parishPlace = selectedParish?.saint ? (selectedParish.name || "") : (selectedParish?.place || "");
+                                  const { saintName, parishPlace } = selectedParish ? getParishDetails(selectedParish) : { saintName: "", parishPlace: "" };
                                   const schoolNameCombined = selectedParish ? formatSchoolName(saintName, parishPlace) : "";
                                   const updated = [...newUsers];
                                   updated[index] = {
                                     ...user,
                                     parish: parishPlace || saintName,
                                     parishCode: code,
+                                    parishId: selectedParish?.id || "",
                                     schoolname: schoolNameCombined,
                                     schoolName: schoolNameCombined,
                                   };
@@ -1627,7 +1751,7 @@ export function Users() {
                                   {availableParishes.map((p) => {
                                     const alreadyUsed = isParishAlreadyRegistered(p);
                                     return (
-                                      <SelectItem key={p.id} value={p.name} disabled={alreadyUsed}>
+                                      <SelectItem key={p.id} value={p.id} disabled={alreadyUsed}>
                                         <span className={alreadyUsed ? "text-muted-foreground line-through" : ""}>
                                           {toTitleCase(p.name)}{p.place ? ` — ${toTitleCase(p.place)}` : ""}
                                         </span>
@@ -2094,24 +2218,38 @@ export function Users() {
         </div>
       </div>
 
-      <Tabs
-        value={activeTab}
-        className="w-full"
-        onValueChange={(val) => {
-          const nextTab = val as "school" | "parish";
-          setActiveTab(nextTab);
-          setSearchParams({ tab: nextTab });
-          setSelectedUserIds([]);
-          setIsSelectMode(false);
-          setSelectedForaneFilter("all");
-          setSelectedParishFilter("all");
-        }}
-      >
-        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
-          <TabsTrigger value="school">Sunday Schools</TabsTrigger>
-          <TabsTrigger value="parish">Parishes</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <Tabs
+          value={activeTab}
+          className="w-auto"
+          onValueChange={(val) => {
+            const nextTab = val as "school" | "parish";
+            setActiveTab(nextTab);
+            setSearchParams({ tab: nextTab });
+            setSelectedUserIds([]);
+            setIsSelectMode(false);
+            setSelectedForaneFilter("all");
+            setSelectedParishFilter("all");
+          }}
+        >
+          <TabsList className="grid w-[300px] sm:w-[400px] grid-cols-2">
+            <TabsTrigger value="school">Sunday Schools</TabsTrigger>
+            <TabsTrigger value="parish">Parishes</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <Button
+          variant="outline"
+          className="border-border hover:bg-muted text-foreground self-start sm:self-auto"
+          onClick={() => {
+            setActiveCreationTab("forane");
+            setIsAddForaneParishOpen(true);
+          }}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Forane/Parish
+        </Button>
+      </div>
 
       {/* Filters and Search */}
       <Card>
@@ -2251,11 +2389,10 @@ export function Users() {
           return (
             <Card
               key={user.id}
-              className={`hover:shadow-md transition-all relative ${
-                isSelectMode
-                  ? "cursor-pointer border-2 " + (isSelected ? "border-blue-500 bg-blue-50/10 dark:bg-blue-900/5 ring-1 ring-blue-500" : "border-border hover:border-gray-400")
-                  : "transition-shadow"
-              }`}
+              className={`hover:shadow-md transition-all relative ${isSelectMode
+                ? "cursor-pointer border-2 " + (isSelected ? "border-blue-500 bg-blue-50/10 dark:bg-blue-900/5 ring-1 ring-blue-500" : "border-border hover:border-gray-400")
+                : "transition-shadow"
+                }`}
               onClick={() => {
                 if (isSelectMode) {
                   if (isSelected) {
@@ -2273,7 +2410,7 @@ export function Users() {
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => {}} // parent onClick handles toggle
+                        onChange={() => { }} // parent onClick handles toggle
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         onClick={(e) => e.stopPropagation()}
                       />
@@ -2476,6 +2613,158 @@ export function Users() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for Unified Forane / Parish Creation */}
+      <Dialog open={isAddForaneParishOpen} onOpenChange={setIsAddForaneParishOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Forane / Parish</DialogTitle>
+            <DialogDescription>
+              Create a new Forane or Parish record in the database.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Important Warning Banner */}
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30 text-amber-800 dark:text-amber-300 text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold">Important Notice</p>
+              <p>Use this form <strong>only</strong> to define a new Forane or Parish in the database. This does <strong>not</strong> create a user account. To create login credentials for a Sunday School or Parish, click the main <strong>Add User</strong> button.</p>
+            </div>
+          </div>
+
+          {/* Tab Selector */}
+          <div className="flex border-b border-border mb-4">
+            <button
+              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${activeCreationTab === "forane"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              onClick={() => setActiveCreationTab("forane")}
+            >
+              Add Forane
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${activeCreationTab === "parish"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              onClick={() => setActiveCreationTab("parish")}
+            >
+              Add Parish
+            </button>
+          </div>
+
+          {activeCreationTab === "forane" ? (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="newForaneName">Forane Name *</Label>
+                <Input
+                  id="newForaneName"
+                  placeholder="e.g. Mundakayam"
+                  value={newForaneName}
+                  onChange={(e) => setNewForaneName(e.target.value)}
+                />
+              </div>
+              <DialogFooter className="mt-6 gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setNewForaneName("");
+                    setIsAddForaneParishOpen(false);
+                  }}
+                  disabled={isSubmittingNewForane}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateNewForane}
+                  disabled={isSubmittingNewForane}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isSubmittingNewForane ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
+                  ) : (
+                    "Create Forane"
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="foraneSelect">Forane *</Label>
+                <Select
+                  value={selectedForaneIdForParish}
+                  onValueChange={(val) => setSelectedForaneIdForParish(val)}
+                >
+                  <SelectTrigger id="foraneSelect">
+                    <SelectValue placeholder="Select forane" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {foranesData.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newParishSaint">Parish Name *</Label>
+                <Input
+                  id="newParishSaint"
+                  placeholder="e.g. St. George"
+                  value={newParishSaint}
+                  onChange={(e) => setNewParishSaint(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newParishPlace">Place *</Label>
+                <Input
+                  id="newParishPlace"
+                  placeholder="e.g. Kanjirappally"
+                  value={newParishPlace}
+                  onChange={(e) => setNewParishPlace(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newParishCode">Code *</Label>
+                <Input
+                  id="newParishCode"
+                  placeholder="e.g. 131"
+                  value={newParishCode}
+                  onChange={(e) => setNewParishCode(e.target.value)}
+                />
+              </div>
+              <DialogFooter className="mt-6 gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setNewParishSaint("");
+                    setNewParishPlace("");
+                    setNewParishCode("");
+                    setSelectedForaneIdForParish("");
+                    setIsAddForaneParishOpen(false);
+                  }}
+                  disabled={isSubmittingNewParish}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateNewParish}
+                  disabled={isSubmittingNewParish}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isSubmittingNewParish ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
+                  ) : (
+                    "Create Parish"
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

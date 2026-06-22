@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, setDoc } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import { Parish } from "@/features/teachers/types";
 
@@ -57,6 +57,28 @@ export const ParishService = {
       console.error("Failed to query parish by code:", e);
       return null;
     }
+  },
+
+  /**
+   * Add a new Forane to the database
+   */
+  addForane: async (name: string): Promise<Forane> => {
+    const id = name.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+    await setDoc(doc(db, "foranes", id), { name });
+    return { id, name };
+  },
+
+  /**
+   * Add a new Parish under a specific Forane
+   */
+  addParish: async (
+    foraneId: string,
+    parishData: { name: string; saint: string; place: string; code: string }
+  ): Promise<any> => {
+    const parishId = parishData.place.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+    const parishDocRef = doc(db, "foranes", foraneId, "parishes", parishId);
+    await setDoc(parishDocRef, parishData);
+    return { id: parishId, ...parishData };
   }
 };
 

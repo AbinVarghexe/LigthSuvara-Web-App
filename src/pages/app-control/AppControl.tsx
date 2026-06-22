@@ -20,13 +20,10 @@ import {
     Music,
     HelpCircle,
     Presentation,
-    GraduationCap,
     Youtube,
-    BookOpen,
     FolderOpen,
     ArrowUp,
     ArrowDown,
-    Radio,
 } from "lucide-react";
 import {
     Card,
@@ -73,7 +70,6 @@ import {
     ResourceItem,
     getYouTubeId,
     isDriveLink,
-    seedAllClassResources,
 } from "../../features/video-resources/services/videoResourceService";
 import { uploadFile } from "../../lib/upload";
 
@@ -123,7 +119,7 @@ export function AppControl() {
     const [chapterTitle, setChapterTitle] = useState<string>("");
 
     // Resource Form States
-    const [activeChapterId, setActiveChapterId] = useState<string>("");
+    const [activeChapterId, setActiveChapterId] = useState<string>(" ");
     const [editingResource, setEditingResource] = useState<ResourceItem | null>(null);
     const [resourceTitle, setResourceTitle] = useState<string>("");
     const [resourceUrl, setResourceUrl] = useState<string>("");
@@ -174,10 +170,9 @@ export function AppControl() {
             try {
                 const login = await getLoginScreenConfig();
                 setLoginConfig(login);
-                await seedAllClassResources();
             } catch (error) {
                 console.error("Error fetching app control data:", error);
-                toast.toast ? toast.toast({ description: "Failed to load configuration" }) : toast.error("Failed to load configuration");
+                toast.error("Failed to load configuration");
             } finally {
                 setLoading(false);
             }
@@ -450,12 +445,12 @@ export function AppControl() {
                 }
             }
 
-            const updatedChapters = resourcesData.chapters.map((ch) => {
+            const updatedChapters = resourcesData.chapters.map((ch: Chapter) => {
                 if (ch.id !== activeChapterId) return ch;
 
                 let updatedResources = [...ch.resources];
                 if (editingResource) {
-                    updatedResources = updatedResources.map((r) =>
+                    updatedResources = updatedResources.map((r: ResourceItem) =>
                         r.id === editingResource.id
                             ? { ...r, title: resourceTitle, url: finalUrl, type: finalType, customColor }
                             : r
@@ -496,11 +491,11 @@ export function AppControl() {
         if (resourceDeleteTarget.type === "chapter") {
             updatedChapters = updatedChapters.filter((c) => c.id !== resourceDeleteTarget.chapterId);
         } else if (resourceDeleteTarget.type === "resource" && resourceDeleteTarget.resourceId) {
-            updatedChapters = updatedChapters.map((ch) => {
+            updatedChapters = updatedChapters.map((ch: Chapter) => {
                 if (ch.id !== resourceDeleteTarget.chapterId) return ch;
                 return {
                     ...ch,
-                    resources: ch.resources.filter((r) => r.id !== resourceDeleteTarget.resourceId),
+                    resources: ch.resources.filter((r: ResourceItem) => r.id !== resourceDeleteTarget.resourceId),
                 };
             });
         }
@@ -620,7 +615,7 @@ export function AppControl() {
                 };
             case "image":
                 return {
-                    icon: <Image className="w-5 h-5" style={inlineTextStyle} />,
+                    icon: <ImageIcon className="w-5 h-5" style={inlineTextStyle} />,
                     bgStyle: inlineBgStyle,
                     textStyle: inlineTextStyle,
                     label: "Image/Photo",
@@ -1213,7 +1208,7 @@ export function AppControl() {
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 gap-8">
-                                    {resourcesData?.chapters.map((chapter) => (
+                                    {resourcesData?.chapters.map((chapter: Chapter) => (
                                         <div
                                             key={chapter.id}
                                             className="bg-card rounded-2xl border border-border p-6 shadow-sm space-y-4 hover:shadow-md transition-shadow relative overflow-hidden group/chapter"
@@ -1248,7 +1243,7 @@ export function AppControl() {
 
                                             {/* Resource cards list */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
-                                                {chapter.resources.map((resource) => {
+                                                {chapter.resources.map((resource: ResourceItem) => {
                                                     const details = getResourceDetails(resource);
                                                     const ytId = getYouTubeId(resource.url);
 

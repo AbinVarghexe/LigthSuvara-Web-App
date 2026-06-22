@@ -525,8 +525,7 @@ export function UserDetail() {
                     <div className="flex items-center gap-4">
                       <StatusBadge
                         status={
-                          event.status ||
-                          (event.isPublic ? "approved" : "pending")
+                          event.isPublic ? "approved" : (event.status === "pending" ? "pending" : "rejected")
                         }
                       />
                       <Link

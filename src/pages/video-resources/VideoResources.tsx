@@ -7,7 +7,6 @@ import {
   ResourceItem,
   getYouTubeId,
   isDriveLink,
-  seedAllClassResources,
 } from "../../features/video-resources/services/videoResourceService";
 import {
   FileText,
@@ -50,7 +49,7 @@ export function VideoResources() {
   const [editingResource, setEditingResource] = useState<ResourceItem | null>(null);
   const [resourceTitle, setResourceTitle] = useState<string>("");
   const [resourceUrl, setResourceUrl] = useState<string>("");
-  const [resourceType, setResourceType] = useState<"youtube" | "drive" | "document" | "link">("link");
+  const [resourceType, setResourceType] = useState<ResourceItem["type"]>("link");
   
   // File Upload states
   const [sourceMode, setSourceMode] = useState<"link" | "file">("link");
@@ -65,13 +64,6 @@ export function VideoResources() {
 
   // Video Player Modal State
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
-
-  // Seed all classes on mount
-  useEffect(() => {
-    seedAllClassResources()
-      .then(() => console.log("Classes seeded successfully"))
-      .catch((err) => console.error("Seeding error:", err));
-  }, []);
 
   // Fetch data when class changes
   useEffect(() => {

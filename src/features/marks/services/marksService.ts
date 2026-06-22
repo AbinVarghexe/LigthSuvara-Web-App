@@ -451,3 +451,26 @@ export const updateQuestionTextValue = async (marksId: string, subKey: string, t
         }
     });
 };
+
+// Get marks by parish
+export const getMarksByParish = async (parish: string): Promise<MarksData[]> => {
+    const q = query(
+        collection(db, 'marks'),
+        where('parish', '==', parish)
+    );
+    const snapshot = await getDocs(q);
+    const rawMarks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            schoolId: data.schoolUserId || data.schoolId || ''
+        } as MarksData;
+    });
+
+    // Sort by year descending
+    rawMarks.sort((a, b) => b.year.localeCompare(a.year));
+
+    return await enrichMarksData(rawMarks);
+};
+

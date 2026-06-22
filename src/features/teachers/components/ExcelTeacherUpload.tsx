@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Loader2, Download } from "lucide-react";
+import { FileSpreadsheet, AlertCircle, CheckCircle, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { TeacherService } from "../services/teacherService";
-import { getUsers, UserData } from "@/features/users/services/userService";
+import { getUsers } from "@/features/users/services/userService";
 import { getCurrentAcademicYear } from "@/lib/academic-years";
 
 interface ExcelTeacherUploadProps {

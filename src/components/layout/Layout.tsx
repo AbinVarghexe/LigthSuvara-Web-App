@@ -17,7 +17,9 @@ const pageTitles: Record<string, string> = {
     '/notifications': 'Notifications',
     '/reports': 'Reports',
     '/settings': 'Settings',
-    '/calendar': 'Calendar'
+    '/calendar': 'Calendar',
+    '/catechism': 'Catechism Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)',
+    '/word-of-life': 'Word of Life (ജീവൻ്റെ വചനം)'
 };
 
 export function Layout() {

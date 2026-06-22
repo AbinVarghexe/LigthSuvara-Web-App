@@ -498,8 +498,7 @@ export function Dashboard() {
                         <TableCell>
                           <StatusBadge
                             status={
-                              event.status ||
-                              (event.isPublic ? "approved" : "pending")
+                              event.isPublic ? "approved" : (event.status === "pending" ? "pending" : "rejected")
                             }
                           />
                         </TableCell>

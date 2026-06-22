@@ -28,6 +28,7 @@ export function EventForm() {
     // Preserve original creator info so admin edits don't overwrite ownership
     const [originalCreatorId, setOriginalCreatorId] = useState<string | null>(null);
     const [originalCreatorForane, setOriginalCreatorForane] = useState<string | null>(null);
+    const [originalIsPublic, setOriginalIsPublic] = useState<boolean>(false);
 
     useEffect(() => {
         const fetchEvent = async () => {
@@ -58,6 +59,7 @@ export function EventForm() {
                     // ── preserve original ownership ──
                     setOriginalCreatorId(event.creatorId || null);
                     setOriginalCreatorForane((event as any).creatorForane || null);
+                    setOriginalIsPublic(event.isPublic || false);
                 }
             } catch (error) {
                 console.error("Error fetching event:", error);
@@ -103,7 +105,7 @@ export function EventForm() {
                 place: data.place,
                 date: new Date(data.date),
                 category: data.category,
-                isPublic: data.isPublic || false,
+                isPublic: isAdminUser ? true : (data.isPublic || false),
                 status: isAdminUser ? 'approved' : 'pending', // Set status based on role
                 creatorId: currentUser.uid,
                 lastEditedByName: entityName,
@@ -119,7 +121,7 @@ export function EventForm() {
                     place: data.place,
                     date: new Date(data.date),
                     category: data.category,
-                    isPublic: data.isPublic || false,
+                    isPublic: originalIsPublic, // Preserve the original isPublic value on edit
                     status: isAdminUser ? 'approved' : 'pending',
                     creatorId: originalCreatorId || currentUser.uid,
                     lastEditedByName: entityName,

@@ -21,6 +21,8 @@ import {
   Video,
   Sparkles,
   Radio,
+  BookOpen,
+  Flame,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -82,6 +84,8 @@ const navigation: NavItem[] = [
   },
   { name: "Video Resources", href: "/video-resources", icon: Video },
   { name: "Saints", href: "/saints", icon: Sparkles },
+  { name: "Catechism Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)", href: "/catechism", icon: BookOpen },
+  { name: "Word of Life (ജീവൻ്റെ വചനം)", href: "/word-of-life", icon: Flame },
   {
     name: "Theme & Programs",
     href: "/theme",
@@ -240,7 +244,7 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <item.icon className="w-5 h-5" />
+                          <item.icon className="w-5 h-5 shrink-0" />
                           <span className="font-medium">{item.name}</span>
                         </div>
                         {isExpanded ? (
@@ -302,7 +306,7 @@ export function Sidebar({ isOpen, onClose, onRefresh }: SidebarProps) {
                           : "text-foreground hover:bg-accent hover:text-accent-foreground"
                       }`}
                     >
-                      <item.icon className="w-5 h-5" />
+                      <item.icon className="w-5 h-5 shrink-0" />
                       <span className="font-medium">{item.name}</span>
                     </Link>
                   )}

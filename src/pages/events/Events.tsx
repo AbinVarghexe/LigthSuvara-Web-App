@@ -812,8 +812,7 @@ export function Events() {
                           </h3>
                           <StatusBadge
                             status={
-                              event.status ||
-                              (event.isPublic ? "approved" : "pending")
+                              event.isPublic ? "approved" : (event.status === "pending" ? "pending" : "rejected")
                             }
                           />
                         </div>
@@ -931,8 +930,7 @@ export function Events() {
                           <TableCell>
                             <StatusBadge
                               status={
-                                event.status ||
-                                (event.isPublic ? "approved" : "pending")
+                                event.isPublic ? "approved" : (event.status === "pending" ? "pending" : "rejected")
                               }
                             />
                           </TableCell>

@@ -100,6 +100,23 @@ export const sendToAll = async (title: string, body: string, imageUrl?: string, 
     });
 };
 
+export const sendNewProgramNotification = async (programName: string) => {
+    return await addDoc(collection(db, NOTIFICATIONS_COLLECTION), {
+        title: 'New Program Created',
+        body: `A new program "${programName}" is available. Please register.`,
+        imageUrl: null,
+        timestamp: serverTimestamp(),
+        recipientId: 'role_school',
+        isBroadcast: true,
+        isRead: false,
+        audience: 'all',
+        readBy: [],
+        type: 'app_update',
+        notificationOnly: false,
+    });
+};
+
+
 export const sendToSpecific = async (title: string, body: string, schoolIds: string[], schoolNames?: string[], imageUrl?: string, notificationOnly?: boolean) => {
     const batch = writeBatch(db);
     // Generate a unique groupId locally (no network call) to link all batch documents

@@ -73,6 +73,7 @@ import {
   ProgramRegistration,
   CustomField,
 } from "../../features/programs/services/programService";
+import { sendNewProgramNotification } from "../../features/notifications/services/notificationService";
 import { Timestamp } from "firebase/firestore";
 import { PremiumProgramPdfService } from "../../features/reports/services/programPdfService";
 import { getUsers } from "../../features/users/services/userService";
@@ -424,6 +425,14 @@ export function Programs() {
         studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
         teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
       });
+      
+      // Send popup notification to all schools
+      try {
+        await sendNewProgramNotification(formData.name);
+      } catch (notifError) {
+        console.error("Error sending new program notification:", notifError);
+      }
+
       toast.success("Program created successfully");
       setIsCreateDialogOpen(false);
       resetForm();
@@ -1268,7 +1277,7 @@ export function Programs() {
                                       </TableCell>
                                       <TableCell className="font-medium">
                                         {reg.isCountOnly
-                                          ? `${reg.studentCount} Students`
+                                          ? `${reg.studentCount} ${role === 'teacher' ? 'Teachers' : 'Students'}`
                                           : reg.studentName}
                                       </TableCell>
                                       <TableCell>
@@ -1319,7 +1328,7 @@ export function Programs() {
                                       <span className="font-medium text-sm">
                                         {idx + 1}.{" "}
                                         {reg.isCountOnly
-                                          ? `${reg.studentCount} Students (Bulk)`
+                                          ? `${reg.studentCount} ${role === 'teacher' ? 'Teachers' : 'Students'} (Bulk)`
                                           : reg.studentName}
                                       </span>
                                       <Badge
