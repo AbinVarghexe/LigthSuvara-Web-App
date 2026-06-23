@@ -18,6 +18,7 @@ import {
   Search,
   Flame,
   BookOpen,
+  Video,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -70,6 +71,11 @@ export function WordOfLife() {
   const [uploading, setUploading] = useState<boolean>(false);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
 
+  // Video Upload states
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null);
+
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Load entries
@@ -93,6 +99,8 @@ export function WordOfLife() {
     loadEntries();
   }, []);
 
+
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -105,14 +113,25 @@ export function WordOfLife() {
     }
   };
 
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedVideoFile(file);
+      setVideoPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
   const handleOpenEntryDialog = (entry?: WordOfLifeData) => {
     setSelectedFile(null);
     setImagePreview(null);
+    setSelectedVideoFile(null);
+    setVideoPreviewUrl(null);
     if (entry) {
       setEditingEntry(entry);
       setTitle(entry.title || "");
       setNotes(entry.notes || "");
       setExistingImageUrl(entry.imageUrl || null);
+      setExistingVideoUrl(entry.videoUrl || null);
       
       const parsedStart = entry.startDate instanceof Timestamp 
         ? entry.startDate.toDate() 
@@ -130,6 +149,7 @@ export function WordOfLife() {
       setStartDate(getTodayString());
       setEndDate(getNextWeekString());
       setExistingImageUrl(null);
+      setExistingVideoUrl(null);
     }
     setEntryDialogOpen(true);
   };
@@ -145,18 +165,24 @@ export function WordOfLife() {
       return;
     }
 
-    if (!title.trim() && !notes.trim() && !selectedFile && !existingImageUrl) {
-      toast.error("Please add a title, verse/notes, or an image to save");
+    if (!title.trim() && !notes.trim() && !selectedFile && !existingImageUrl && !selectedVideoFile && !existingVideoUrl) {
+      toast.error("Please add a title, verse/notes, an image, or a video to save");
       return;
     }
 
     setUploading(true);
     try {
       let finalImageUrl = existingImageUrl;
+      let finalVideoUrl = existingVideoUrl;
 
       if (selectedFile) {
         const path = `word_of_life/${Date.now()}_${selectedFile.name}`;
         finalImageUrl = await uploadFile(selectedFile, path);
+      }
+
+      if (selectedVideoFile) {
+        const path = `word_of_life/videos/${Date.now()}_${selectedVideoFile.name}`;
+        finalVideoUrl = await uploadFile(selectedVideoFile, path);
       }
 
       const payload = {
@@ -165,6 +191,7 @@ export function WordOfLife() {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         imageUrl: finalImageUrl,
+        videoUrl: finalVideoUrl,
       };
 
       let newId = editingEntry?.id;
@@ -362,8 +389,17 @@ export function WordOfLife() {
                     )}
 
                     {entry.imageUrl ? (
-                      <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 bg-muted">
+                      <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 bg-muted relative">
                         <img src={entry.imageUrl} alt="" className="w-full h-full object-cover" />
+                        {entry.videoUrl && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+                            <Video className="w-4 h-4 text-white" />
+                          </div>
+                        )}
+                      </div>
+                    ) : entry.videoUrl ? (
+                      <div className="w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-950/50 flex items-center justify-center shrink-0 text-emerald-600">
+                        <Video className="w-5 h-5" />
                       </div>
                     ) : (
                       <div className="w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-950/50 flex items-center justify-center shrink-0 text-emerald-600">
@@ -441,13 +477,25 @@ export function WordOfLife() {
                     </div>
                   </div>
 
+                  {/* Detail Panel Video Content */}
+                  {selectedEntry.videoUrl && (
+                    <div className="rounded-xl overflow-hidden border border-border shadow-inner bg-black shrink-0">
+                      <video
+                        src={selectedEntry.videoUrl}
+                        controls
+                        className="w-full max-h-[35vh] object-contain"
+                        preload="metadata"
+                      />
+                    </div>
+                  )}
+
                   {/* Detail Panel Image Content */}
                   {selectedEntry.imageUrl && (
-                    <div className="rounded-xl overflow-hidden border border-border shadow-inner max-h-[30vh] bg-muted shrink-0">
+                    <div className="rounded-xl overflow-hidden border border-border shadow-inner max-h-[25vh] bg-muted shrink-0">
                       <img
                         src={selectedEntry.imageUrl}
                         alt={selectedEntry.title || ""}
-                        className="w-full h-full object-contain max-h-[30vh]"
+                        className="w-full h-full object-contain max-h-[25vh]"
                       />
                     </div>
                   )}
@@ -527,15 +575,29 @@ export function WordOfLife() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="font-semibold text-sm">Attachment Image (optional)</Label>
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                disabled={uploading}
-                className="cursor-pointer rounded-xl border-border file:bg-emerald-50 dark:file:bg-emerald-950/20 file:text-emerald-600 dark:file:text-emerald-400 file:border-0 file:rounded-lg file:px-3 file:py-1 file:mr-2"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Attachment Image (optional)</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                  className="cursor-pointer rounded-xl border-border file:bg-emerald-50 dark:file:bg-emerald-950/20 file:text-emerald-600 dark:file:text-emerald-400 file:border-0 file:rounded-lg file:px-3 file:py-1 file:mr-2"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm flex items-center gap-1.5">
+                  <Video className="w-3.5 h-3.5 text-emerald-600" /> Attachment Video (optional)
+                </Label>
+                <Input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleVideoFileChange}
+                  disabled={uploading}
+                  className="cursor-pointer rounded-xl border-border file:bg-emerald-50 dark:file:bg-emerald-950/20 file:text-emerald-600 dark:file:text-emerald-400 file:border-0 file:rounded-lg file:px-3 file:py-1 file:mr-2"
+                />
+              </div>
             </div>
 
             {/* Image Preview */}
@@ -552,6 +614,30 @@ export function WordOfLife() {
                     setSelectedFile(null);
                     setImagePreview(null);
                     setExistingImageUrl(null);
+                  }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+                  disabled={uploading}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Video Preview */}
+            {(videoPreviewUrl || existingVideoUrl) && (
+              <div className="relative w-full rounded-xl overflow-hidden bg-black border border-border shadow-inner">
+                <video
+                  src={videoPreviewUrl || existingVideoUrl || ""}
+                  controls
+                  className="w-full max-h-[220px] object-contain"
+                  preload="metadata"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedVideoFile(null);
+                    setVideoPreviewUrl(null);
+                    setExistingVideoUrl(null);
                   }}
                   className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
                   disabled={uploading}

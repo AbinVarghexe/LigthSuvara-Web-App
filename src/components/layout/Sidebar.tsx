@@ -84,7 +84,7 @@ const navigation: NavItem[] = [
   },
   { name: "Video Resources", href: "/video-resources", icon: Video },
   { name: "Saints", href: "/saints", icon: Sparkles },
-  { name: "Catechism Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)", href: "/catechism", icon: BookOpen },
+  { name: "Catechetical Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)", href: "/catechism", icon: BookOpen },
   { name: "Word of Life (ജീവൻ്റെ വചനം)", href: "/word-of-life", icon: Flame },
   {
     name: "Theme & Programs",

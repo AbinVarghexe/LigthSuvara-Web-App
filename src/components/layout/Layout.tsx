@@ -18,7 +18,7 @@ const pageTitles: Record<string, string> = {
     '/reports': 'Reports',
     '/settings': 'Settings',
     '/calendar': 'Calendar',
-    '/catechism': 'Catechism Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)',
+    '/catechism': 'Catechetical Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)',
     '/word-of-life': 'Word of Life (ജീവൻ്റെ വചനം)'
 };
 

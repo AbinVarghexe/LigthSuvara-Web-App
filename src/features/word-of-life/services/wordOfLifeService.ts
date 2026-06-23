@@ -17,6 +17,7 @@ export interface WordOfLifeData {
   title: string;
   notes: string;
   imageUrl?: string | null;
+  videoUrl?: string | null;
   startDate: Date | Timestamp;
   endDate: Date | Timestamp;
   createdAt?: any;

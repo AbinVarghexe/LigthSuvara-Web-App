@@ -73,7 +73,7 @@ export function Catechism() {
       setEntries(data);
     } catch (err) {
       console.error("Error loading catechism hours:", err);
-      toast.error("Failed to load Catechism Hour entries");
+      toast.error("Failed to load Catechetical Hour entries");
     } finally {
       setLoading(false);
     }
@@ -202,13 +202,17 @@ export function Catechism() {
     }
   };
 
-  // Check if entry is currently active (target Saturday date is today or in the future)
+  // Check if entry is currently active.
+  // An entry stays active from its target Saturday date through the following Thursday at 11:59 PM
+  // (i.e., 6 days after the target date). For example, a June 20 entry is active until June 26 at 11:59 PM.
   const isEntryActive = (entry: CatechismHourData) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
     const target = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
-    target.setHours(23, 59, 59, 999);
-    return today <= target;
+    // Active window ends 6 days after the target date at 11:59:59 PM
+    const activeUntil = new Date(target);
+    activeUntil.setDate(target.getDate() + 6);
+    activeUntil.setHours(23, 59, 59, 999);
+    return now <= activeUntil;
   };
 
   // Filter based on search term
@@ -232,10 +236,10 @@ export function Catechism() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-2">
             <BookOpen className="w-8 h-8 text-blue-600" />
-            Catechism Hour - വിശ്വാസപരിശീലന മണിക്കൂർ 
+            Catechetical Hour - വിശ്വാസപരിശീലന മണിക്കൂർ 
           </h1>
           <p className="text-muted-foreground">
-            Catechism Hour - Upload weekly study material, images, and text notes for Saturdays.
+            Catechetical Hour - Upload weekly study material, images, and text notes for Saturdays.
           </p>
         </div>
         <Button
@@ -401,7 +405,7 @@ export function Catechism() {
               {editingEntry ? "Edit Weekly Material" : "Add Weekly Material"}
             </DialogTitle>
             <DialogDescription>
-              Upload study notes, summary topics, and reference images for Saturday Catechism Hour.
+              Upload study notes, summary topics, and reference images for Saturday Catechetical Hour.
             </DialogDescription>
           </DialogHeader>
           
