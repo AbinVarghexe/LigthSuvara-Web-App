@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
+import { Switch } from "../../components/ui/switch";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
 import { uploadFile } from "../../lib/upload";
@@ -47,6 +48,14 @@ const getNextWeekString = () => {
   return formatDateString(nextWeek);
 };
 
+// Helper to get YouTube Video ID
+const getYoutubeId = (url: string) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
 export function WordOfLife() {
   const [entries, setEntries] = useState<WordOfLifeData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -64,6 +73,10 @@ export function WordOfLife() {
   const [notes, setNotes] = useState<string>("");
   const [startDate, setStartDate] = useState<string>(getTodayString());
   const [endDate, setEndDate] = useState<string>(getNextWeekString());
+  
+  // YouTube states
+  const [isYoutube, setIsYoutube] = useState<boolean>(false);
+  const [youtubeUrl, setYoutubeUrl] = useState<string>("");
   
   // File Upload states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -142,6 +155,16 @@ export function WordOfLife() {
 
       setStartDate(formatDateString(parsedStart));
       setEndDate(formatDateString(parsedEnd));
+
+      // Handle youtube url detection
+      const ytId = entry.videoUrl ? getYoutubeId(entry.videoUrl) : null;
+      if (ytId) {
+        setIsYoutube(true);
+        setYoutubeUrl(entry.videoUrl || "");
+      } else {
+        setIsYoutube(false);
+        setYoutubeUrl("");
+      }
     } else {
       setEditingEntry(null);
       setTitle("");
@@ -150,6 +173,8 @@ export function WordOfLife() {
       setEndDate(getNextWeekString());
       setExistingImageUrl(null);
       setExistingVideoUrl(null);
+      setIsYoutube(false);
+      setYoutubeUrl("");
     }
     setEntryDialogOpen(true);
   };
@@ -165,24 +190,30 @@ export function WordOfLife() {
       return;
     }
 
-    if (!title.trim() && !notes.trim() && !selectedFile && !existingImageUrl && !selectedVideoFile && !existingVideoUrl) {
-      toast.error("Please add a title, verse/notes, an image, or a video to save");
+    const hasMedia = selectedFile || existingImageUrl || selectedVideoFile || existingVideoUrl || (isYoutube && youtubeUrl.trim());
+    if (!title.trim() && !notes.trim() && !hasMedia) {
+      toast.error("Please add a title, verse/notes, an image, or a video/YouTube link to save");
       return;
     }
 
     setUploading(true);
     try {
       let finalImageUrl = existingImageUrl;
-      let finalVideoUrl = existingVideoUrl;
+      let finalVideoUrl = isYoutube ? youtubeUrl.trim() : existingVideoUrl;
 
       if (selectedFile) {
         const path = `word_of_life/${Date.now()}_${selectedFile.name}`;
         finalImageUrl = await uploadFile(selectedFile, path);
       }
 
-      if (selectedVideoFile) {
+      if (isYoutube) {
+        finalVideoUrl = youtubeUrl.trim();
+      } else if (selectedVideoFile) {
         const path = `word_of_life/videos/${Date.now()}_${selectedVideoFile.name}`;
         finalVideoUrl = await uploadFile(selectedVideoFile, path);
+      } else if (existingVideoUrl && getYoutubeId(existingVideoUrl)) {
+        // If they toggled youtube off and didn't provide a new file, but there was an existing youtube link, clear it
+        finalVideoUrl = null;
       }
 
       const payload = {
@@ -479,13 +510,24 @@ export function WordOfLife() {
 
                   {/* Detail Panel Video Content */}
                   {selectedEntry.videoUrl && (
-                    <div className="rounded-xl overflow-hidden border border-border shadow-inner bg-black shrink-0">
-                      <video
-                        src={selectedEntry.videoUrl}
-                        controls
-                        className="w-full max-h-[35vh] object-contain"
-                        preload="metadata"
-                      />
+                    <div className="rounded-xl overflow-hidden border border-border shadow-inner bg-black shrink-0 aspect-video">
+                      {getYoutubeId(selectedEntry.videoUrl) ? (
+                        <iframe
+                          src={`https://www.youtube.com/embed/${getYoutubeId(selectedEntry.videoUrl)}`}
+                          title="YouTube video player"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          className="w-full h-full object-contain max-h-[35vh]"
+                        />
+                      ) : (
+                        <video
+                          src={selectedEntry.videoUrl}
+                          controls
+                          className="w-full max-h-[35vh] object-contain"
+                          preload="metadata"
+                        />
+                      )}
                     </div>
                   )}
 
@@ -575,6 +617,26 @@ export function WordOfLife() {
               </div>
             </div>
 
+            <div className="flex items-center space-x-2 py-1">
+              <Switch
+                id="youtube-toggle"
+                checked={isYoutube}
+                onCheckedChange={(checked) => {
+                  setIsYoutube(checked);
+                  if (checked) {
+                    setSelectedVideoFile(null);
+                    setVideoPreviewUrl(null);
+                  } else {
+                    setYoutubeUrl("");
+                  }
+                }}
+                disabled={uploading}
+              />
+              <Label htmlFor="youtube-toggle" className="font-medium text-xs cursor-pointer flex items-center gap-1">
+                Use YouTube Video Link
+              </Label>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Attachment Image (optional)</Label>
@@ -587,16 +649,35 @@ export function WordOfLife() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="font-semibold text-sm flex items-center gap-1.5">
-                  <Video className="w-3.5 h-3.5 text-emerald-600" /> Attachment Video (optional)
-                </Label>
-                <Input
-                  type="file"
-                  accept="video/*"
-                  onChange={handleVideoFileChange}
-                  disabled={uploading}
-                  className="cursor-pointer rounded-xl border-border file:bg-emerald-50 dark:file:bg-emerald-950/20 file:text-emerald-600 dark:file:text-emerald-400 file:border-0 file:rounded-lg file:px-3 file:py-1 file:mr-2"
-                />
+                {isYoutube ? (
+                  <>
+                    <Label htmlFor="youtubeUrl" className="font-semibold text-sm flex items-center gap-1.5">
+                      <Video className="w-3.5 h-3.5 text-emerald-600" /> YouTube Video Link (optional)
+                    </Label>
+                    <Input
+                      id="youtubeUrl"
+                      type="text"
+                      placeholder="e.g. https://www.youtube.com/watch?v=..."
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                      disabled={uploading}
+                      className="rounded-xl border-border focus:ring-emerald-500"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Label className="font-semibold text-sm flex items-center gap-1.5">
+                      <Video className="w-3.5 h-3.5 text-emerald-600" /> Attachment Video (optional)
+                    </Label>
+                    <Input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoFileChange}
+                      disabled={uploading}
+                      className="cursor-pointer rounded-xl border-border file:bg-emerald-50 dark:file:bg-emerald-950/20 file:text-emerald-600 dark:file:text-emerald-400 file:border-0 file:rounded-lg file:px-3 file:py-1 file:mr-2"
+                    />
+                  </>
+                )}
               </div>
             </div>
 
@@ -624,27 +705,52 @@ export function WordOfLife() {
             )}
 
             {/* Video Preview */}
-            {(videoPreviewUrl || existingVideoUrl) && (
-              <div className="relative w-full rounded-xl overflow-hidden bg-black border border-border shadow-inner">
-                <video
-                  src={videoPreviewUrl || existingVideoUrl || ""}
-                  controls
-                  className="w-full max-h-[220px] object-contain"
-                  preload="metadata"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedVideoFile(null);
-                    setVideoPreviewUrl(null);
-                    setExistingVideoUrl(null);
-                  }}
-                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
-                  disabled={uploading}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+            {isYoutube ? (
+              youtubeUrl && getYoutubeId(youtubeUrl) && (
+                <div className="relative w-full rounded-xl overflow-hidden bg-black border border-border shadow-inner aspect-video">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${getYoutubeId(youtubeUrl)}`}
+                    title="YouTube video preview"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full max-h-[220px] object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setYoutubeUrl("");
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+                    disabled={uploading}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )
+            ) : (
+              (videoPreviewUrl || existingVideoUrl) && (
+                <div className="relative w-full rounded-xl overflow-hidden bg-black border border-border shadow-inner">
+                  <video
+                    src={videoPreviewUrl || existingVideoUrl || ""}
+                    controls
+                    className="w-full max-h-[220px] object-contain"
+                    preload="metadata"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedVideoFile(null);
+                      setVideoPreviewUrl(null);
+                      setExistingVideoUrl(null);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+                    disabled={uploading}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )
             )}
 
             <div className="space-y-1.5">
