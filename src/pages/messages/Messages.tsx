@@ -27,6 +27,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { toast } from "sonner";
 import {
   sendBroadcast,
@@ -68,6 +75,8 @@ export function Messages() {
   const [isLoading, setIsLoading] = useState(false);
   const [schools, setSchools] = useState<UserData[]>([]);
   const [parishes, setParishes] = useState<UserData[]>([]);
+  const [schoolSearch, setSchoolSearch] = useState("");
+  const [foraneFilter, setForaneFilter] = useState("all");
 
   // Image attachment state
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -370,6 +379,36 @@ export function Messages() {
     );
   };
 
+  // Get unique Foranes from schools list
+  const uniqueForanes = Array.from(
+    new Set(schools.map((s) => s.forane).filter(Boolean))
+  ).sort() as string[];
+
+  // Filter schools based on search text and Forane dropdown selection
+  const filteredSchoolsForPicker = schools.filter((school) => {
+    const name = (
+      school.schoolname ||
+      school.schoolName ||
+      school.fullName ||
+      school.email ||
+      ""
+    ).toLowerCase();
+    const matchesSearch = name.includes(schoolSearch.toLowerCase());
+    const matchesForane =
+      foraneFilter === "all" || school.forane === foraneFilter;
+    return matchesSearch && matchesForane;
+  });
+
+  const handleSelectAllFiltered = () => {
+    const filteredIds = filteredSchoolsForPicker.map((s) => s.id);
+    setSelectedSchools((prev) => Array.from(new Set([...prev, ...filteredIds])));
+  };
+
+  const handleDeselectAllFiltered = () => {
+    const filteredIds = filteredSchoolsForPicker.map((s) => s.id);
+    setSelectedSchools((prev) => prev.filter((id) => !filteredIds.includes(id)));
+  };
+
   const openEditDialog = (n: NotificationData) => {
     setEditingNotification(n);
     setEditTitle(n.title);
@@ -616,13 +655,72 @@ export function Messages() {
 
                 {/* School Picker */}
                 {audience === "specific" && (
-                  <div className="space-y-3 animate-in fade-in slide-in-from-top-4">
-                    <Label>Select Schools</Label>
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+                    <Label className="text-base font-semibold">Select Schools</Label>
+                    
+                    {/* Search and Filter Row */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Search schools by name..."
+                          value={schoolSearch}
+                          onChange={(e) => setSchoolSearch(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="w-full sm:w-[220px]">
+                        <Select
+                          value={foraneFilter}
+                          onValueChange={(val) => setForaneFilter(val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="All Foranes" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Foranes</SelectItem>
+                            {uniqueForanes.map((f) => (
+                              <SelectItem key={f} value={f}>
+                                {f}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Selection Helpers */}
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSelectAllFiltered}
+                          disabled={filteredSchoolsForPicker.length === 0}
+                        >
+                          Select All ({filteredSchoolsForPicker.length})
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDeselectAllFiltered}
+                          disabled={filteredSchoolsForPicker.length === 0}
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                      <span className="text-muted-foreground">
+                        {filteredSchoolsForPicker.length} visible
+                      </span>
+                    </div>
+
+                    {/* Schools List Container */}
                     <div className="border border-border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2 bg-muted/50">
-                      {schools.map((school) => (
+                      {filteredSchoolsForPicker.map((school) => (
                         <div
                           key={school.id}
-                          className="flex items-center space-x-2 bg-background p-3 rounded-md border border-border"
+                          className="flex items-center space-x-2 bg-background p-3 rounded-md border border-border hover:bg-accent/10 transition-colors"
                         >
                           <Checkbox
                             id={school.id}
@@ -631,24 +729,33 @@ export function Messages() {
                           />
                           <Label
                             htmlFor={school.id}
-                            className="flex-1 cursor-pointer font-normal"
+                            className="flex-1 cursor-pointer font-normal flex items-center justify-between"
                           >
-                            {school.schoolname ||
-                              school.schoolName ||
-                              school.fullName ||
-                              school.email}
+                            <span>
+                              {school.schoolname ||
+                                school.schoolName ||
+                                school.fullName ||
+                                school.email}
+                            </span>
+                            {school.forane && (
+                              <Badge variant="outline" className="ml-2 font-normal text-[11px]">
+                                {school.forane}
+                              </Badge>
+                            )}
                           </Label>
                         </div>
                       ))}
-                      {schools.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-2">
-                          No schools found.
+                      {filteredSchoolsForPicker.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-6">
+                          No schools match your search or filter criteria.
                         </p>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground text-right">
-                      {selectedSchools.length} school(s) selected
-                    </p>
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>
+                        Total selected: {selectedSchools.length} school(s)
+                      </span>
+                    </div>
                   </div>
                 )}
 
