@@ -174,6 +174,17 @@ export function ProgramAnalytics() {
         return { total, performance, leaderboard, maxCount };
     }, [registrations, programs, selectedProgramFilter, users, searchQuery, selectedForane, selectedParishId]);
 
+    const activeProgram = useMemo(() => {
+        return programs.find(p => p.name === selectedProgramFilter);
+    }, [programs, selectedProgramFilter]);
+
+    const audienceLabel = useMemo(() => {
+        if (selectedProgramFilter === "All") return "Participants";
+        if (activeProgram?.targetAudience === "teacher") return "Teachers";
+        if (activeProgram?.targetAudience === "both") return "Participants";
+        return "Students";
+    }, [selectedProgramFilter, activeProgram]);
+
     if (loading) {
         return (
             <div className="h-full w-full flex items-center justify-center p-20">
@@ -287,7 +298,7 @@ export function ProgramAnalytics() {
                         <h2 className="text-6xl font-bold tracking-tighter">{stats.total}</h2>
                         <div className="flex flex-col">
                             <span className="text-blue-100 text-lg font-medium leading-none">Registered</span>
-                            <span className="text-blue-100 text-lg font-medium">Students</span>
+                            <span className="text-blue-100 text-lg font-medium">{audienceLabel}</span>
                         </div>
                     </div>
                     <div className="mt-8 flex gap-3">

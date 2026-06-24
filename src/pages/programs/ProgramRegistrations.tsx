@@ -74,6 +74,11 @@ export function ProgramRegistrations() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileSchoolId, setProfileSchoolId] = useState<string | null>(null);
 
+  const getAudienceLabel = (count: number, targetAudience?: "student" | "teacher" | "both") => {
+    const label = targetAudience === "teacher" ? "Teacher" : (targetAudience === "both" ? "Participant" : "Student");
+    return `${count} ${label}${count === 1 ? "" : "s"}`;
+  };
+
   useEffect(() => {
     setLoading(true);
     const unsubscribeRegistrations = subscribeToAllRegistrations((data) => {
@@ -377,7 +382,7 @@ export function ProgramRegistrations() {
                         <div className="flex items-center gap-1.5 mt-1">
                           <Users className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-sm font-medium text-muted-foreground">
-                            {p.count} Students
+                            {getAudienceLabel(p.count, programs.find((prg) => prg.name === p.name)?.targetAudience)}
                           </span>
                         </div>
                       </div>
@@ -490,7 +495,7 @@ export function ProgramRegistrations() {
                           <div className="flex items-center gap-1.5 mt-1">
                             <Users className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-sm font-medium text-muted-foreground">
-                              {s.count} Students
+                              {getAudienceLabel(s.count, selectedProgram?.targetAudience)}
                             </span>
                           </div>
                         </div>
@@ -542,7 +547,7 @@ export function ProgramRegistrations() {
                           <div className="flex-1 min-w-0">
                             <h3 className="font-bold text-foreground truncate">
                               {st.isCountOnly
-                                ? `${st.studentCount} Students (Consolidated)`
+                                ? `${st.studentCount} ${role === "teacher" ? "Teachers" : "Students"} (Consolidated)`
                                 : st.studentName}
                             </h3>
                             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
