@@ -205,15 +205,26 @@ export function Catechism() {
   // Check if entry is currently active.
   // An entry stays active from its target Saturday date through the following Thursday at 11:59 PM
   // (i.e., 6 days after the target date). For example, a June 20 entry is active until June 26 at 11:59 PM.
+  // If it is the latest/last entry, it remains active indefinitely if no newer entry is added.
   const isEntryActive = (entry: CatechismHourData) => {
-    const now = new Date();
+    if (!entry.date) return true;
     const target = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+
+    // Check if this entry is the last entry (latest by date) in entries
+    const isLastEntry = !entries.some((e) => {
+      if (!e.date) return false;
+      const eDate = e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date);
+      return eDate > target;
+    });
+
+    const now = new Date();
     // Active window ends 6 days after the target date at 11:59:59 PM
     const activeUntil = new Date(target);
     activeUntil.setDate(target.getDate() + 6);
     activeUntil.setHours(23, 59, 59, 999);
-    return now <= activeUntil;
+    return now <= activeUntil || isLastEntry;
   };
+
 
   // Filter based on search term
   const searchedEntries = entries.filter(
