@@ -371,9 +371,15 @@ export const PrivacyPolicy = () => {
                                 </p>
                                 <div className="bg-muted p-4 rounded-lg mt-4">
                                     <p className="text-sm font-medium">Light Suvara Support</p>
-                                    <p className="text-sm text-muted-foreground mt-1">Email: [Your Contact Email]</p>
-                                    <p className="text-sm text-muted-foreground">Phone: [Your Contact Phone]</p>
-                                    <p className="text-sm text-muted-foreground">Address: [Your Physical Address]</p>
+                                    <p className="text-sm text-muted-foreground mt-1">Email: adminlightsuvara@gmail.com</p>
+                                    <p className="text-sm text-muted-foreground">Phone: +919447914882</p>
+                                    <p className="text-sm text-muted-foreground">Address: Diocese of Kanjirappally, 
+                                        PB No 22 6/356 Pastoral Center Kanjirapally,
+                                        Church Road Pastoral Centre,
+                                        Kanjirappally
+                                        Kanjirappally
+Kottayam, Kerala 686507
+India</p>
                                 </div>
                             </section>
 
