@@ -38,6 +38,17 @@ export interface ProgramData {
     // Custom Fields Schema per participant role
     studentFields?: CustomField[];
     teacherFields?: CustomField[];
+
+    // Payment details
+    paymentDetails?: {
+        isRequired?: boolean;
+        registrationFee?: number;
+        bankName?: string;
+        accountName?: string;
+        accountNumber?: string;
+        ifscCode?: string;
+        qrCodeUrl?: string;
+    };
 }
 
 export interface ProgramRegistration {
@@ -58,6 +69,7 @@ export interface ProgramRegistration {
     // Dynamic Custom Field Values
     type?: 'student' | 'teacher'; // defaults to 'student'
     customFieldValues?: Record<string, any>;
+    paymentScreenshotUrl?: string;
 }
 
 // Program CRUD Operations

@@ -15,6 +15,7 @@ import {
   MapPin,
   ClipboardList,
   Church,
+  Eye,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -73,6 +74,9 @@ export function ProgramRegistrations() {
   // School Profile Dialog
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileSchoolId, setProfileSchoolId] = useState<string | null>(null);
+
+  // Payment Receipt Dialog State
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
   const getAudienceLabel = (count: number, targetAudience?: "student" | "teacher" | "both") => {
     const label = targetAudience === "teacher" ? "Teacher" : (targetAudience === "both" ? "Participant" : "Student");
@@ -585,12 +589,24 @@ export function ProgramRegistrations() {
                                 <Info className="h-5 w-5 text-primary" />
                               </Button>
                             ) : (
-                              <Badge
-                                variant="secondary"
-                                className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                              >
-                                Verified
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                {st.paymentScreenshotUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs flex items-center gap-1.5"
+                                    onClick={() => setReceiptUrl(st.paymentScreenshotUrl!)}
+                                  >
+                                    <Eye className="h-3.5 w-3.5" /> Receipt
+                                  </Button>
+                                )}
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                >
+                                  Verified
+                                </Badge>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -735,6 +751,29 @@ export function ProgramRegistrations() {
               onClick={() => setIsProfileOpen(false)}
               className="w-full bg-blue-600 hover:bg-blue-700"
             >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt View Dialog */}
+      <Dialog open={!!receiptUrl} onOpenChange={(open) => !open && setReceiptUrl(null)}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col items-center justify-center p-6">
+          <DialogHeader className="w-full">
+            <DialogTitle>Payment Receipt / Screenshot</DialogTitle>
+          </DialogHeader>
+          <div className="w-full flex-1 flex items-center justify-center overflow-auto mt-4 max-h-[60vh] rounded-lg border bg-muted/20">
+            {receiptUrl && (
+              <img
+                src={receiptUrl}
+                alt="Payment screenshot"
+                className="max-w-full max-h-full object-contain rounded"
+              />
+            )}
+          </div>
+          <DialogFooter className="w-full mt-4">
+            <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => setReceiptUrl(null)}>
               Close
             </Button>
           </DialogFooter>

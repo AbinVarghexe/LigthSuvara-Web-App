@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { uploadFile } from "../../lib/upload";
 import {
   Plus,
   Search,
@@ -250,7 +251,16 @@ export function Programs() {
     endDate: "",
     isActive: true,
     targetAudience: "student" as 'student' | 'teacher' | 'both',
+    paymentRequired: false,
+    registrationFee: 0,
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    ifscCode: "",
+    qrCodeUrl: "",
   });
+
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
   const [studentFields, setStudentFields] = useState<CustomField[]>(() => getInitialStudentFields());
   const [teacherFields, setTeacherFields] = useState<CustomField[]>(() => getInitialTeacherFields());
@@ -424,6 +434,15 @@ export function Programs() {
         targetAudience: formData.targetAudience,
         studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
         teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
+        paymentDetails: {
+          isRequired: formData.paymentRequired,
+          registrationFee: Number(formData.registrationFee) || 0,
+          bankName: formData.bankName,
+          accountName: formData.accountName,
+          accountNumber: formData.accountNumber,
+          ifscCode: formData.ifscCode,
+          qrCodeUrl: formData.qrCodeUrl,
+        }
       });
       
       // Send popup notification to all schools
@@ -463,6 +482,15 @@ export function Programs() {
         targetAudience: formData.targetAudience,
         studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
         teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
+        paymentDetails: {
+          isRequired: formData.paymentRequired,
+          registrationFee: Number(formData.registrationFee) || 0,
+          bankName: formData.bankName,
+          accountName: formData.accountName,
+          accountNumber: formData.accountNumber,
+          ifscCode: formData.ifscCode,
+          qrCodeUrl: formData.qrCodeUrl,
+        }
       });
       toast.success("Program updated successfully");
       setIsEditDialogOpen(false);
@@ -502,6 +530,13 @@ export function Programs() {
       endDate: endDate.toISOString().split("T")[0],
       isActive: program.isActive,
       targetAudience: program.targetAudience || "student",
+      paymentRequired: program.paymentDetails?.isRequired || false,
+      registrationFee: program.paymentDetails?.registrationFee || 0,
+      bankName: program.paymentDetails?.bankName || "",
+      accountName: program.paymentDetails?.accountName || "",
+      accountNumber: program.paymentDetails?.accountNumber || "",
+      ifscCode: program.paymentDetails?.ifscCode || "",
+      qrCodeUrl: program.paymentDetails?.qrCodeUrl || "",
     });
     setStudentFields(program.studentFields || []);
     setTeacherFields(program.teacherFields || []);
@@ -516,6 +551,13 @@ export function Programs() {
       endDate: "",
       isActive: true,
       targetAudience: "student",
+      paymentRequired: false,
+      registrationFee: 0,
+      bankName: "",
+      accountName: "",
+      accountNumber: "",
+      ifscCode: "",
+      qrCodeUrl: "",
     });
     setStudentFields(getInitialStudentFields());
     setTeacherFields(getInitialTeacherFields());
@@ -790,6 +832,118 @@ export function Programs() {
                 <Label htmlFor="isActive">Active</Label>
               </div>
 
+              {/* Payment Details Section */}
+              <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="paymentRequired"
+                    checked={formData.paymentRequired}
+                    onCheckedChange={(checked: boolean) =>
+                      setFormData({ ...formData, paymentRequired: checked })
+                    }
+                  />
+                  <Label htmlFor="paymentRequired" className="font-semibold cursor-pointer">Requires Payment Registration</Label>
+                </div>
+
+                {formData.paymentRequired && (
+                  <div className="space-y-4 pl-6 border-l-2 border-blue-500 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="registrationFee">Registration Fee (₹)</Label>
+                        <Input
+                          id="registrationFee"
+                          type="number"
+                          value={formData.registrationFee}
+                          onChange={(e) =>
+                            setFormData({ ...formData, registrationFee: parseFloat(e.target.value) || 0 })
+                          }
+                          placeholder="e.g. 100"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bankName">Bank Name</Label>
+                        <Input
+                          id="bankName"
+                          value={formData.bankName}
+                          onChange={(e) =>
+                            setFormData({ ...formData, bankName: e.target.value })
+                          }
+                          placeholder="e.g. State Bank of India"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="accountName">Account Holder Name</Label>
+                        <Input
+                          id="accountName"
+                          value={formData.accountName}
+                          onChange={(e) =>
+                            setFormData({ ...formData, accountName: e.target.value })
+                          }
+                          placeholder="e.g. Light Suvara Catechetical Centre"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="accountNumber">Account Number</Label>
+                        <Input
+                          id="accountNumber"
+                          value={formData.accountNumber}
+                          onChange={(e) =>
+                            setFormData({ ...formData, accountNumber: e.target.value })
+                          }
+                          placeholder="Enter account number"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="ifscCode">IFSC Code / Routing Code</Label>
+                        <Input
+                          id="ifscCode"
+                          value={formData.ifscCode}
+                          onChange={(e) =>
+                            setFormData({ ...formData, ifscCode: e.target.value })
+                          }
+                          placeholder="Enter IFSC code"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>QR Code for Payment</Label>
+                        <div className="flex items-center gap-3">
+                          {formData.qrCodeUrl && (
+                            <div className="relative w-10 h-10 border rounded overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                              <img src={formData.qrCodeUrl} alt="QR Preview" className="object-contain w-full h-full" />
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <Input
+                              type="file"
+                              accept="image/*"
+                              className="h-9 text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    toast.loading("Uploading QR Code...", { id: "qr-upload" });
+                                    const url = await uploadFile(file, `programs/qr_codes/${Date.now()}_${file.name}`);
+                                    setFormData(prev => ({ ...prev, qrCodeUrl: url }));
+                                    toast.success("QR Code uploaded successfully", { id: "qr-upload" });
+                                  } catch (err) {
+                                    console.error(err);
+                                    toast.error("Failed to upload QR Code", { id: "qr-upload" });
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
                 {formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')}
               </div>
@@ -1057,6 +1211,118 @@ export function Programs() {
               <Label htmlFor="edit-isActive">Active</Label>
             </div>
 
+            {/* Payment Details Section */}
+            <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="edit-paymentRequired"
+                  checked={formData.paymentRequired}
+                  onCheckedChange={(checked: boolean) =>
+                    setFormData({ ...formData, paymentRequired: checked })
+                  }
+                />
+                <Label htmlFor="edit-paymentRequired" className="font-semibold cursor-pointer">Requires Payment Registration</Label>
+              </div>
+
+              {formData.paymentRequired && (
+                <div className="space-y-4 pl-6 border-l-2 border-blue-500 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-registrationFee">Registration Fee (₹)</Label>
+                      <Input
+                        id="edit-registrationFee"
+                        type="number"
+                        value={formData.registrationFee}
+                        onChange={(e) =>
+                          setFormData({ ...formData, registrationFee: parseFloat(e.target.value) || 0 })
+                        }
+                        placeholder="e.g. 100"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-bankName">Bank Name</Label>
+                      <Input
+                        id="edit-bankName"
+                        value={formData.bankName}
+                        onChange={(e) =>
+                          setFormData({ ...formData, bankName: e.target.value })
+                        }
+                        placeholder="e.g. State Bank of India"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-accountName">Account Holder Name</Label>
+                      <Input
+                        id="edit-accountName"
+                        value={formData.accountName}
+                        onChange={(e) =>
+                          setFormData({ ...formData, accountName: e.target.value })
+                        }
+                        placeholder="e.g. Light Suvara Catechetical Centre"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-accountNumber">Account Number</Label>
+                      <Input
+                        id="edit-accountNumber"
+                        value={formData.accountNumber}
+                        onChange={(e) =>
+                          setFormData({ ...formData, accountNumber: e.target.value })
+                        }
+                        placeholder="Enter account number"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-ifscCode">IFSC Code / Routing Code</Label>
+                      <Input
+                        id="edit-ifscCode"
+                        value={formData.ifscCode}
+                        onChange={(e) =>
+                          setFormData({ ...formData, ifscCode: e.target.value })
+                        }
+                        placeholder="Enter IFSC code"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>QR Code for Payment</Label>
+                      <div className="flex items-center gap-3">
+                        {formData.qrCodeUrl && (
+                          <div className="relative w-10 h-10 border rounded overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                            <img src={formData.qrCodeUrl} alt="QR Preview" className="object-contain w-full h-full" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            className="h-9 text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  toast.loading("Uploading QR Code...", { id: "qr-upload" });
+                                  const url = await uploadFile(file, `programs/qr_codes/${Date.now()}_${file.name}`);
+                                  setFormData(prev => ({ ...prev, qrCodeUrl: url }));
+                                  toast.success("QR Code uploaded successfully", { id: "qr-upload" });
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error("Failed to upload QR Code", { id: "qr-upload" });
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
               {formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')}
             </div>
@@ -1253,8 +1519,6 @@ export function Programs() {
                                 {totalSchoolCount} {role === 'student' ? 'students' : 'teachers'}
                               </Badge>
                             </h4>
-
-                            {/* Desktop table */}
                             <div className="hidden sm:block rounded-lg border overflow-x-auto">
                               <Table>
                                 <TableHeader>
@@ -1265,6 +1529,9 @@ export function Programs() {
                                     {customFields.map(f => (
                                       <TableHead key={f.id}>{f.name}</TableHead>
                                     ))}
+                                    {selectedProgram?.paymentDetails?.isRequired && (
+                                      <TableHead>Payment Receipt</TableHead>
+                                    )}
                                     <TableHead>Status</TableHead>
                                     <TableHead>Submitted</TableHead>
                                   </TableRow>
@@ -1298,6 +1565,22 @@ export function Programs() {
                                           </TableCell>
                                         );
                                       })}
+                                      {selectedProgram?.paymentDetails?.isRequired && (
+                                        <TableCell>
+                                          {reg.paymentScreenshotUrl ? (
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-8 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1"
+                                              onClick={() => setReceiptUrl(reg.paymentScreenshotUrl!)}
+                                            >
+                                              <Eye className="h-3.5 w-3.5" /> View Receipt
+                                            </Button>
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground">No Receipt</span>
+                                          )}
+                                        </TableCell>
+                                      )}
                                       <TableCell>
                                         <Badge
                                           className={getStatusColor(reg.status)}
@@ -1370,6 +1653,23 @@ export function Programs() {
                                         })}
                                       </div>
                                     )}
+                                    {selectedProgram?.paymentDetails?.isRequired && (
+                                      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs">
+                                        <span className="font-medium text-gray-700 dark:text-gray-300">Payment Receipt:</span>
+                                        {reg.paymentScreenshotUrl ? (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 text-xs text-blue-600 hover:text-blue-700 px-1 py-0"
+                                            onClick={() => setReceiptUrl(reg.paymentScreenshotUrl!)}
+                                          >
+                                            View Receipt
+                                          </Button>
+                                        ) : (
+                                          <span className="text-gray-500">No Receipt</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </CardContent>
                                 </Card>
                               ))}
@@ -1385,45 +1685,84 @@ export function Programs() {
                 const showStudents = targetAudience === "both" || targetAudience === "student";
                 const showTeachers = targetAudience === "both" || targetAudience === "teacher";
 
-                if (showStudents && showTeachers) {
-                  return (
-                    <Tabs defaultValue="students" className="w-full">
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="students">Students ({sStats.total})</TabsTrigger>
-                        <TabsTrigger value="teachers">Teachers ({tStats.total})</TabsTrigger>
-                      </TabsList>
+                return (
+                  <div className="space-y-6">
+                    {selectedProgram?.paymentDetails?.isRequired && (
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Registration Fee</p>
+                          <p className="text-lg font-bold text-blue-900 dark:text-blue-100">₹{selectedProgram.paymentDetails.registrationFee || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Expected (All Registrants)</p>
+                          <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                            ₹{((sStats?.total || 0) + (tStats?.total || 0)) * (selectedProgram.paymentDetails.registrationFee || 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Sum Total Received (Approved/Locked)</p>
+                          <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                            ₹{((sStats?.approved || 0) + (sStats?.locked || 0) + (tStats?.approved || 0) + (tStats?.locked || 0)) * (selectedProgram.paymentDetails.registrationFee || 0)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                      <TabsContent value="students" className="space-y-4 py-4">
+                    {showStudents && showTeachers ? (
+                      <Tabs defaultValue="students" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="students">Students ({sStats.total})</TabsTrigger>
+                          <TabsTrigger value="teachers">Teachers ({tStats.total})</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="students" className="space-y-4 py-4">
+                          {renderStatsSummary(sStats)}
+                          {renderRegistrationsList('student', studentRegs)}
+                        </TabsContent>
+
+                        <TabsContent value="teachers" className="space-y-4 py-4">
+                          {renderStatsSummary(tStats)}
+                          {renderRegistrationsList('teacher', teacherRegs)}
+                        </TabsContent>
+                      </Tabs>
+                    ) : showStudents ? (
+                      <div className="space-y-4 py-4">
                         {renderStatsSummary(sStats)}
                         {renderRegistrationsList('student', studentRegs)}
-                      </TabsContent>
-
-                      <TabsContent value="teachers" className="space-y-4 py-4">
+                      </div>
+                    ) : (
+                      <div className="space-y-4 py-4">
                         {renderStatsSummary(tStats)}
                         {renderRegistrationsList('teacher', teacherRegs)}
-                      </TabsContent>
-                    </Tabs>
-                  );
-                }
-
-                if (showStudents) {
-                  return (
-                    <div className="space-y-4 py-4">
-                      {renderStatsSummary(sStats)}
-                      {renderRegistrationsList('student', studentRegs)}
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-4 py-4">
-                    {renderStatsSummary(tStats)}
-                    {renderRegistrationsList('teacher', teacherRegs)}
+                      </div>
+                    )}
                   </div>
                 );
               })()
             ) : null}
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Receipt View Dialog */}
+      <Dialog open={!!receiptUrl} onOpenChange={(open) => !open && setReceiptUrl(null)}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col items-center justify-center p-6">
+          <DialogHeader className="w-full">
+            <DialogTitle>Payment Receipt / Screenshot</DialogTitle>
+          </DialogHeader>
+          <div className="w-full flex-1 flex items-center justify-center overflow-auto mt-4 max-h-[60vh] rounded-lg border bg-muted/20">
+            {receiptUrl && (
+              <img
+                src={receiptUrl}
+                alt="Payment screenshot"
+                className="max-w-full max-h-full object-contain rounded"
+              />
+            )}
+          </div>
+          <DialogFooter className="w-full mt-4">
+            <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => setReceiptUrl(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
