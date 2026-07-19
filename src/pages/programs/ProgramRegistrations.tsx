@@ -590,15 +590,26 @@ export function ProgramRegistrations() {
                               </Button>
                             ) : (
                               <div className="flex items-center gap-2">
-                                {st.paymentScreenshotUrl && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 text-xs flex items-center gap-1.5"
-                                    onClick={() => setReceiptUrl(st.paymentScreenshotUrl!)}
-                                  >
-                                    <Eye className="h-3.5 w-3.5" /> Receipt
-                                  </Button>
+                                {selectedProgram?.paymentDetails?.isRequired && (
+                                  st.paymentScreenshotUrl ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs font-bold">
+                                        Paid
+                                      </Badge>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 text-xs flex items-center gap-1.5"
+                                        onClick={() => setReceiptUrl(st.paymentScreenshotUrl!)}
+                                      >
+                                        <Eye className="h-3.5 w-3.5" /> Receipt
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 text-xs font-bold">
+                                      Unpaid
+                                    </Badge>
+                                  )
                                 )}
                                 <Badge
                                   variant="secondary"

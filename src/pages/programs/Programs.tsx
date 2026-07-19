@@ -253,6 +253,9 @@ export function Programs() {
     targetAudience: "student" as 'student' | 'teacher' | 'both',
     paymentRequired: false,
     registrationFee: 0,
+    advancePercentage: 100,
+    advanceType: "percentage" as 'percentage' | 'fixed',
+    advanceValue: 100,
     bankName: "",
     accountName: "",
     accountNumber: "",
@@ -437,6 +440,9 @@ export function Programs() {
         paymentDetails: {
           isRequired: formData.paymentRequired,
           registrationFee: Number(formData.registrationFee) || 0,
+          advancePercentage: formData.advanceType === 'percentage' ? (Number(formData.advanceValue) || 100) : 100,
+          advanceType: formData.advanceType,
+          advanceValue: Number(formData.advanceValue) || 0,
           bankName: formData.bankName,
           accountName: formData.accountName,
           accountNumber: formData.accountNumber,
@@ -445,11 +451,16 @@ export function Programs() {
         }
       });
       
-      // Send popup notification to all schools
-      try {
-        await sendNewProgramNotification(formData.name);
-      } catch (notifError) {
-        console.error("Error sending new program notification:", notifError);
+      // Send popup notification to all schools (Skip for Test Programs)
+      const isTestProgram = formData.name.toLowerCase().includes("test");
+      if (!isTestProgram) {
+        try {
+          await sendNewProgramNotification(formData.name);
+        } catch (notifError) {
+          console.error("Error sending new program notification:", notifError);
+        }
+      } else {
+        toast.info("Skipped sending notifications (Test Program detected)");
       }
 
       toast.success("Program created successfully");
@@ -485,6 +496,9 @@ export function Programs() {
         paymentDetails: {
           isRequired: formData.paymentRequired,
           registrationFee: Number(formData.registrationFee) || 0,
+          advancePercentage: formData.advanceType === 'percentage' ? (Number(formData.advanceValue) || 100) : 100,
+          advanceType: formData.advanceType,
+          advanceValue: Number(formData.advanceValue) || 0,
           bankName: formData.bankName,
           accountName: formData.accountName,
           accountNumber: formData.accountNumber,
@@ -526,12 +540,17 @@ export function Programs() {
     setFormData({
       name: program.name,
       description: program.description || "",
-      startDate: startDate.toISOString().split("T")[0],
-      endDate: endDate.toISOString().split("T")[0],
+      startDate: toLocalDateTimeString(startDate),
+      endDate: toLocalDateTimeString(endDate),
       isActive: program.isActive,
       targetAudience: program.targetAudience || "student",
       paymentRequired: program.paymentDetails?.isRequired || false,
       registrationFee: program.paymentDetails?.registrationFee || 0,
+      advancePercentage: program.paymentDetails?.advancePercentage !== undefined ? program.paymentDetails.advancePercentage : 100,
+      advanceType: program.paymentDetails?.advanceType || "percentage",
+      advanceValue: program.paymentDetails?.advanceValue !== undefined 
+        ? program.paymentDetails.advanceValue 
+        : (program.paymentDetails?.advancePercentage !== undefined ? program.paymentDetails.advancePercentage : 100),
       bankName: program.paymentDetails?.bankName || "",
       accountName: program.paymentDetails?.accountName || "",
       accountNumber: program.paymentDetails?.accountNumber || "",
@@ -553,6 +572,9 @@ export function Programs() {
       targetAudience: "student",
       paymentRequired: false,
       registrationFee: 0,
+      advancePercentage: 100,
+      advanceType: "percentage",
+      advanceValue: 100,
       bankName: "",
       accountName: "",
       accountNumber: "",
@@ -596,13 +618,16 @@ export function Programs() {
   const formatDate = (date: Date | Timestamp | undefined) => {
     if (!date) return "N/A";
     try {
-      if (date instanceof Timestamp) {
-        return date.toDate().toLocaleDateString();
-      }
-      return new Date(date).toLocaleDateString();
+      const d = date instanceof Timestamp ? date.toDate() : new Date(date);
+      return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
     } catch {
       return "Invalid Date";
     }
+  };
+
+  const toLocalDateTimeString = (date: Date) => {
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
   };
 
   const getProgramStatus = (program: ProgramData) => {
@@ -705,6 +730,7 @@ export function Programs() {
           users,
           role,
           customFields,
+          selectedProgram.paymentDetails
         );
         toast.success(`${role === 'teacher' ? 'Teachers' : 'Students'} PDF Exported successfully`);
       } catch (err) {
@@ -780,7 +806,7 @@ export function Programs() {
                   <Label htmlFor="startDate">Start Date</Label>
                   <Input
                     id="startDate"
-                    type="date"
+                    type="datetime-local"
                     value={formData.startDate}
                     onChange={(e) =>
                       setFormData({ ...formData, startDate: e.target.value })
@@ -791,7 +817,7 @@ export function Programs() {
                   <Label htmlFor="endDate">End Date</Label>
                   <Input
                     id="endDate"
-                    type="date"
+                    type="datetime-local"
                     value={formData.endDate}
                     onChange={(e) =>
                       setFormData({ ...formData, endDate: e.target.value })
@@ -847,17 +873,47 @@ export function Programs() {
 
                 {formData.paymentRequired && (
                   <div className="space-y-4 pl-6 border-l-2 border-blue-500 animate-in fade-in duration-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="registrationFee">Registration Fee (₹)</Label>
                         <Input
                           id="registrationFee"
                           type="number"
-                          value={formData.registrationFee}
+                          value={formData.registrationFee || ""}
                           onChange={(e) =>
                             setFormData({ ...formData, registrationFee: parseFloat(e.target.value) || 0 })
                           }
                           placeholder="e.g. 100"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="advanceType">Advance Type</Label>
+                        <select
+                          id="advanceType"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          value={formData.advanceType}
+                          onChange={(e) =>
+                            setFormData({ ...formData, advanceType: e.target.value as 'percentage' | 'fixed', advanceValue: e.target.value === 'percentage' ? 100 : formData.registrationFee })
+                          }
+                        >
+                          <option value="percentage">Percentage (%)</option>
+                          <option value="fixed">Fixed Amount (₹)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="advanceValue">
+                          {formData.advanceType === 'percentage' ? 'Advance Value (%)' : 'Advance Value (₹)'}
+                        </Label>
+                        <Input
+                          id="advanceValue"
+                          type="number"
+                          min="0"
+                          max={formData.advanceType === 'percentage' ? 100 : formData.registrationFee}
+                          value={formData.advanceValue || ""}
+                          onChange={(e) =>
+                            setFormData({ ...formData, advanceValue: parseFloat(e.target.value) || 0 })
+                          }
+                          placeholder={formData.advanceType === 'percentage' ? 'e.g. 50' : 'e.g. 100'}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1159,7 +1215,7 @@ export function Programs() {
                 <Label htmlFor="edit-startDate">Start Date</Label>
                 <Input
                   id="edit-startDate"
-                  type="date"
+                  type="datetime-local"
                   value={formData.startDate}
                   onChange={(e) =>
                     setFormData({ ...formData, startDate: e.target.value })
@@ -1170,7 +1226,7 @@ export function Programs() {
                 <Label htmlFor="edit-endDate">End Date</Label>
                 <Input
                   id="edit-endDate"
-                  type="date"
+                  type="datetime-local"
                   value={formData.endDate}
                   onChange={(e) =>
                     setFormData({ ...formData, endDate: e.target.value })
@@ -1226,17 +1282,47 @@ export function Programs() {
 
               {formData.paymentRequired && (
                 <div className="space-y-4 pl-6 border-l-2 border-blue-500 animate-in fade-in duration-200">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="edit-registrationFee">Registration Fee (₹)</Label>
                       <Input
-                        id="edit-registrationFee"
+                        id="edit-edit-registrationFee"
                         type="number"
-                        value={formData.registrationFee}
+                        value={formData.registrationFee || ""}
                         onChange={(e) =>
                           setFormData({ ...formData, registrationFee: parseFloat(e.target.value) || 0 })
                         }
                         placeholder="e.g. 100"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-advanceType">Advance Type</Label>
+                      <select
+                        id="edit-advanceType"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={formData.advanceType}
+                        onChange={(e) =>
+                          setFormData({ ...formData, advanceType: e.target.value as 'percentage' | 'fixed', advanceValue: e.target.value === 'percentage' ? 100 : formData.registrationFee })
+                        }
+                      >
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed Amount (₹)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-advanceValue">
+                        {formData.advanceType === 'percentage' ? 'Advance Value (%)' : 'Advance Value (₹)'}
+                      </Label>
+                      <Input
+                        id="edit-advanceValue"
+                        type="number"
+                        min="0"
+                        max={formData.advanceType === 'percentage' ? 100 : formData.registrationFee}
+                        value={formData.advanceValue || ""}
+                        onChange={(e) =>
+                          setFormData({ ...formData, advanceValue: parseFloat(e.target.value) || 0 })
+                        }
+                        placeholder={formData.advanceType === 'percentage' ? 'e.g. 50' : 'e.g. 100'}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1511,13 +1597,38 @@ export function Programs() {
                           (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
                           0
                         );
+                        const schoolPaidCount = schoolRegs.filter(r => r.paymentScreenshotUrl).reduce(
+                            (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
+                            0
+                          );
+                          const pd = selectedProgram?.paymentDetails;
+                          const schoolRegFee = pd?.registrationFee || 0;
+                          const schoolAdvType = pd?.advanceType || 'percentage';
+                          const schoolAdvValue = pd?.advanceValue !== undefined ? pd.advanceValue : (pd?.advancePercentage !== undefined ? pd.advancePercentage : 100);
+                          let schoolAdvPerHead = schoolRegFee;
+                          if (schoolAdvType === 'fixed') {
+                            schoolAdvPerHead = schoolAdvValue;
+                          } else {
+                            schoolAdvPerHead = schoolRegFee * (schoolAdvValue / 100);
+                          }
+                          const schoolHasAdvance = schoolAdvPerHead < schoolRegFee;
+                          const schoolAmountPerPerson = schoolHasAdvance ? schoolAdvPerHead : schoolRegFee;
+                          const schoolAmountReceived = schoolPaidCount * schoolAmountPerPerson;
+                          const showPaymentAmount = pd?.isRequired && schoolRegFee > 0;
                         return (
                           <div key={schoolName} className="space-y-3">
                             <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
                               <span>{schoolName}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {totalSchoolCount} {role === 'student' ? 'students' : 'teachers'}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                {showPaymentAmount && (
+                                  <Badge className="text-xs bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                    ₹{schoolAmountReceived.toFixed(1)} received
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className="text-xs">
+                                  {totalSchoolCount} {role === 'student' ? 'students' : 'teachers'}
+                                </Badge>
+                              </div>
                             </h4>
                             <div className="hidden sm:block rounded-lg border overflow-x-auto">
                               <Table>
@@ -1568,16 +1679,23 @@ export function Programs() {
                                       {selectedProgram?.paymentDetails?.isRequired && (
                                         <TableCell>
                                           {reg.paymentScreenshotUrl ? (
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-8 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1"
-                                              onClick={() => setReceiptUrl(reg.paymentScreenshotUrl!)}
-                                            >
-                                              <Eye className="h-3.5 w-3.5" /> View Receipt
-                                            </Button>
+                                            <div className="flex flex-col gap-1 items-start">
+                                              <Badge className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-[10px] py-0.5 px-1.5 font-bold">
+                                                Paid
+                                              </Badge>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 text-[10px] text-blue-600 dark:text-blue-400 p-0 flex items-center gap-1"
+                                                onClick={() => setReceiptUrl(reg.paymentScreenshotUrl!)}
+                                              >
+                                                <Eye className="h-3 w-3" /> View Receipt
+                                              </Button>
+                                            </div>
                                           ) : (
-                                            <span className="text-xs text-muted-foreground">No Receipt</span>
+                                            <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 text-[10px] py-0.5 px-1.5 font-bold">
+                                              Unpaid
+                                            </Badge>
                                           )}
                                         </TableCell>
                                       )}
@@ -1655,18 +1773,25 @@ export function Programs() {
                                     )}
                                     {selectedProgram?.paymentDetails?.isRequired && (
                                       <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs">
-                                        <span className="font-medium text-gray-700 dark:text-gray-300">Payment Receipt:</span>
+                                        <span className="font-medium text-gray-700 dark:text-gray-300">Payment Status:</span>
                                         {reg.paymentScreenshotUrl ? (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 text-xs text-blue-600 hover:text-blue-700 px-1 py-0"
-                                            onClick={() => setReceiptUrl(reg.paymentScreenshotUrl!)}
-                                          >
-                                            View Receipt
-                                          </Button>
+                                          <div className="flex items-center gap-2">
+                                            <Badge className="bg-green-100 text-green-800 border-green-200 py-0.5 px-1.5 text-[10px] font-bold">
+                                              Paid
+                                            </Badge>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 text-xs text-blue-600 hover:text-blue-700 p-0"
+                                              onClick={() => setReceiptUrl(reg.paymentScreenshotUrl!)}
+                                            >
+                                              View Receipt
+                                            </Button>
+                                          </div>
                                         ) : (
-                                          <span className="text-gray-500">No Receipt</span>
+                                          <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200 py-0.5 px-1.5 text-[10px] font-bold">
+                                            Unpaid
+                                          </Badge>
                                         )}
                                       </div>
                                     )}
@@ -1687,26 +1812,78 @@ export function Programs() {
 
                 return (
                   <div className="space-y-6">
-                    {selectedProgram?.paymentDetails?.isRequired && (
-                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Registration Fee</p>
-                          <p className="text-lg font-bold text-blue-900 dark:text-blue-100">₹{selectedProgram.paymentDetails.registrationFee || 0}</p>
+                    {selectedProgram?.paymentDetails?.isRequired && (() => {
+                      const pd = selectedProgram.paymentDetails;
+                      const regFee = pd.registrationFee || 0;
+                      const advType = pd.advanceType || 'percentage';
+                      const advValue = pd.advanceValue !== undefined ? pd.advanceValue : (pd.advancePercentage !== undefined ? pd.advancePercentage : 100);
+
+                      let advancePerHead = regFee;
+                      let advanceLabel = "";
+                      if (advType === 'fixed') {
+                        advancePerHead = advValue;
+                        advanceLabel = `₹${advValue} fixed`;
+                      } else {
+                        advancePerHead = regFee * (advValue / 100);
+                        advanceLabel = `${advValue}%`;
+                      }
+                      const hasAdvance = advancePerHead < regFee;
+
+                      const totalRegistrants = (sStats?.total || 0) + (tStats?.total || 0);
+                      const approvedRegistrants = (sStats?.approved || 0) + (sStats?.locked || 0) + (tStats?.approved || 0) + (tStats?.locked || 0);
+
+                      const totalExpectedFull = totalRegistrants * regFee;
+                      const totalExpectedAdvance = totalRegistrants * advancePerHead;
+
+                      const allRegs = [...(detailRegistrations || [])];
+                      const paidRegs = allRegs.filter(r => r.paymentScreenshotUrl);
+                      const paidCount = paidRegs.reduce((sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
+                      const amountPerPaidPerson = hasAdvance ? advancePerHead : regFee;
+                      const totalAmountReceived = paidCount * amountPerPaidPerson;
+
+                      return (
+                        <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-5 gap-4">
+                          <div>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Registration Fee</p>
+                            <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                              ₹{regFee}
+                              {hasAdvance && (
+                                <span className="text-xs text-muted-foreground block font-normal">
+                                  (Advance: {advanceLabel} / ₹{advancePerHead.toFixed(1)})
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Full Amount Expected</p>
+                            <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                              ₹{totalExpectedFull}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Advance Expected</p>
+                            <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                              ₹{totalExpectedAdvance.toFixed(1)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Approved</p>
+                            <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                              {approvedRegistrants}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Amount Received</p>
+                            <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                              ₹{totalAmountReceived.toFixed(1)}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              ({paidCount} paid × ₹{amountPerPaidPerson.toFixed(1)}{hasAdvance ? ' advance' : ''})
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Expected (All Registrants)</p>
-                          <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
-                            ₹{((sStats?.total || 0) + (tStats?.total || 0)) * (selectedProgram.paymentDetails.registrationFee || 0)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Sum Total Received (Approved/Locked)</p>
-                          <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                            ₹{((sStats?.approved || 0) + (sStats?.locked || 0) + (tStats?.approved || 0) + (tStats?.locked || 0)) * (selectedProgram.paymentDetails.registrationFee || 0)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {showStudents && showTeachers ? (
                       <Tabs defaultValue="students" className="w-full">

@@ -43,6 +43,9 @@ export interface ProgramData {
     paymentDetails?: {
         isRequired?: boolean;
         registrationFee?: number;
+        advancePercentage?: number; // legacy support
+        advanceType?: 'percentage' | 'fixed';
+        advanceValue?: number;
         bankName?: string;
         accountName?: string;
         accountNumber?: string;
