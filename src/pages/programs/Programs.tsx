@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { uploadFile } from "../../lib/upload";
+import { cn } from "../../lib/utils";
 import {
   Plus,
   Search,
@@ -203,7 +204,13 @@ const ProgramCard = ({
 const getInitialStudentFields = (): CustomField[] => [
   { id: Math.random().toString(36).substring(2, 9), name: "Name", type: "text", isMandatory: true },
   { id: Math.random().toString(36).substring(2, 9), name: "Phone Number", type: "text", isMandatory: false },
-  { id: Math.random().toString(36).substring(2, 9), name: "Class", type: "text", isMandatory: false },
+  {
+    id: Math.random().toString(36).substring(2, 9),
+    name: "Class",
+    type: "select",
+    isMandatory: false,
+    options: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+  },
   { id: Math.random().toString(36).substring(2, 9), name: "Address", type: "text", isMandatory: false },
 ];
 
@@ -295,7 +302,15 @@ export function Programs() {
     const fields = role === 'student' ? studentFields : teacherFields;
     const updated = fields.map(f => {
       if (f.id === id) {
-        return { ...f, ...updates };
+        const merged = { ...f, ...updates };
+        const isClass = merged.name.trim().toLowerCase() === 'class';
+        if (isClass) {
+          merged.type = 'select';
+          if (!merged.options || merged.options.length === 0) {
+            merged.options = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+          }
+        }
+        return merged;
       }
       return f;
     });
@@ -304,6 +319,55 @@ export function Programs() {
     } else {
       setTeacherFields(updated);
     }
+  };
+
+  const getClassPresetValue = (options?: string[]) => {
+    if (!options || options.length === 0) return "custom";
+    const sorted = [...options].sort((a, b) => Number(a) - Number(b));
+    const str = sorted.join(",");
+    if (str === "1,2,3,4,5,6,7,8,9,10,11,12") return "1-12";
+    if (str === "1,2,3,4") return "1-4";
+    if (str === "1,2,3,4,5") return "1-5";
+    if (str === "1,2,3,4,5,6,7") return "1-7";
+    if (str === "1,2,3,4,5,6,7,8,9,10") return "1-10";
+    if (str === "5,6,7,8,9,10") return "5-10";
+    if (str === "8,9,10,11,12") return "8-12";
+    if (str === "10,11,12") return "10-12";
+    return "custom";
+  };
+
+  const handlePresetClassChange = (role: 'student' | 'teacher', fieldId: string, preset: string) => {
+    let opts: string[] = [];
+    switch (preset) {
+      case "1-12":
+        opts = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+        break;
+      case "1-4":
+        opts = ["1", "2", "3", "4"];
+        break;
+      case "1-5":
+        opts = ["1", "2", "3", "4", "5"];
+        break;
+      case "1-7":
+        opts = ["1", "2", "3", "4", "5", "6", "7"];
+        break;
+      case "1-10":
+        opts = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+        break;
+      case "5-10":
+        opts = ["5", "6", "7", "8", "9", "10"];
+        break;
+      case "8-12":
+        opts = ["8", "9", "10", "11", "12"];
+        break;
+      case "10-12":
+        opts = ["10", "11", "12"];
+        break;
+      default:
+        opts = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+        break;
+    }
+    updateField(role, fieldId, { options: opts, type: 'select' });
   };
 
   const renderFieldsBuilder = (role: 'student' | 'teacher') => {
@@ -319,41 +383,139 @@ export function Programs() {
           Define extra fields required for {role === 'student' ? 'students' : 'teachers'}. Name and Phone are always collected.
         </p>
 
-        <div className="space-y-3 max-h-[30vh] overflow-y-auto pr-1">
-          {fields.map((field) => (
-            <div key={field.id} className="flex flex-col gap-3 p-3 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-200 dark:border-gray-800">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs">Field Label</Label>
-                  <Input
-                    value={field.name}
-                    onChange={(e) => updateField(role, field.id, { name: e.target.value })}
-                    placeholder="e.g. Name,Phone Number"
-                    className="h-8 text-xs"
-                  />
-                </div>
-                <div className="flex items-center gap-3 sm:pt-5">
-                  <div className="flex items-center space-x-1.5">
-                    <Switch
-                      id={`mandatory-${role}-${field.id}`}
-                      checked={field.isMandatory}
-                      onCheckedChange={(checked) => updateField(role, field.id, { isMandatory: checked })}
+        <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
+          {fields.map((field) => {
+            const isClassField = field.name.trim().toLowerCase() === 'class' || field.type === 'select';
+            const selectedOptions = field.options || ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+
+            return (
+              <div key={field.id} className="flex flex-col gap-3 p-3 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-200 dark:border-gray-800">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Field Label</Label>
+                    <Input
+                      value={field.name}
+                      onChange={(e) => {
+                        const newName = e.target.value;
+                        const isClass = newName.trim().toLowerCase() === 'class';
+                        updateField(role, field.id, {
+                          name: newName,
+                          type: isClass ? 'select' : field.type,
+                          options: isClass && (!field.options || field.options.length === 0)
+                            ? ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+                            : field.options
+                        });
+                      }}
+                      placeholder="e.g. Name, Phone Number, Class"
+                      className="h-8 text-xs"
                     />
-                    <Label htmlFor={`mandatory-${role}-${field.id}`} className="text-xs cursor-pointer select-none">Required</Label>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeField(role, field.id)}
-                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+
+                  {isClassField && (
+                    <div className="w-full sm:w-48 space-y-1">
+                      <Label className="text-xs">Allowed Classes Dropdown</Label>
+                      <Select
+                        value={getClassPresetValue(field.options)}
+                        onValueChange={(val) => handlePresetClassChange(role, field.id, val)}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-900 border-gray-300">
+                          <SelectValue placeholder="Select classes" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1-12">Classes 1 to 12 (Default)</SelectItem>
+                          <SelectItem value="1-4">Classes 1 to 4</SelectItem>
+                          <SelectItem value="1-5">Classes 1 to 5</SelectItem>
+                          <SelectItem value="1-7">Classes 1 to 7</SelectItem>
+                          <SelectItem value="1-10">Classes 1 to 10</SelectItem>
+                          <SelectItem value="5-10">Classes 5 to 10</SelectItem>
+                          <SelectItem value="8-12">Classes 8 to 12</SelectItem>
+                          <SelectItem value="10-12">Classes 10 to 12</SelectItem>
+                          <SelectItem value="custom">Custom Selection</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 sm:pt-5">
+                    <div className="flex items-center space-x-1.5">
+                      <Switch
+                        id={`mandatory-${role}-${field.id}`}
+                        checked={field.isMandatory}
+                        onCheckedChange={(checked) => updateField(role, field.id, { isMandatory: checked })}
+                      />
+                      <Label htmlFor={`mandatory-${role}-${field.id}`} className="text-xs cursor-pointer select-none">Required</Label>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeField(role, field.id)}
+                      className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
+
+                {isClassField && (
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Class Dropdown Options ({selectedOptions.length} Classes Selected)
+                      </Label>
+                      <div className="flex gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 py-0"
+                          onClick={() => updateField(role, field.id, { options: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"] })}
+                        >
+                          Select All (1-12)
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 py-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => updateField(role, field.id, { options: [] })}
+                        >
+                          Clear All
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 pt-1">
+                      {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((clsNum) => {
+                        const isChecked = selectedOptions.includes(clsNum);
+                        return (
+                          <button
+                            key={clsNum}
+                            type="button"
+                            onClick={() => {
+                              const newOpts = isChecked
+                                ? selectedOptions.filter((o) => o !== clsNum)
+                                : [...selectedOptions, clsNum].sort((a, b) => Number(a) - Number(b));
+                              updateField(role, field.id, { options: newOpts });
+                            }}
+                            className={cn(
+                              "px-2 py-1 text-xs rounded border text-center transition-all font-medium select-none flex items-center justify-center gap-1",
+                              isChecked
+                                ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                                : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <span>Class {clsNum}</span>
+                            {isChecked && <span className="text-[10px]">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {fields.length === 0 && (
             <div className="text-center py-6 border border-dashed rounded-lg text-muted-foreground text-xs">
               No custom fields defined. Click the button below to add one.
@@ -450,7 +612,7 @@ export function Programs() {
           qrCodeUrl: formData.qrCodeUrl,
         }
       });
-      
+
       // Send popup notification to all schools (Skip for Test Programs)
       const isTestProgram = formData.name.toLowerCase().includes("test");
       if (!isTestProgram) {
@@ -548,8 +710,8 @@ export function Programs() {
       registrationFee: program.paymentDetails?.registrationFee || 0,
       advancePercentage: program.paymentDetails?.advancePercentage !== undefined ? program.paymentDetails.advancePercentage : 100,
       advanceType: program.paymentDetails?.advanceType || "percentage",
-      advanceValue: program.paymentDetails?.advanceValue !== undefined 
-        ? program.paymentDetails.advanceValue 
+      advanceValue: program.paymentDetails?.advanceValue !== undefined
+        ? program.paymentDetails.advanceValue
         : (program.paymentDetails?.advancePercentage !== undefined ? program.paymentDetails.advancePercentage : 100),
       bankName: program.paymentDetails?.bankName || "",
       accountName: program.paymentDetails?.accountName || "",
@@ -1598,23 +1760,23 @@ export function Programs() {
                           0
                         );
                         const schoolPaidCount = schoolRegs.filter(r => r.paymentScreenshotUrl).reduce(
-                            (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
-                            0
-                          );
-                          const pd = selectedProgram?.paymentDetails;
-                          const schoolRegFee = pd?.registrationFee || 0;
-                          const schoolAdvType = pd?.advanceType || 'percentage';
-                          const schoolAdvValue = pd?.advanceValue !== undefined ? pd.advanceValue : (pd?.advancePercentage !== undefined ? pd.advancePercentage : 100);
-                          let schoolAdvPerHead = schoolRegFee;
-                          if (schoolAdvType === 'fixed') {
-                            schoolAdvPerHead = schoolAdvValue;
-                          } else {
-                            schoolAdvPerHead = schoolRegFee * (schoolAdvValue / 100);
-                          }
-                          const schoolHasAdvance = schoolAdvPerHead < schoolRegFee;
-                          const schoolAmountPerPerson = schoolHasAdvance ? schoolAdvPerHead : schoolRegFee;
-                          const schoolAmountReceived = schoolPaidCount * schoolAmountPerPerson;
-                          const showPaymentAmount = pd?.isRequired && schoolRegFee > 0;
+                          (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
+                          0
+                        );
+                        const pd = selectedProgram?.paymentDetails;
+                        const schoolRegFee = pd?.registrationFee || 0;
+                        const schoolAdvType = pd?.advanceType || 'percentage';
+                        const schoolAdvValue = pd?.advanceValue !== undefined ? pd.advanceValue : (pd?.advancePercentage !== undefined ? pd.advancePercentage : 100);
+                        let schoolAdvPerHead = schoolRegFee;
+                        if (schoolAdvType === 'fixed') {
+                          schoolAdvPerHead = schoolAdvValue;
+                        } else {
+                          schoolAdvPerHead = schoolRegFee * (schoolAdvValue / 100);
+                        }
+                        const schoolHasAdvance = schoolAdvPerHead < schoolRegFee;
+                        const schoolAmountPerPerson = schoolHasAdvance ? schoolAdvPerHead : schoolRegFee;
+                        const schoolAmountReceived = schoolPaidCount * schoolAmountPerPerson;
+                        const showPaymentAmount = pd?.isRequired && schoolRegFee > 0;
                         return (
                           <div key={schoolName} className="space-y-3">
                             <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
