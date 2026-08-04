@@ -1589,7 +1589,7 @@ export function Programs() {
 
       {/* Program Detail Dialog */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] lg:max-w-6xl w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-blue-600" />
@@ -2035,12 +2035,12 @@ export function Programs() {
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Amount Received</p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Advance Amount Received</p>
                             <p className="text-lg font-bold text-green-700 dark:text-green-300">
-                              ₹{totalAmountReceived.toFixed(1)}
+                              ₹{totalAmountReceived % 1 === 0 ? totalAmountReceived : totalAmountReceived.toFixed(1)} / ₹{totalExpectedAdvance % 1 === 0 ? totalExpectedAdvance : totalExpectedAdvance.toFixed(1)}
                             </p>
                             <p className="text-[10px] text-muted-foreground">
-                              ({paidCount} paid × ₹{amountPerPaidPerson.toFixed(1)}{hasAdvance ? ' advance' : ''})
+                              ({paidCount} of {totalRegistrants} paid × ₹{amountPerPaidPerson % 1 === 0 ? amountPerPaidPerson : amountPerPaidPerson.toFixed(1)})
                             </p>
                           </div>
                         </div>

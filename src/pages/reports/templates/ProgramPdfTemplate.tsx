@@ -25,6 +25,9 @@ export const ProgramPdfTemplate = ({
     const todayDate = new Date().toISOString().split('T')[0];
     const isTeacher = role === 'teacher';
 
+    // Helper to format currency values cleanly without trailing .0 if integer
+    const formatAmount = (num: number) => num % 1 === 0 ? num.toString() : num.toFixed(1);
+
     // Calculate Summary Stats
     const totalCount = registrations.reduce((acc, reg) => acc + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
     const uniqueSchools = new Set(registrations.map(reg => reg.schoolUserId)).size;
@@ -37,15 +40,32 @@ export const ProgramPdfTemplate = ({
     const totalExpectedFull = totalCount * regFee;
     const totalExpectedAdvance = totalCount * advFeePerHead;
     
-    // Approved or Locked Total Received
+    // Approved and Unapproved (Pending / Rejected) Registrations
     const approvedOrLockedRegs = registrations.filter(
         (reg) => reg.status === 'approved_parish' || reg.status === 'locked'
+    );
+    const unapprovedRegs = registrations.filter(
+        (reg) => reg.status !== 'approved_parish' && reg.status !== 'locked'
     );
 
     const totalApprovedCount = approvedOrLockedRegs.reduce((sum, reg) => {
         const count = reg.isCountOnly ? (reg.studentCount || 1) : 1;
         return sum + count;
     }, 0);
+
+    const totalUnapprovedCount = unapprovedRegs.reduce((sum, reg) => {
+        const count = reg.isCountOnly ? (reg.studentCount || 1) : 1;
+        return sum + count;
+    }, 0);
+
+    // Paid Registrations and Actual Paid Amount
+    const paidRegs = registrations.filter((reg) => !!reg.paymentScreenshotUrl);
+    const totalPaidCount = paidRegs.reduce((sum, reg) => {
+        const count = reg.isCountOnly ? (reg.studentCount || 1) : 1;
+        return sum + count;
+    }, 0);
+
+    const totalActualPaidAdvance = totalPaidCount * advFeePerHead;
 
     // Geographic Grouping Logic with Totals
     const groupedData = registrations.reduce((acc: any, reg) => {
@@ -134,36 +154,48 @@ export const ProgramPdfTemplate = ({
                 </div>
             </div>
 
-            {/* Payment Summary Box (Only if program has payment) */}
+            {/* Payment & Approval Summary Box (Only if program has payment) */}
             {paymentDetails?.isRequired && (
                 <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: '1fr 1fr 1fr', 
-                    gap: '12px', 
+                    gridTemplateColumns: 'repeat(5, 1fr)', 
+                    gap: '8px', 
                     marginBottom: '18px',
-                    padding: '12px',
+                    padding: '10px 12px',
                     background: '#f8fafc',
                     border: '1px dashed #cbd5e1',
                     borderRadius: '9px'
                 }}>
                     <div>
                         <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Registration Fee</div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#1e293b' }}>
-                            ₹{regFee} <span style={{ fontSize: '8px', color: '#64748b', fontWeight: 500 }}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#1e293b' }}>
+                            ₹{regFee} <span style={{ fontSize: '7.5px', color: '#64748b', fontWeight: 500 }}>
                                 (Adv: {advType === 'fixed' ? `₹${advValue}` : `${advValue}%`})
                             </span>
                         </div>
                     </div>
                     <div>
-                        <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Expected Total (Full / Advance)</div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#1e293b' }}>
-                            ₹{totalExpectedFull} / ₹{totalExpectedAdvance.toFixed(1)}
+                        <div style={{ fontSize: '7px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Expected Total (Full / Adv)</div>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#1e293b' }}>
+                            ₹{totalExpectedFull} / ₹{formatAmount(totalExpectedAdvance)}
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '7px', color: '#2563eb', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Actual Paid (Advance)</div>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#2563eb' }}>
+                            ₹{formatAmount(totalActualPaidAdvance)} / ₹{formatAmount(totalExpectedAdvance)}
                         </div>
                     </div>
                     <div>
                         <div style={{ fontSize: '7px', color: '#16a34a', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Total Approved</div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#16a34a' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#16a34a' }}>
                             {totalApprovedCount} {isTeacher ? 'Teacher(s)' : 'Student(s)'}
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '7px', color: '#d97706', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>Not Approved</div>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#d97706' }}>
+                            {totalUnapprovedCount} {isTeacher ? 'Teacher(s)' : 'Student(s)'}
                         </div>
                     </div>
                 </div>
@@ -198,85 +230,92 @@ export const ProgramPdfTemplate = ({
                                 </span>
                             </div>
 
-                            {Object.keys(groupedData[fName].parishes).sort().map((pName) => (
-                                <div key={pName} style={{ marginBottom: '11px', border: '1px solid #f1f5f9', borderRadius: '8px', overflow: 'hidden' }}>
-                                    <div style={{
-                                        padding: '7px 11px',
-                                        background: '#f8fafc',
-                                        borderBottom: '1px solid #f1f5f9',
-                                        color: '#111827',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                    }}>
-                                        <span style={{ fontWeight: 800, fontSize: '10px' }}>{pName}</span>
-                                        <span style={{ fontSize: '8px', fontWeight: 600, color: '#3b82f6' }}>
-                                            Count: {groupedData[fName].parishes[pName].total}
-                                            {paymentDetails?.isRequired && ` | Expected: ₹${groupedData[fName].parishes[pName].total * regFee} (Adv: ₹${(groupedData[fName].parishes[pName].total * advFeePerHead).toFixed(0)})`}
-                                        </span>
-                                    </div>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '8.5px', fontFamily: "'Noto Sans Malayalam', 'Inter', sans-serif" }}>
-                                        <thead>
-                                            <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-                                                <th style={{ padding: '6px 11px', width: '22px' }}>#</th>
-                                                <th style={{ padding: '6px 11px' }}>{isTeacher ? 'Teacher Name' : 'Student Name'}</th>
-                                                <th style={{ padding: '6px 11px' }}>Phone</th>
-                                                {customFields.map(f => (
-                                                    <th key={f.id} style={{ padding: '6px 11px' }}>{f.name}</th>
-                                                ))}
-                                                {paymentDetails?.isRequired && <th style={{ padding: '6px 11px', textAlign: 'center', width: '55px' }}>Payment</th>}
-                                                {!isTeacher && <th style={{ padding: '6px 11px', textAlign: 'center', width: '45px' }}>Entry</th>}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {groupedData[fName].parishes[pName].regs.map((reg: any, i: number) => (
-                                                <tr key={reg.id || i} style={{ borderBottom: i === groupedData[fName].parishes[pName].regs.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
-                                                    <td style={{ padding: '6px 11px', color: '#94a3b8' }}>{i + 1}</td>
-                                                    <td style={{ padding: '6px 11px', color: '#4b5563' }}>
-                                                        {reg.isCountOnly ? (
-                                                            <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: '7.5px', background: '#eff6ff', padding: '1px 4px', borderRadius: '2px' }}>
-                                                                Count only
-                                                            </span>
-                                                        ) : (
-                                                            reg.studentName || 'N/A'
-                                                        )}
-                                                    </td>
-                                                    <td style={{ padding: '6px 11px', color: '#4b5563' }}>
-                                                        {reg.isCountOnly ? '-' : (reg.studentPhone || 'N/A')}
-                                                    </td>
-                                                    {customFields.map(field => {
-                                                        const val = reg.customFieldValues?.[field.id];
-                                                        let displayVal = "-";
-                                                        if (val !== undefined && val !== null) {
-                                                            if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
-                                                            else displayVal = String(val);
-                                                        }
-                                                        return (
-                                                            <td key={field.id} style={{ padding: '6px 11px', color: '#4b5563' }}>
-                                                                {displayVal}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                    {paymentDetails?.isRequired && (
-                                                        <td style={{ padding: '6px 11px', textAlign: 'center', fontWeight: 600 }}>
-                                                            {reg.paymentScreenshotUrl ? (
-                                                                <span style={{ color: '#16a34a' }}>Paid</span>
+                            {Object.keys(groupedData[fName].parishes).sort().map((pName) => {
+                                const parishPaidCount = groupedData[fName].parishes[pName].regs
+                                    .filter((r: any) => r.paymentScreenshotUrl)
+                                    .reduce((sum: number, reg: any) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
+                                const parishPaidAdv = parishPaidCount * advFeePerHead;
+                                const parishExpectedAdv = groupedData[fName].parishes[pName].total * advFeePerHead;
+                                return (
+                                    <div key={pName} style={{ marginBottom: '11px', border: '1px solid #f1f5f9', borderRadius: '8px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            padding: '7px 11px',
+                                            background: '#f8fafc',
+                                            borderBottom: '1px solid #f1f5f9',
+                                            color: '#111827',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <span style={{ fontWeight: 800, fontSize: '10px' }}>{pName}</span>
+                                            <span style={{ fontSize: '8px', fontWeight: 600, color: '#3b82f6' }}>
+                                                Count: {groupedData[fName].parishes[pName].total}
+                                                {paymentDetails?.isRequired && ` | Paid Adv: ₹${formatAmount(parishPaidAdv)} / ₹${formatAmount(parishExpectedAdv)}`}
+                                            </span>
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '8.5px', fontFamily: "'Noto Sans Malayalam', 'Inter', sans-serif" }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                                                    <th style={{ padding: '6px 11px', width: '22px' }}>#</th>
+                                                    <th style={{ padding: '6px 11px' }}>{isTeacher ? 'Teacher Name' : 'Student Name'}</th>
+                                                    <th style={{ padding: '6px 11px' }}>Phone</th>
+                                                    {customFields.map(f => (
+                                                        <th key={f.id} style={{ padding: '6px 11px' }}>{f.name}</th>
+                                                    ))}
+                                                    {paymentDetails?.isRequired && <th style={{ padding: '6px 11px', textAlign: 'center', width: '55px' }}>Payment</th>}
+                                                    {!isTeacher && <th style={{ padding: '6px 11px', textAlign: 'center', width: '45px' }}>Entry</th>}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {groupedData[fName].parishes[pName].regs.map((reg: any, i: number) => (
+                                                    <tr key={reg.id || i} style={{ borderBottom: i === groupedData[fName].parishes[pName].regs.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                                        <td style={{ padding: '6px 11px', color: '#94a3b8' }}>{i + 1}</td>
+                                                        <td style={{ padding: '6px 11px', color: '#4b5563' }}>
+                                                            {reg.isCountOnly ? (
+                                                                <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: '7.5px', background: '#eff6ff', padding: '1px 4px', borderRadius: '2px' }}>
+                                                                    Count only
+                                                                </span>
                                                             ) : (
-                                                                <span style={{ color: '#dc2626' }}>Unpaid</span>
+                                                                reg.studentName || 'N/A'
                                                             )}
                                                         </td>
-                                                    )}
-                                                    {!isTeacher && (
-                                                        <td style={{ padding: '6px 11px', color: '#111827', fontWeight: 700, textAlign: 'center' }}>
-                                                            {reg.isCountOnly ? reg.studentCount : ''}
+                                                        <td style={{ padding: '6px 11px', color: '#4b5563' }}>
+                                                            {reg.isCountOnly ? '-' : (reg.studentPhone || 'N/A')}
                                                         </td>
-                                                    )}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ))}
+                                                        {customFields.map(field => {
+                                                            const val = reg.customFieldValues?.[field.id];
+                                                            let displayVal = "-";
+                                                            if (val !== undefined && val !== null) {
+                                                                if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+                                                                else displayVal = String(val);
+                                                            }
+                                                            return (
+                                                                <td key={field.id} style={{ padding: '6px 11px', color: '#4b5563' }}>
+                                                                    {displayVal}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                        {paymentDetails?.isRequired && (
+                                                            <td style={{ padding: '6px 11px', textAlign: 'center', fontWeight: 600 }}>
+                                                                {reg.paymentScreenshotUrl ? (
+                                                                    <span style={{ color: '#16a34a' }}>Paid</span>
+                                                                ) : (
+                                                                    <span style={{ color: '#dc2626' }}>Unpaid</span>
+                                                                )}
+                                                            </td>
+                                                        )}
+                                                        {!isTeacher && (
+                                                            <td style={{ padding: '6px 11px', color: '#111827', fontWeight: 700, textAlign: 'center' }}>
+                                                                {reg.isCountOnly ? reg.studentCount : ''}
+                                                            </td>
+                                                        )}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ))
                 )}
@@ -299,3 +338,4 @@ export const ProgramPdfTemplate = ({
         </div>
     );
 };
+
