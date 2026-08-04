@@ -15,6 +15,9 @@ import {
   Clock,
   FileText,
   Download,
+  Maximize2,
+  Minimize2,
+  ExternalLink,
 } from "lucide-react";
 import {
   Card,
@@ -254,6 +257,36 @@ export function Programs() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [detailForaneFilter, setDetailForaneFilter] = useState("All");
   const [detailParishFilter, setDetailParishFilter] = useState("All");
+  const [isDetailMaximized, setIsDetailMaximized] = useState(false);
+  const [isReceiptMaximized, setIsReceiptMaximized] = useState(false);
+
+  // PDF Export Progress & Timer Modal state
+  const [pdfExportProgress, setPdfExportProgress] = useState<{
+    isOpen: boolean;
+    statusText: string;
+    progressPercent: number;
+    secondsElapsed: number;
+  }>({
+    isOpen: false,
+    statusText: "",
+    progressPercent: 0,
+    secondsElapsed: 0,
+  });
+
+  useEffect(() => {
+    let timer: any;
+    if (pdfExportProgress.isOpen) {
+      timer = setInterval(() => {
+        setPdfExportProgress(prev => ({
+          ...prev,
+          secondsElapsed: prev.secondsElapsed + 1,
+        }));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [pdfExportProgress.isOpen]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -616,6 +649,7 @@ export function Programs() {
     setSelectedProgram(program);
     setDetailForaneFilter("All");
     setDetailParishFilter("All");
+    setIsDetailMaximized(false);
     setIsDetailDialogOpen(true);
     setDetailLoading(true);
     setDetailRegistrations([]);
@@ -975,7 +1009,12 @@ export function Programs() {
       toast.success(`${role === 'teacher' ? 'Teachers' : 'Students'} CSV Exported successfully`);
     } else if (format === "pdf") {
       try {
-        toast.info(`Generating ${role === 'teacher' ? 'Teachers' : 'Students'} PDF, please wait...`);
+        setPdfExportProgress({
+          isOpen: true,
+          statusText: "Initializing PDF Export...",
+          progressPercent: 5,
+          secondsElapsed: 0,
+        });
         const uList = users.length > 0 ? users : await getUsers();
         await PremiumProgramPdfService.generateReport(
           roleRegs,
@@ -985,12 +1024,23 @@ export function Programs() {
           uList,
           role,
           customFields,
-          selectedProgram.paymentDetails
+          selectedProgram.paymentDetails,
+          (statusText, percent) => {
+            setPdfExportProgress(prev => ({
+              ...prev,
+              statusText,
+              progressPercent: percent,
+            }));
+          }
         );
         toast.success(`${role === 'teacher' ? 'Teachers' : 'Students'} PDF Exported successfully`);
       } catch (err) {
         console.error("PDF generation failed", err);
         toast.error("Failed to generate PDF");
+      } finally {
+        setTimeout(() => {
+          setPdfExportProgress(prev => ({ ...prev, isOpen: false }));
+        }, 800);
       }
     }
   };
@@ -1682,14 +1732,40 @@ export function Programs() {
 
       {/* Program Detail Dialog */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-[95vw] lg:max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-blue-600" />
-              {selectedProgram?.name}
-            </DialogTitle>
+        <DialogContent className={cn(
+          "w-full overflow-y-auto transition-all duration-200",
+          isDetailMaximized
+            ? "max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh] p-6"
+            : "max-w-[95vw] lg:max-w-6xl max-h-[90vh]"
+        )}>
+          <DialogHeader className="pr-8">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="flex items-center gap-2 text-base font-bold">
+                <FileText className="h-5 w-5 text-blue-600" />
+                {selectedProgram?.name}
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2.5 text-xs gap-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                onClick={() => setIsDetailMaximized(!isDetailMaximized)}
+                title={isDetailMaximized ? "Restore Default Size" : "Expand Full Screen"}
+              >
+                {isDetailMaximized ? (
+                  <>
+                    <Minimize2 className="h-3.5 w-3.5 text-blue-600" />
+                    <span className="hidden sm:inline font-medium">Restore</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="h-3.5 w-3.5 text-blue-600" />
+                    <span className="hidden sm:inline font-medium">Expand Window</span>
+                  </>
+                )}
+              </Button>
+            </div>
             {selectedProgram?.description && (
-              <DialogDescription>
+              <DialogDescription className="mt-1 text-xs">
                 {selectedProgram.description}
               </DialogDescription>
             )}
@@ -2210,25 +2286,134 @@ export function Programs() {
         </DialogContent>
       </Dialog>
       {/* Receipt View Dialog */}
-      <Dialog open={!!receiptUrl} onOpenChange={(open) => !open && setReceiptUrl(null)}>
-        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col items-center justify-center p-6">
-          <DialogHeader className="w-full">
-            <DialogTitle>Payment Receipt / Screenshot</DialogTitle>
+      <Dialog open={!!receiptUrl} onOpenChange={(open) => {
+        if (!open) {
+          setReceiptUrl(null);
+          setIsReceiptMaximized(false);
+        }
+      }}>
+        <DialogContent className={cn(
+          "flex flex-col items-center justify-between p-6 transition-all duration-200",
+          isReceiptMaximized ? "max-w-[96vw] w-[96vw] h-[94vh] max-h-[94vh]" : "max-w-2xl max-h-[88vh]"
+        )}>
+          <DialogHeader className="w-full flex flex-row items-center justify-between border-b pb-3 pr-6">
+            <div className="flex items-center gap-2">
+              <DialogTitle className="text-base font-bold">Payment Receipt / Screenshot</DialogTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              {receiptUrl && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs flex items-center gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950"
+                    onClick={() => window.open(receiptUrl, '_blank')}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Open Full Image
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs flex items-center gap-1.5"
+                    onClick={() => setIsReceiptMaximized(!isReceiptMaximized)}
+                  >
+                    {isReceiptMaximized ? (
+                      <>
+                        <Minimize2 className="h-3.5 w-3.5" /> Restore
+                      </>
+                    ) : (
+                      <>
+                        <Maximize2 className="h-3.5 w-3.5" /> Full Screen
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
           </DialogHeader>
-          <div className="w-full flex-1 flex items-center justify-center overflow-auto mt-4 max-h-[60vh] rounded-lg border bg-muted/20">
+          
+          <div className={cn(
+            "w-full flex-1 flex items-center justify-center overflow-auto my-3 rounded-lg border bg-slate-900/5 dark:bg-slate-900/40 p-2",
+            isReceiptMaximized ? "max-h-[80vh]" : "max-h-[62vh]"
+          )}>
             {receiptUrl && (
               <img
                 src={receiptUrl}
                 alt="Payment screenshot"
-                className="max-w-full max-h-full object-contain rounded"
+                className="max-w-full max-h-full object-contain rounded shadow-sm"
               />
             )}
           </div>
-          <DialogFooter className="w-full mt-4">
-            <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => setReceiptUrl(null)}>
+
+          <DialogFooter className="w-full flex flex-row items-center justify-between gap-3 pt-2 border-t">
+            {receiptUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs flex items-center gap-1.5"
+                onClick={() => {
+                  const link = document.createElement("a");
+                  link.href = receiptUrl;
+                  link.target = "_blank";
+                  link.download = `payment_receipt_${Date.now()}.jpg`;
+                  link.click();
+                }}
+              >
+                <Download className="h-3.5 w-3.5" /> Download Screenshot
+              </Button>
+            )}
+            <Button className="bg-blue-600 hover:bg-blue-700 text-xs px-6" onClick={() => {
+              setReceiptUrl(null);
+              setIsReceiptMaximized(false);
+            }}>
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* PDF Generation Progress & Timer Modal */}
+      <Dialog open={pdfExportProgress.isOpen} onOpenChange={() => {}}>
+        <DialogContent className="max-w-md w-full p-6 text-center space-y-4 shadow-xl border-blue-100 dark:border-blue-900">
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/50 rounded-full text-blue-600 dark:text-blue-400 animate-pulse">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Generating PDF Report
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500 dark:text-gray-400">
+              Please wait while payment proof screenshots are retrieved and compiled into the document.
+            </DialogDescription>
+          </div>
+
+          {/* Status & Progress Bar */}
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-between items-center text-xs font-semibold text-gray-700 dark:text-gray-300">
+              <span className="truncate max-w-[240px] text-left">{pdfExportProgress.statusText}</span>
+              <span className="text-blue-600 dark:text-blue-400">{pdfExportProgress.progressPercent}%</span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${pdfExportProgress.progressPercent}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Elapsed Timer Counter */}
+          <div className="flex items-center justify-center gap-2 pt-1 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 py-2 px-3 rounded-lg border border-gray-100 dark:border-gray-800">
+            <Clock className="h-3.5 w-3.5 text-blue-500" />
+            <span>Time Elapsed:</span>
+            <span className="font-mono font-bold text-gray-800 dark:text-gray-200">
+              {Math.floor(pdfExportProgress.secondsElapsed / 60)
+                .toString()
+                .padStart(2, "0")}
+              :
+              {(pdfExportProgress.secondsElapsed % 60)
+                .toString()
+                .padStart(2, "0")}
+            </span>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

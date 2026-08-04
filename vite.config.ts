@@ -57,6 +57,13 @@
     server: {
       port: 3000,
       open: true,
+      proxy: {
+        '/firebase-img-proxy': {
+          target: 'https://firebasestorage.googleapis.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/firebase-img-proxy/, ''),
+        },
+      },
     },
     publicDir: 'Public',
   });
