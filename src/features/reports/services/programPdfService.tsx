@@ -73,8 +73,7 @@ export const PremiumProgramPdfService = {
                 logging: false,
             });
 
-            // 7. Calculate precise dimensions for A4
-            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            // 7. Calculate precise dimensions for A4 and find element positions to prevent page splits
             const pdf = new jsPDF({
                 orientation: 'portrait',
                 unit: 'mm',
@@ -82,26 +81,82 @@ export const PremiumProgramPdfService = {
             });
 
             const margin = 10;
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+            const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
 
-            const effectiveWidth = pdfWidth - (margin * 2);
-            const imgHeight = (canvas.height * effectiveWidth) / canvas.width;
+            const effectiveWidth = pdfWidth - (margin * 2); // 190mm
+            const effectiveHeight = pdfHeight - (margin * 2); // 277mm
 
-            let heightLeft = imgHeight;
-            let position = margin; // Starting position (Y offset)
+            // Max canvas height in pixels per PDF page
+            const maxPageCanvasHeight = (effectiveHeight / effectiveWidth) * canvas.width;
 
-            // First page
-            pdf.addImage(imgData, 'JPEG', margin, position, effectiveWidth, imgHeight);
-            heightLeft -= (pdfHeight - (margin * 2));
+            // Collect bounds of all elements that shouldn't be split mid-row/mid-card
+            const keepTogetherElements = Array.from(tempContainer.querySelectorAll('.pdf-keep-together, tr, h1, h2, h3, table, .pdf-header'));
+            const containerRect = tempContainer.getBoundingClientRect();
+            const scaleFactor = canvas.width / tempContainer.offsetWidth;
 
-            // Setup pagination if height is still left
-            while (heightLeft >= 0) {
-                position = heightLeft - imgHeight; // Shift position up by the height of what's already printed
-                pdf.addPage();
-                // Add the same image but shifted up
-                pdf.addImage(imgData, 'JPEG', margin, position + margin, effectiveWidth, imgHeight);
-                heightLeft -= (pdfHeight - (margin * 2)); // Subtract effective page height
+            const protectedBounds: { topPx: number; bottomPx: number }[] = [];
+            keepTogetherElements.forEach((el) => {
+                const rect = el.getBoundingClientRect();
+                const topPx = (rect.top - containerRect.top) * scaleFactor;
+                const bottomPx = (rect.bottom - containerRect.top) * scaleFactor;
+                if (bottomPx > topPx) {
+                    protectedBounds.push({ topPx, bottomPx });
+                }
+            });
+
+            protectedBounds.sort((a, b) => a.topPx - b.topPx);
+
+            let currentY = 0;
+            const totalCanvasHeight = canvas.height;
+            let pageIndex = 0;
+
+            while (currentY < totalCanvasHeight) {
+                let targetY = currentY + maxPageCanvasHeight;
+
+                if (targetY < totalCanvasHeight) {
+                    // Check if targetY cuts through any protected element
+                    for (const bound of protectedBounds) {
+                        if (bound.topPx < targetY && bound.bottomPx > targetY) {
+                            // Adjust slice point to top of element if element starts sufficiently after currentY
+                            if (bound.topPx > currentY + 30) {
+                                targetY = bound.topPx;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    targetY = totalCanvasHeight;
+                }
+
+                const sliceHeight = targetY - currentY;
+
+                // Create individual page sub-canvas
+                const sliceCanvas = document.createElement('canvas');
+                sliceCanvas.width = canvas.width;
+                sliceCanvas.height = sliceHeight;
+                const ctx = sliceCanvas.getContext('2d');
+
+                if (ctx) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+                    ctx.drawImage(
+                        canvas,
+                        0, currentY, canvas.width, sliceHeight,
+                        0, 0, canvas.width, sliceHeight
+                    );
+                }
+
+                const sliceImgData = sliceCanvas.toDataURL('image/jpeg', 1.0);
+                const sliceImgHeightMm = (sliceHeight * effectiveWidth) / canvas.width;
+
+                if (pageIndex > 0) {
+                    pdf.addPage();
+                }
+                pdf.addImage(sliceImgData, 'JPEG', margin, margin, effectiveWidth, sliceImgHeightMm);
+
+                currentY = targetY;
+                pageIndex++;
             }
 
             pdf.save(`${programName.replace(/\s+/g, '_')}_Report_${new Date().toISOString().split('T')[0]}.pdf`);

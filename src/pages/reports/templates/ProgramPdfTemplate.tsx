@@ -102,7 +102,10 @@ export const ProgramPdfTemplate = ({
             position: 'relative',
         }}>
             <style>
-                {`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Malayalam:wght@400;700&display=swap');`}
+                {`
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Malayalam:wght@400;700&display=swap');
+                    .pdf-keep-together { page-break-inside: avoid; break-inside: avoid; }
+                `}
             </style>
 
             {/* Premium Header Decoration */}
@@ -210,7 +213,7 @@ export const ProgramPdfTemplate = ({
                 ) : (
                     sortedForanes.map((fName) => (
                         <div key={fName} style={{ marginBottom: '8px' }}>
-                            <div style={{
+                            <div className="pdf-keep-together" style={{
                                 padding: '4px 11px',
                                 background: '#1e293b',
                                 color: '#fff',
@@ -238,7 +241,7 @@ export const ProgramPdfTemplate = ({
                                 const parishExpectedAdv = groupedData[fName].parishes[pName].total * advFeePerHead;
                                 return (
                                     <div key={pName} style={{ marginBottom: '11px', border: '1px solid #f1f5f9', borderRadius: '8px', overflow: 'hidden' }}>
-                                        <div style={{
+                                        <div className="pdf-keep-together" style={{
                                             padding: '7px 11px',
                                             background: '#f8fafc',
                                             borderBottom: '1px solid #f1f5f9',
@@ -255,7 +258,7 @@ export const ProgramPdfTemplate = ({
                                         </div>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '8.5px', fontFamily: "'Noto Sans Malayalam', 'Inter', sans-serif" }}>
                                             <thead>
-                                                <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                                                <tr className="pdf-keep-together" style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
                                                     <th style={{ padding: '6px 11px', width: '22px' }}>#</th>
                                                     <th style={{ padding: '6px 11px' }}>{isTeacher ? 'Teacher Name' : 'Student Name'}</th>
                                                     <th style={{ padding: '6px 11px' }}>Phone</th>
@@ -268,7 +271,7 @@ export const ProgramPdfTemplate = ({
                                             </thead>
                                             <tbody>
                                                 {groupedData[fName].parishes[pName].regs.map((reg: any, i: number) => (
-                                                    <tr key={reg.id || i} style={{ borderBottom: i === groupedData[fName].parishes[pName].regs.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                                    <tr key={reg.id || i} className="pdf-keep-together" style={{ borderBottom: i === groupedData[fName].parishes[pName].regs.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
                                                         <td style={{ padding: '6px 11px', color: '#94a3b8' }}>{i + 1}</td>
                                                         <td style={{ padding: '6px 11px', color: '#4b5563' }}>
                                                             {reg.isCountOnly ? (

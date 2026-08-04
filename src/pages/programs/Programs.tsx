@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { uploadFile } from "../../lib/upload";
 import { cn } from "../../lib/utils";
 import {
@@ -78,7 +78,7 @@ import {
 import { sendNewProgramNotification } from "../../features/notifications/services/notificationService";
 import { Timestamp } from "firebase/firestore";
 import { PremiumProgramPdfService } from "../../features/reports/services/programPdfService";
-import { getUsers } from "../../features/users/services/userService";
+import { getUsers, UserData } from "../../features/users/services/userService";
 import {
   Tabs,
   TabsList,
@@ -249,6 +249,11 @@ export function Programs() {
     rejected: number;
   } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Detail view filters & user metadata
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [detailForaneFilter, setDetailForaneFilter] = useState("All");
+  const [detailParishFilter, setDetailParishFilter] = useState("All");
 
   // Form state
   const [formData, setFormData] = useState({
@@ -536,7 +541,7 @@ export function Programs() {
     );
   };
 
-  // Real-time subscription to programs
+  // Real-time subscription to programs & users metadata
   useEffect(() => {
     setLoading(true);
     const unsubscribe = subscribeToPrograms(async (programsData) => {
@@ -558,11 +563,59 @@ export function Programs() {
       }
     });
 
+    const fetchUsersList = async () => {
+      try {
+        const uList = await getUsers();
+        setUsers(uList);
+      } catch (e) {
+        console.error("Error fetching users list:", e);
+      }
+    };
+    fetchUsersList();
+
     return () => unsubscribe();
   }, []);
 
+  // Compute available Foranes & Parishes for filtering in detail view
+  const availableForanes = useMemo(() => {
+    const set = new Set<string>();
+    detailRegistrations.forEach((reg) => {
+      const schoolInfo = users.find((u) => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
+      const forane = schoolInfo?.forane;
+      if (forane) set.add(forane);
+    });
+    return Array.from(set).sort();
+  }, [detailRegistrations, users]);
+
+  const availableParishes = useMemo(() => {
+    const set = new Set<string>();
+    detailRegistrations.forEach((reg) => {
+      const schoolInfo = users.find((u) => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
+      const regForane = schoolInfo?.forane || 'Unknown Forane';
+      const regParish = reg.schoolName || schoolInfo?.schoolName || schoolInfo?.schoolname;
+      if (detailForaneFilter === "All" || regForane === detailForaneFilter) {
+        if (regParish) set.add(regParish);
+      }
+    });
+    return Array.from(set).sort();
+  }, [detailRegistrations, users, detailForaneFilter]);
+
+  const filteredDetailRegistrations = useMemo(() => {
+    return detailRegistrations.filter((reg) => {
+      const schoolInfo = users.find((u) => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
+      const regForane = schoolInfo?.forane || 'Unknown Forane';
+      const regParish = reg.schoolName || schoolInfo?.schoolName || schoolInfo?.schoolname || 'Unknown Parish';
+
+      const matchForane = detailForaneFilter === "All" || regForane === detailForaneFilter;
+      const matchParish = detailParishFilter === "All" || regParish === detailParishFilter;
+      return matchForane && matchParish;
+    });
+  }, [detailRegistrations, users, detailForaneFilter, detailParishFilter]);
+
   const openDetailDialog = useCallback(async (program: ProgramData) => {
     setSelectedProgram(program);
+    setDetailForaneFilter("All");
+    setDetailParishFilter("All");
     setIsDetailDialogOpen(true);
     setDetailLoading(true);
     setDetailRegistrations([]);
@@ -816,80 +869,120 @@ export function Programs() {
   };
 
   const handleExportRegistrations = async (role: "student" | "teacher", format: "csv" | "pdf") => {
-    if (!selectedProgram || detailRegistrations.length === 0) return;
+    if (!selectedProgram || filteredDetailRegistrations.length === 0) return;
 
     const customFields = role === 'student'
       ? selectedProgram.studentFields || []
       : selectedProgram.teacherFields || [];
 
-    const filteredRegs = detailRegistrations.filter((r) => {
+    const roleRegs = filteredDetailRegistrations.filter((r: ProgramRegistration) => {
       if (role === 'student') {
         return !r.type || r.type === 'student';
       }
       return r.type === 'teacher';
     });
 
-    if (filteredRegs.length === 0) {
-      toast.error(`No registered ${role}s found to export`);
+    if (roleRegs.length === 0) {
+      toast.error(`No registered ${role}s found for the selected filters`);
       return;
     }
 
+    const pd = selectedProgram.paymentDetails;
+    const regFee = pd?.registrationFee || 0;
+    const advType = pd?.advanceType || 'percentage';
+    const advValue = pd?.advanceValue !== undefined ? pd.advanceValue : (pd?.advancePercentage !== undefined ? pd.advancePercentage : 100);
+    let advPerHead = regFee;
+    if (advType === 'fixed') {
+      advPerHead = advValue;
+    } else {
+      advPerHead = regFee * (advValue / 100);
+    }
+
+    const totalCount = roleRegs.reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
+    const approvedCount = roleRegs.filter((r: ProgramRegistration) => r.status === 'approved_parish' || r.status === 'locked').reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
+    const pendingCount = roleRegs.filter((r: ProgramRegistration) => r.status === 'pending_parish').reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
+    const paidCount = roleRegs.filter((r: ProgramRegistration) => !!r.paymentScreenshotUrl).reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
+
     if (format === "csv") {
+      // Complete Excel/CSV metadata & summary information rows
+      const summaryLines = [
+        `"SUVARA ADMINISTRATIVE REPORT - ${role.toUpperCase()} REGISTRY"`,
+        `"Program Name","${(selectedProgram.name || '').replace(/"/g, '""')}"`,
+        `"Forane Filter","${detailForaneFilter}"`,
+        `"Parish Filter","${detailParishFilter}"`,
+        `"Export Date","${new Date().toLocaleDateString()}"`,
+        `"Total ${role === 'teacher' ? 'Teachers' : 'Students'}","${totalCount}"`,
+        `"Total Approved","${approvedCount}"`,
+        `"Total Pending","${pendingCount}"`,
+        ...(pd?.isRequired ? [
+          `"Registration Fee","₹${regFee}"`,
+          `"Total Full Expected","₹${totalCount * regFee}"`,
+          `"Total Advance Expected","₹${(totalCount * advPerHead).toFixed(1)}"`,
+          `"Advance Amount Received","₹${(paidCount * advPerHead).toFixed(1)}"`
+        ] : []),
+        ""
+      ];
+
       const headers = [
+        "#",
         role === 'teacher' ? "Teacher Name" : "Student Name",
         "Phone",
-        "School",
-        "Status",
-        ...customFields.map(f => `"${f.name}"`),
+        "School/Parish",
+        "Approval Status",
+        ...(pd?.isRequired ? ["Payment Status"] : []),
+        ...customFields.map(f => `"${f.name.replace(/"/g, '""')}"`),
         "Submitted At",
       ];
 
-      const sortedRegistrations = [...filteredRegs].sort((a, b) =>
+      const sortedRegistrations = [...roleRegs].sort((a, b) =>
         (a.schoolName || "").localeCompare(b.schoolName || ""),
       );
 
-      const csv = [
-        headers.join(","),
-        ...sortedRegistrations.map((reg) => {
-          const row = [
-            `"${reg.studentName}"`,
-            `"${reg.studentPhone}"`,
-            `"${reg.schoolName}"`,
-            getStatusLabel(reg.status),
-          ];
+      const rows = sortedRegistrations.map((reg, index) => {
+        const row = [
+          index + 1,
+          `"${(reg.studentName || 'N/A').replace(/"/g, '""')}"`,
+          `"${(reg.studentPhone || 'N/A').replace(/"/g, '""')}"`,
+          `"${(reg.schoolName || 'N/A').replace(/"/g, '""')}"`,
+          `"${getStatusLabel(reg.status)}"`,
+        ];
 
-          customFields.forEach(field => {
-            const val = reg.customFieldValues?.[field.id];
-            let displayVal = "";
-            if (val !== undefined && val !== null) {
-              if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
-              else displayVal = String(val);
-            }
-            row.push(`"${displayVal.replace(/"/g, '""')}"`);
-          });
+        if (pd?.isRequired) {
+          row.push(reg.paymentScreenshotUrl ? '"Paid"' : '"Unpaid"');
+        }
 
-          row.push(reg.submittedAt ? reg.submittedAt.toDate().toLocaleDateString() : "N/A");
-          return row.join(",");
-        }),
-      ].join("\n");
+        customFields.forEach(field => {
+          const val = reg.customFieldValues?.[field.id];
+          let displayVal = "";
+          if (val !== undefined && val !== null) {
+            if (typeof val === 'boolean') displayVal = val ? 'Yes' : 'No';
+            else displayVal = String(val);
+          }
+          row.push(`"${displayVal.replace(/"/g, '""')}"`);
+        });
 
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        row.push(reg.submittedAt ? `"${reg.submittedAt.toDate().toLocaleDateString()}"` : '"N/A"');
+        return row.join(",");
+      });
+
+      const csvContent = [...summaryLines, headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `${selectedProgram.name.replace(/\s+/g, "_")}_${role}s_${new Date().toISOString().split("T")[0]}.csv`;
+      const safeForaneStr = detailForaneFilter.replace(/\s+/g, "_");
+      link.download = `${selectedProgram.name.replace(/\s+/g, "_")}_${role}s_${safeForaneStr}_${new Date().toISOString().split("T")[0]}.csv`;
       link.click();
       toast.success(`${role === 'teacher' ? 'Teachers' : 'Students'} CSV Exported successfully`);
     } else if (format === "pdf") {
       try {
         toast.info(`Generating ${role === 'teacher' ? 'Teachers' : 'Students'} PDF, please wait...`);
-        // Fetch users to try and lookup forane/parish metadata if needed by report
-        const users = await getUsers();
+        const uList = users.length > 0 ? users : await getUsers();
         await PremiumProgramPdfService.generateReport(
-          filteredRegs,
+          roleRegs,
           selectedProgram.name,
-          "All", // Using "All" forane context from within program detail
-          "All", // Using "All" parish context
-          users,
+          detailForaneFilter,
+          detailParishFilter,
+          uList,
           role,
           customFields,
           selectedProgram.paymentDetails
@@ -1619,52 +1712,86 @@ export function Programs() {
               )}
             </div>
 
-            {/* Registration Stats */}
-            <div className="flex justify-between items-center mt-2">
+            {/* Registration Stats & Filters Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-2 pb-2 border-b border-gray-100 dark:border-gray-800">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Registered Members ({detailStats?.total || 0})
+                <Users className="h-4 w-4 text-blue-600" />
+                Registered Members ({filteredDetailRegistrations.reduce((acc: number, r: ProgramRegistration) => acc + (r.isCountOnly ? (r.studentCount || 1) : 1), 0)})
               </h3>
-              {detailRegistrations.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "student") && (
-                      <>
-                        <DropdownMenuItem
-                          onClick={() => handleExportRegistrations("student", "csv")}
-                        >
-                          Export Students (CSV)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleExportRegistrations("student", "pdf")}
-                        >
-                          Export Students (PDF)
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "teacher") && (
-                      <>
-                        <DropdownMenuItem
-                          onClick={() => handleExportRegistrations("teacher", "csv")}
-                        >
-                          Export Teachers (CSV)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleExportRegistrations("teacher", "pdf")}
-                        >
-                          Export Teachers (PDF)
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                {/* Forane Filter Dropdown */}
+                <div className="w-36 sm:w-44">
+                  <Select value={detailForaneFilter} onValueChange={(val) => { setDetailForaneFilter(val); setDetailParishFilter("All"); }}>
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                      <SelectValue placeholder="Forane: All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">Forane: All</SelectItem>
+                      {availableForanes.map((f: string) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Parish Filter Dropdown */}
+                <div className="w-40 sm:w-52">
+                  <Select value={detailParishFilter} onValueChange={setDetailParishFilter}>
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                      <SelectValue placeholder="Parish: All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">Parish: All</SelectItem>
+                      {availableParishes.map((p: string) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Export Dropdown */}
+                {detailRegistrations.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                        <Download className="h-3.5 w-3.5" />
+                        Export
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "student") && (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() => handleExportRegistrations("student", "csv")}
+                          >
+                            Export Students (CSV)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleExportRegistrations("student", "pdf")}
+                          >
+                            Export Students (PDF)
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "teacher") && (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() => handleExportRegistrations("teacher", "csv")}
+                          >
+                            Export Teachers (CSV)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleExportRegistrations("teacher", "pdf")}
+                          >
+                            Export Teachers (PDF)
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
 
             {detailLoading ? (
@@ -1673,8 +1800,8 @@ export function Programs() {
               </div>
             ) : detailStats ? (
               (() => {
-                const studentRegs = detailRegistrations.filter(r => !r.type || r.type === 'student');
-                const teacherRegs = detailRegistrations.filter(r => r.type === 'teacher');
+                const studentRegs = filteredDetailRegistrations.filter(r => !r.type || r.type === 'student');
+                const teacherRegs = filteredDetailRegistrations.filter(r => r.type === 'teacher');
 
                 const getStatsForRole = (regs: ProgramRegistration[]) => {
                   const countStudents = (arr: ProgramRegistration[]) => {
@@ -1749,17 +1876,17 @@ export function Programs() {
                     ? selectedProgram?.studentFields || []
                     : selectedProgram?.teacherFields || [];
 
-                  const uniqueSchools = Array.from(new Set(regs.map(r => r.schoolName))).sort();
+                  const uniqueSchools = Array.from(new Set(regs.map((r: ProgramRegistration) => r.schoolName))).sort();
 
                   return (
                     <div className="space-y-6">
                       {uniqueSchools.map(schoolName => {
-                        const schoolRegs = regs.filter(r => r.schoolName === schoolName);
+                        const schoolRegs = regs.filter((r: ProgramRegistration) => r.schoolName === schoolName);
                         const totalSchoolCount = schoolRegs.reduce(
                           (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
                           0
                         );
-                        const schoolPaidCount = schoolRegs.filter(r => r.paymentScreenshotUrl).reduce(
+                        const schoolPaidCount = schoolRegs.filter((r: ProgramRegistration) => !!r.paymentScreenshotUrl).reduce(
                           (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
                           0
                         );
@@ -1997,7 +2124,7 @@ export function Programs() {
                       const totalExpectedFull = totalRegistrants * regFee;
                       const totalExpectedAdvance = totalRegistrants * advancePerHead;
 
-                      const allRegs = [...(detailRegistrations || [])];
+                      const allRegs = [...(filteredDetailRegistrations || [])];
                       const paidRegs = allRegs.filter(r => r.paymentScreenshotUrl);
                       const paidCount = paidRegs.reduce((sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
                       const amountPerPaidPerson = hasAdvance ? advancePerHead : regFee;
