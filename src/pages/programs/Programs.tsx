@@ -18,6 +18,9 @@ import {
   Maximize2,
   Minimize2,
   ExternalLink,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import {
   Card,
@@ -132,6 +135,11 @@ const ProgramCard = ({
             )}
             <div className="mt-2 flex flex-wrap gap-2">
               <Badge variant={status.variant}>{status.label}</Badge>
+              {program.isCountOnly && (
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800 text-[11px]">
+                  Count Only
+                </Badge>
+              )}
               <Badge
                 variant="secondary"
                 className="bg-gray-100 text-gray-800 flex items-center gap-1"
@@ -205,22 +213,20 @@ const ProgramCard = ({
 };
 
 const getInitialStudentFields = (): CustomField[] => [
-  { id: Math.random().toString(36).substring(2, 9), name: "Name", type: "text", isMandatory: true },
-  { id: Math.random().toString(36).substring(2, 9), name: "Phone Number", type: "text", isMandatory: false },
+  { id: 'name', name: "Name", type: "text", isMandatory: true },
+  { id: 'phone', name: "Phone Number", type: "phone", isMandatory: false },
   {
-    id: Math.random().toString(36).substring(2, 9),
+    id: 'class',
     name: "Class",
     type: "select",
     isMandatory: false,
     options: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
   },
-  { id: Math.random().toString(36).substring(2, 9), name: "Address", type: "text", isMandatory: false },
 ];
 
 const getInitialTeacherFields = (): CustomField[] => [
-  { id: Math.random().toString(36).substring(2, 9), name: "Name", type: "text", isMandatory: true },
-  { id: Math.random().toString(36).substring(2, 9), name: "Phone Number", type: "text", isMandatory: false },
-  { id: Math.random().toString(36).substring(2, 9), name: "Address", type: "text", isMandatory: false },
+  { id: 'name', name: "Name", type: "text", isMandatory: true },
+  { id: 'phone', name: "Phone Number", type: "phone", isMandatory: false },
 ];
 
 export function Programs() {
@@ -257,6 +263,8 @@ export function Programs() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [detailForaneFilter, setDetailForaneFilter] = useState("All");
   const [detailParishFilter, setDetailParishFilter] = useState("All");
+  const [detailDateFilter, setDetailDateFilter] = useState("All");
+  const [detailSortOrder, setDetailSortOrder] = useState<"forane" | "date-desc" | "date-asc" | "name-asc" | "name-desc">("forane");
   const [isDetailMaximized, setIsDetailMaximized] = useState(false);
   const [isReceiptMaximized, setIsReceiptMaximized] = useState(false);
 
@@ -295,6 +303,7 @@ export function Programs() {
     startDate: "",
     endDate: "",
     isActive: true,
+    isCountOnly: false,
     targetAudience: "student" as 'student' | 'teacher' | 'both',
     paymentRequired: false,
     registrationFee: 0,
@@ -418,7 +427,7 @@ export function Programs() {
           </Label>
         </div>
         <p className="text-xs text-muted-foreground">
-          Define extra fields required for {role === 'student' ? 'students' : 'teachers'}. Name and Phone are always collected.
+          Configure registration fields for {role === 'student' ? 'students' : 'teachers'}. You can edit, set required, or delete any field (including Phone Number).
         </p>
 
         <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
@@ -633,22 +642,58 @@ export function Programs() {
     return Array.from(set).sort();
   }, [detailRegistrations, users, detailForaneFilter]);
 
+  const availableSubmissionDates = useMemo(() => {
+    const dateMap = new Map<string, { key: string; label: string; time: number }>();
+    detailRegistrations.forEach((reg) => {
+      if (reg.submittedAt) {
+        const d = reg.submittedAt.toDate();
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const label = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        if (!dateMap.has(key)) {
+          const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+          dateMap.set(key, { key, label, time: startOfDay });
+        }
+      }
+    });
+    return Array.from(dateMap.values()).sort((a, b) => b.time - a.time);
+  }, [detailRegistrations]);
+
   const filteredDetailRegistrations = useMemo(() => {
-    return detailRegistrations.filter((reg) => {
+    const filtered = detailRegistrations.filter((reg) => {
       const schoolInfo = users.find((u) => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
       const regForane = schoolInfo?.forane || 'Unknown Forane';
       const regParish = reg.schoolName || schoolInfo?.schoolName || schoolInfo?.schoolname || 'Unknown Parish';
 
       const matchForane = detailForaneFilter === "All" || regForane === detailForaneFilter;
       const matchParish = detailParishFilter === "All" || regParish === detailParishFilter;
-      return matchForane && matchParish;
+
+      let matchDate = true;
+      if (detailDateFilter !== "All") {
+        if (!reg.submittedAt) {
+          matchDate = false;
+        } else {
+          const d = reg.submittedAt.toDate();
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          matchDate = key === detailDateFilter;
+        }
+      }
+
+      return matchForane && matchParish && matchDate;
     });
-  }, [detailRegistrations, users, detailForaneFilter, detailParishFilter]);
+
+    return filtered.sort((a, b) => {
+      const timeA = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : (a.submittedAt ? new Date(a.submittedAt).getTime() : 0);
+      const timeB = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : (b.submittedAt ? new Date(b.submittedAt).getTime() : 0);
+      return detailSortOrder === "asc" ? timeA - timeB : timeB - timeA;
+    });
+  }, [detailRegistrations, users, detailForaneFilter, detailParishFilter, detailDateFilter, detailSortOrder]);
 
   const openDetailDialog = useCallback(async (program: ProgramData) => {
     setSelectedProgram(program);
     setDetailForaneFilter("All");
     setDetailParishFilter("All");
+    setDetailDateFilter("All");
+    setDetailSortOrder("desc");
     setIsDetailMaximized(false);
     setIsDetailDialogOpen(true);
     setDetailLoading(true);
@@ -683,9 +728,10 @@ export function Programs() {
         startDate: new Date(formData.startDate),
         endDate: new Date(formData.endDate),
         isActive: formData.isActive,
+        isCountOnly: formData.isCountOnly,
         targetAudience: formData.targetAudience,
-        studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
-        teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
+        studentFields: formData.isCountOnly ? [] : (formData.targetAudience === 'teacher' ? [] : studentFields),
+        teacherFields: formData.isCountOnly ? [] : (formData.targetAudience === 'student' ? [] : teacherFields),
         paymentDetails: {
           isRequired: formData.paymentRequired,
           registrationFee: Number(formData.registrationFee) || 0,
@@ -739,9 +785,10 @@ export function Programs() {
         startDate: new Date(formData.startDate),
         endDate: new Date(formData.endDate),
         isActive: formData.isActive,
+        isCountOnly: formData.isCountOnly,
         targetAudience: formData.targetAudience,
-        studentFields: formData.targetAudience === 'teacher' ? [] : studentFields,
-        teacherFields: formData.targetAudience === 'student' ? [] : teacherFields,
+        studentFields: formData.isCountOnly ? [] : (formData.targetAudience === 'teacher' ? [] : studentFields),
+        teacherFields: formData.isCountOnly ? [] : (formData.targetAudience === 'student' ? [] : teacherFields),
         paymentDetails: {
           isRequired: formData.paymentRequired,
           registrationFee: Number(formData.registrationFee) || 0,
@@ -792,6 +839,7 @@ export function Programs() {
       startDate: toLocalDateTimeString(startDate),
       endDate: toLocalDateTimeString(endDate),
       isActive: program.isActive,
+      isCountOnly: !!program.isCountOnly,
       targetAudience: program.targetAudience || "student",
       paymentRequired: program.paymentDetails?.isRequired || false,
       registrationFee: program.paymentDetails?.registrationFee || 0,
@@ -806,8 +854,16 @@ export function Programs() {
       ifscCode: program.paymentDetails?.ifscCode || "",
       qrCodeUrl: program.paymentDetails?.qrCodeUrl || "",
     });
-    setStudentFields(program.studentFields || []);
-    setTeacherFields(program.teacherFields || []);
+
+    const stFields = (program.studentFields && program.studentFields.length > 0)
+      ? program.studentFields
+      : getInitialStudentFields();
+    const tcFields = (program.teacherFields && program.teacherFields.length > 0)
+      ? program.teacherFields
+      : getInitialTeacherFields();
+
+    setStudentFields(stFields);
+    setTeacherFields(tcFields);
     setIsEditDialogOpen(true);
   };
 
@@ -818,6 +874,7 @@ export function Programs() {
       startDate: "",
       endDate: "",
       isActive: true,
+      isCountOnly: false,
       targetAudience: "student",
       paymentRequired: false,
       registrationFee: 0,
@@ -1025,6 +1082,8 @@ export function Programs() {
           role,
           customFields,
           selectedProgram.paymentDetails,
+          detailDateFilter,
+          detailSortOrder,
           (statusText, percent) => {
             setPdfExportProgress(prev => ({
               ...prev,
@@ -1161,6 +1220,27 @@ export function Programs() {
                   }
                 />
                 <Label htmlFor="isActive">Active</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="isCountOnly"
+                  checked={formData.isCountOnly}
+                  onCheckedChange={(checked: boolean) => {
+                    setFormData({ ...formData, isCountOnly: checked });
+                    if (!checked) {
+                      if (studentFields.length === 0) setStudentFields(getInitialStudentFields());
+                      if (teacherFields.length === 0) setTeacherFields(getInitialTeacherFields());
+                    }
+                  }}
+                />
+                <div className="flex flex-col">
+                  <Label htmlFor="isCountOnly" className="font-semibold cursor-pointer">
+                    Count-Only Registration
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    Schools will only submit total participant count without filling individual participant details.
+                  </span>
+                </div>
               </div>
 
               {/* Payment Details Section */}
@@ -1306,7 +1386,19 @@ export function Programs() {
               </div>
 
               <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
-                {formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')}
+                {formData.isCountOnly ? (
+                  <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300 text-sm flex items-center gap-3">
+                    <Users className="h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm">Count-Only Mode Active</p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                        Individual participant fields are disabled because supporters will only submit participant counts.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')
+                )}
               </div>
             </div>
             <DialogFooter>
@@ -1392,9 +1484,16 @@ export function Programs() {
                           <TableCell>{formatDate(program.startDate)}</TableCell>
                           <TableCell>{formatDate(program.endDate)}</TableCell>
                           <TableCell>
-                            <Badge variant={status.variant}>
-                              {status.label}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant={status.variant}>
+                                {status.label}
+                              </Badge>
+                              {program.isCountOnly && (
+                                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800 text-[10px]">
+                                  Count Only
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
@@ -1571,6 +1670,27 @@ export function Programs() {
               />
               <Label htmlFor="edit-isActive">Active</Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="edit-isCountOnly"
+                checked={formData.isCountOnly}
+                onCheckedChange={(checked: boolean) => {
+                  setFormData({ ...formData, isCountOnly: checked });
+                  if (!checked) {
+                    if (studentFields.length === 0) setStudentFields(getInitialStudentFields());
+                    if (teacherFields.length === 0) setTeacherFields(getInitialTeacherFields());
+                  }
+                }}
+              />
+              <div className="flex flex-col">
+                <Label htmlFor="edit-isCountOnly" className="font-semibold cursor-pointer">
+                  Count-Only Registration
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  Schools will only submit total participant count without filling individual participant details.
+                </span>
+              </div>
+            </div>
 
             {/* Payment Details Section */}
             <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-800">
@@ -1715,7 +1835,19 @@ export function Programs() {
             </div>
 
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
-              {formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')}
+              {formData.isCountOnly ? (
+                <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300 text-sm flex items-center gap-3">
+                  <Users className="h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+                  <div>
+                    <p className="font-semibold text-xs sm:text-sm">Count-Only Mode Active</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                      Individual participant fields are disabled because supporters will only submit participant counts.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                formData.targetAudience === 'student' ? renderFieldsBuilder('student') : renderFieldsBuilder('teacher')
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -1826,49 +1958,89 @@ export function Programs() {
                   </Select>
                 </div>
 
-                {/* Export Dropdown */}
-                {detailRegistrations.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                        <Download className="h-3.5 w-3.5" />
-                        Export
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "student") && (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => handleExportRegistrations("student", "csv")}
-                          >
-                            Export Students (CSV)
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleExportRegistrations("student", "pdf")}
-                          >
-                            Export Students (PDF)
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "teacher") && (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => handleExportRegistrations("teacher", "csv")}
-                          >
-                            Export Teachers (CSV)
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleExportRegistrations("teacher", "pdf")}
-                          >
-                            Export Teachers (PDF)
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                {/* Submission Date Filter Dropdown */}
+                <div className="w-36 sm:w-44">
+                  <Select value={detailDateFilter} onValueChange={setDetailDateFilter}>
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                      <SelectValue placeholder="Date: All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">Date: All</SelectItem>
+                      {availableSubmissionDates.map((d) => (
+                        <SelectItem key={d.key} value={d.key}>{d.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sort Order Dropdown */}
+                <div className="w-48 sm:w-60">
+                  <Select value={detailSortOrder} onValueChange={(val: "forane" | "date-desc" | "date-asc" | "name-asc" | "name-desc") => setDetailSortOrder(val)}>
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                      <SelectValue placeholder="Sort Parishes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="forane">Forane Sorting</SelectItem>
+                      <SelectItem value="date-desc">Parish: Newest Registered First</SelectItem>
+                      <SelectItem value="date-asc">Parish: Oldest Registered First</SelectItem>
+                      <SelectItem value="name-asc">Parish Name (A to Z)</SelectItem>
+                      <SelectItem value="name-desc">Parish Name (Z to A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
+
+            {/* Centered Green Export Button Bar */}
+            {detailRegistrations.length > 0 && (
+              <div className="flex justify-center items-center w-full py-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="h-8.5 px-5 text-xs font-semibold gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm border border-emerald-500 rounded-lg transition-all"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-52">
+                    {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "student") && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("student", "csv")}
+                          className="cursor-pointer"
+                        >
+                          Export Students (CSV)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("student", "pdf")}
+                          className="cursor-pointer font-medium text-emerald-700 dark:text-emerald-400"
+                        >
+                          Export Students (PDF)
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {(selectedProgram?.targetAudience === undefined || selectedProgram.targetAudience === "both" || selectedProgram.targetAudience === "teacher") && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("teacher", "csv")}
+                          className="cursor-pointer"
+                        >
+                          Export Teachers (CSV)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleExportRegistrations("teacher", "pdf")}
+                          className="cursor-pointer font-medium text-emerald-700 dark:text-emerald-400"
+                        >
+                          Export Teachers (PDF)
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
 
             {detailLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -1952,12 +2124,64 @@ export function Programs() {
                     ? selectedProgram?.studentFields || []
                     : selectedProgram?.teacherFields || [];
 
-                  const uniqueSchools = Array.from(new Set(regs.map((r: ProgramRegistration) => r.schoolName))).sort();
+                  // Group parishes and sort them by submission date (which parish registered first/last) or forane/alphabetically
+                  const parishMap = new Map<string, { schoolName: string; forane: string; submissionTime: number; dateFormatted: string }>();
+                  regs.forEach((r: ProgramRegistration) => {
+                    const sName = r.schoolName || 'Unknown Parish';
+                    const schoolInfo = users.find((u: UserData) => u.uid === r.schoolUserId || u.id === r.schoolUserId);
+                    const fName = schoolInfo?.forane || 'Unknown Forane';
+                    const t = r.submittedAt?.toMillis ? r.submittedAt.toMillis() : (r.submittedAt ? new Date(r.submittedAt).getTime() : 0);
+                    const dStr = r.submittedAt ? r.submittedAt.toDate().toLocaleDateString() : '';
+                    if (!parishMap.has(sName)) {
+                      parishMap.set(sName, { schoolName: sName, forane: fName, submissionTime: t, dateFormatted: dStr });
+                    } else {
+                      const entry = parishMap.get(sName)!;
+                      if (t > 0 && (entry.submissionTime === 0 || t < entry.submissionTime)) {
+                        entry.submissionTime = t;
+                        entry.dateFormatted = dStr;
+                      }
+                    }
+                  });
+
+                  const sortedParishes = Array.from(parishMap.values()).sort((a, b) => {
+                    if (detailSortOrder === 'forane') {
+                      const foraneComp = a.forane.localeCompare(b.forane);
+                      if (foraneComp !== 0) return foraneComp;
+                      return a.schoolName.localeCompare(b.schoolName);
+                    }
+                    if (detailSortOrder === 'name-asc') {
+                      return a.schoolName.localeCompare(b.schoolName);
+                    }
+                    if (detailSortOrder === 'name-desc') {
+                      return b.schoolName.localeCompare(a.schoolName);
+                    }
+                    if (detailSortOrder === 'date-asc') {
+                      if (a.submissionTime > 0 && b.submissionTime > 0 && a.submissionTime !== b.submissionTime) {
+                        return a.submissionTime - b.submissionTime;
+                      }
+                      if (a.submissionTime > 0 && b.submissionTime === 0) return -1;
+                      if (b.submissionTime > 0 && a.submissionTime === 0) return 1;
+                      return a.schoolName.localeCompare(b.schoolName);
+                    }
+                    // date-desc (default)
+                    if (a.submissionTime > 0 && b.submissionTime > 0 && a.submissionTime !== b.submissionTime) {
+                      return b.submissionTime - a.submissionTime;
+                    }
+                    if (a.submissionTime > 0 && b.submissionTime === 0) return -1;
+                    if (b.submissionTime > 0 && a.submissionTime === 0) return 1;
+                    return a.schoolName.localeCompare(b.schoolName);
+                  });
 
                   return (
                     <div className="space-y-6">
-                      {uniqueSchools.map(schoolName => {
-                        const schoolRegs = regs.filter((r: ProgramRegistration) => r.schoolName === schoolName);
+                      {sortedParishes.map(({ schoolName, dateFormatted }) => {
+                        const rawSchoolRegs = regs.filter((r: ProgramRegistration) => (r.schoolName || 'Unknown Parish') === schoolName);
+                        // Sort members alphabetically by student/teacher name
+                        const schoolRegs = [...rawSchoolRegs].sort((a, b) => {
+                          const nameA = a.studentName || '';
+                          const nameB = b.studentName || '';
+                          return nameA.localeCompare(nameB);
+                        });
                         const totalSchoolCount = schoolRegs.reduce(
                           (sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1),
                           0
@@ -1982,8 +2206,15 @@ export function Programs() {
                         const showPaymentAmount = pd?.isRequired && schoolRegFee > 0;
                         return (
                           <div key={schoolName} className="space-y-3">
-                            <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center">
-                              <span>{schoolName}</span>
+                            <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center flex-wrap gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span>{schoolName}</span>
+                                {dateFormatted && (
+                                  <Badge variant="secondary" className="text-[11px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                    Submitted: {dateFormatted}
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2">
                                 {showPaymentAmount && (
                                   <Badge className="text-xs bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
@@ -2009,7 +2240,20 @@ export function Programs() {
                                       <TableHead>Payment Receipt</TableHead>
                                     )}
                                     <TableHead>Status</TableHead>
-                                    <TableHead>Submitted</TableHead>
+                                    <TableHead
+                                      className="cursor-pointer select-none hover:text-blue-600 transition-colors"
+                                      onClick={() => setDetailSortOrder(prev => prev === 'date-desc' ? 'date-asc' : 'date-desc')}
+                                      title="Click to toggle submission date sort"
+                                    >
+                                      <div className="flex items-center gap-1">
+                                        <span>Submitted</span>
+                                        {detailSortOrder === 'date-desc' ? (
+                                          <ArrowDown className="h-3 w-3 text-blue-600" />
+                                        ) : detailSortOrder === 'date-asc' ? (
+                                          <ArrowUp className="h-3 w-3 text-blue-600" />
+                                        ) : null}
+                                      </div>
+                                    </TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>

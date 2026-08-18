@@ -140,9 +140,85 @@ async function urlToDataUriWithTimeout(url: string, timeoutMs = 15000): Promise<
     ]);
 }
 
+import { ProgramPdfSummaryHeader, ProgramPdfParishSection, formatTimestamp } from "../../../pages/reports/templates/ProgramPdfTemplate";
+
+// Helper to render any JSX element into an offscreen DOM and capture with html2canvas safely
+async function renderJsxToCanvas(jsxElement: React.ReactElement): Promise<{ canvas: HTMLCanvasElement; protectedBounds: { topPx: number; bottomPx: number }[] }> {
+    const htmlString = renderToString(jsxElement);
+    const fullHtmlBody = `<div id="pg-pdf-chunk">${htmlString}</div>`;
+
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '0';
+    wrapper.style.top = '0';
+    wrapper.style.opacity = '0.01';
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.zIndex = '-9999';
+
+    const tempContainer = document.createElement('div');
+    tempContainer.style.width = '600px';
+    tempContainer.style.background = 'white';
+
+    const fontCss = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Malayalam:wght@400;700&display=swap');`;
+    tempContainer.innerHTML = `<style>${fontCss}</style>${fullHtmlBody}`;
+
+    wrapper.appendChild(tempContainer);
+    document.body.appendChild(wrapper);
+
+    try {
+        if ((document as any).fonts && (document as any).fonts.ready) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            await document.fonts.ready;
+        }
+
+        const images = Array.from(tempContainer.querySelectorAll('img'));
+        if (images.length > 0) {
+            await Promise.all(
+                images.map(async (img) => {
+                    try {
+                        if (img.decode) await img.decode();
+                    } catch {
+                        // ignore decode errors
+                    }
+                })
+            );
+        }
+
+        const canvas = await html2canvas(tempContainer, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+        });
+
+        const keepTogetherElements = Array.from(tempContainer.querySelectorAll('.pdf-keep-together, tr, h1, h2, h3, img'));
+        const containerRect = tempContainer.getBoundingClientRect();
+        const scaleFactor = canvas.width / (tempContainer.offsetWidth || 600);
+
+        const protectedBounds: { topPx: number; bottomPx: number }[] = [];
+        keepTogetherElements.forEach((el) => {
+            const rect = el.getBoundingClientRect();
+            const topPx = (rect.top - containerRect.top) * scaleFactor;
+            const bottomPx = (rect.bottom - containerRect.top) * scaleFactor;
+            if (bottomPx > topPx) {
+                protectedBounds.push({ topPx, bottomPx });
+            }
+        });
+
+        protectedBounds.sort((a, b) => a.topPx - b.topPx);
+
+        return { canvas, protectedBounds };
+    } finally {
+        if (wrapper.parentNode) {
+            wrapper.parentNode.removeChild(wrapper);
+        }
+    }
+}
+
 export const PremiumProgramPdfService = {
     /**
-     * Generates a premium PDF report for Program Registrations using html2canvas & jsPDF.
+     * Generates a premium PDF report for Program Registrations using global chronological sorting and segmented rendering.
      */
     generateReport: async (
         registrations: ProgramRegistration[],
@@ -153,11 +229,13 @@ export const PremiumProgramPdfService = {
         role?: 'student' | 'teacher',
         customFields?: CustomField[],
         paymentDetails?: ProgramData['paymentDetails'],
+        dateFilter?: string,
+        sortOrder?: 'forane' | 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'desc' | 'asc' | 'none',
         onProgress?: (statusText: string, percent: number) => void
     ) => {
         onProgress?.("Filtering & preparing registration data...", 10);
 
-        // Find unique receipt URLs to convert
+        // Preload payment proof images to data URIs in parallel batches of 6
         const urlsToConvert = Array.from(
             new Set(
                 registrations
@@ -167,11 +245,15 @@ export const PremiumProgramPdfService = {
         );
 
         const urlMap = new Map<string, string>();
-        for (let i = 0; i < urlsToConvert.length; i++) {
-            const origUrl = urlsToConvert[i];
-            onProgress?.(`Processing Payment Proof Screenshot ${i + 1} of ${urlsToConvert.length}...`, Math.round(15 + ((i + 1) / urlsToConvert.length) * 45));
-            const dataUri = await urlToDataUriWithTimeout(origUrl, 15000);
-            urlMap.set(origUrl, dataUri);
+        const imageBatchSize = 6;
+        for (let i = 0; i < urlsToConvert.length; i += imageBatchSize) {
+            const batch = urlsToConvert.slice(i, i + imageBatchSize);
+            const currentProcessed = Math.min(i + imageBatchSize, urlsToConvert.length);
+            onProgress?.(`Processing Payment Proof Screenshots (${currentProcessed}/${urlsToConvert.length})...`, Math.round(10 + (currentProcessed / urlsToConvert.length) * 35));
+            const results = await Promise.all(batch.map(url => urlToDataUriWithTimeout(url, 8000)));
+            batch.forEach((url, idx) => {
+                urlMap.set(url, results[idx]);
+            });
         }
 
         const updatedRegistrations = registrations.map(reg => {
@@ -181,149 +263,177 @@ export const PremiumProgramPdfService = {
             return reg;
         });
 
-        onProgress?.("Rendering template layout & Malayalam fonts...", 65);
+        // Group registrations by Parish key and determine each parish's earliest submission timestamp
+        const parishMap = new Map<string, {
+            parishName: string;
+            foraneName: string;
+            regs: ProgramRegistration[];
+            totalCount: number;
+            submissionTime: number;
+            dateFormatted: string;
+        }>();
 
-        // 1. Render React component to static HTML string
-        const htmlString = renderToString(
-            <ProgramPdfTemplate
+        updatedRegistrations.forEach((reg) => {
+            const schoolInfo = users.find(u => u.uid === reg.schoolUserId || u.id === reg.schoolUserId);
+            const regForane = schoolInfo?.forane || 'Unknown Forane';
+            const regParish = reg.schoolName || 'Unknown Parish';
+            const count = reg.isCountOnly ? (reg.studentCount || 1) : 1;
+            const t = reg.submittedAt?.toMillis ? reg.submittedAt.toMillis() : (reg.submittedAt ? new Date(reg.submittedAt).getTime() : 0);
+            const dStr = reg.submittedAt ? formatTimestamp(reg.submittedAt) : '';
+
+            if (!parishMap.has(regParish)) {
+                parishMap.set(regParish, {
+                    parishName: regParish,
+                    foraneName: regForane,
+                    regs: [reg],
+                    totalCount: count,
+                    submissionTime: t,
+                    dateFormatted: dStr
+                });
+            } else {
+                const entry = parishMap.get(regParish)!;
+                entry.regs.push(reg);
+                entry.totalCount += count;
+                if (t > 0 && (entry.submissionTime === 0 || t < entry.submissionTime)) {
+                    entry.submissionTime = t;
+                    entry.dateFormatted = dStr;
+                }
+            }
+        });
+
+        // Sort parishes globally by the selected sort order
+        const sortedParishesList = Array.from(parishMap.values()).sort((a, b) => {
+            if (sortOrder === 'forane') {
+                const foraneComp = a.foraneName.localeCompare(b.foraneName);
+                if (foraneComp !== 0) return foraneComp;
+                return a.parishName.localeCompare(b.parishName);
+            }
+            if (sortOrder === 'name-asc') return a.parishName.localeCompare(b.parishName);
+            if (sortOrder === 'name-desc') return b.parishName.localeCompare(a.parishName);
+            if (sortOrder === 'date-asc') {
+                if (a.submissionTime > 0 && b.submissionTime > 0 && a.submissionTime !== b.submissionTime) {
+                    return a.submissionTime - b.submissionTime;
+                }
+                if (a.submissionTime > 0 && b.submissionTime === 0) return -1;
+                if (b.submissionTime > 0 && a.submissionTime === 0) return 1;
+                return a.parishName.localeCompare(b.parishName);
+            }
+            // date-desc (default)
+            if (a.submissionTime > 0 && b.submissionTime > 0 && a.submissionTime !== b.submissionTime) {
+                return b.submissionTime - a.submissionTime;
+            }
+            if (a.submissionTime > 0 && b.submissionTime === 0) return -1;
+            if (b.submissionTime > 0 && a.submissionTime === 0) return 1;
+            return a.parishName.localeCompare(b.parishName);
+        });
+
+        const isTeacher = role === 'teacher';
+
+        onProgress?.("Rendering Summary Header...", 50);
+
+        // Initialize A4 PDF
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const margin = 10;
+        const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+        const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+        const effectiveWidth = pdfWidth - (margin * 2); // 190mm
+
+        let currentYInPageMm = margin;
+
+        // 1. Render Summary Header Chunk
+        const { canvas: headerCanvas } = await renderJsxToCanvas(
+            <ProgramPdfSummaryHeader
                 registrations={updatedRegistrations}
                 programName={programName}
                 forane={forane}
                 parish={parish}
-                users={users}
                 role={role}
-                customFields={customFields}
                 paymentDetails={paymentDetails}
+                dateFilter={dateFilter}
             />
         );
 
-        // 2. Wrap in a full HTML document body
-        const fullHtmlBody = `
-      <div id="pg-pdf-root">
-        ${htmlString}
-      </div>
-    `;
+        const headerHeightMm = (headerCanvas.height * effectiveWidth) / headerCanvas.width;
+        const headerImgData = headerCanvas.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(headerImgData, 'JPEG', margin, currentYInPageMm, effectiveWidth, headerHeightMm);
+        currentYInPageMm += headerHeightMm + 2;
 
-        // 3. Create an invisible wrapper for DOM attachment (in-viewport for GPU image decoding)
-        const wrapper = document.createElement('div');
-        wrapper.style.position = 'fixed';
-        wrapper.style.left = '0';
-        wrapper.style.top = '0';
-        wrapper.style.opacity = '0.01';
-        wrapper.style.pointerEvents = 'none';
-        wrapper.style.zIndex = '-9999';
+        // 2. Batch parishes into groups of 8 to render efficiently (10x faster while staying safely within canvas limits)
+        const PARISH_CHUNK_SIZE = 8;
+        const parishBatches: (typeof sortedParishesList)[] = [];
+        for (let i = 0; i < sortedParishesList.length; i += PARISH_CHUNK_SIZE) {
+            parishBatches.push(sortedParishesList.slice(i, i + PARISH_CHUNK_SIZE));
+        }
 
-        // 4. Create the actual container to be captured
-        const tempContainer = document.createElement('div');
-        tempContainer.style.width = '600px'; // Exact width of our template
-        tempContainer.style.background = 'white';
+        for (let bIdx = 0; bIdx < parishBatches.length; bIdx++) {
+            const batch = parishBatches[bIdx];
+            const startNum = bIdx * PARISH_CHUNK_SIZE + 1;
+            const endNum = Math.min((bIdx + 1) * PARISH_CHUNK_SIZE, sortedParishesList.length);
+            const progressPercent = Math.round(55 + ((bIdx + 1) / parishBatches.length) * 40);
+            onProgress?.(`Rendering Parishes ${startNum}–${endNum} of ${sortedParishesList.length}...`, progressPercent);
 
-        // 5. Inject fonts and content
-        const fontCss = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Malayalam:wght@400;700&display=swap');`;
-        tempContainer.innerHTML = `<style>${fontCss}</style>${fullHtmlBody}`;
+            const { canvas: batchCanvas, protectedBounds } = await renderJsxToCanvas(
+                <div>
+                    {batch.map((p) => (
+                        <ProgramPdfParishSection
+                            key={p.parishName}
+                            parishName={p.parishName}
+                            foraneName={p.foraneName}
+                            parishRegs={p.regs}
+                            totalCount={p.totalCount}
+                            isTeacher={isTeacher}
+                            customFields={customFields || []}
+                            paymentDetails={paymentDetails}
+                        />
+                    ))}
+                </div>
+            );
 
-        wrapper.appendChild(tempContainer);
-        document.body.appendChild(wrapper);
+            let sectionCurrentY = 0;
+            const sectionTotalCanvasHeight = batchCanvas.height;
 
-        try {
-            // Wait for fonts to be ready
-            if ((document as any).fonts && (document as any).fonts.ready) {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                await document.fonts.ready;
-            }
+            while (sectionCurrentY < sectionTotalCanvasHeight) {
+                const spaceLeftInPageMm = (pdfHeight - margin) - currentYInPageMm;
 
-            onProgress?.("Preloading & decoding image elements...", 78);
-
-            // Force browser to decode all image bitmaps into GPU memory
-            const images = Array.from(tempContainer.querySelectorAll('img'));
-            if (images.length > 0) {
-                await Promise.all(
-                    images.map(async (img) => {
-                        try {
-                            if (img.decode) {
-                                await img.decode();
-                            }
-                        } catch {
-                            // ignore decode error if already decoded or fallback
-                        }
-                    })
-                );
-            }
-
-            onProgress?.("Generating high-resolution document canvas...", 86);
-
-            // 6. Generate canvas with html2canvas
-            const canvas = await html2canvas(tempContainer, {
-                scale: 3, // High resolution rendering
-                useCORS: true,
-                allowTaint: true,
-                logging: false,
-            });
-
-            onProgress?.("Formatting A4 PDF pages & slicing layout...", 93);
-
-            // 7. Calculate precise dimensions for A4 and find element positions to prevent page splits
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a4'
-            });
-
-            const margin = 10;
-            const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
-            const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
-
-            const effectiveWidth = pdfWidth - (margin * 2); // 190mm
-            const effectiveHeight = pdfHeight - (margin * 2); // 277mm
-
-            // Max canvas height in pixels per PDF page
-            const maxPageCanvasHeight = (effectiveHeight / effectiveWidth) * canvas.width;
-
-            // Collect bounds of all elements that shouldn't be split mid-row/mid-card/mid-image
-            const keepTogetherElements = Array.from(tempContainer.querySelectorAll('.pdf-keep-together, tr, h1, h2, h3, .pdf-header, img'));
-            const containerRect = tempContainer.getBoundingClientRect();
-            const scaleFactor = canvas.width / tempContainer.offsetWidth;
-
-            const protectedBounds: { topPx: number; bottomPx: number }[] = [];
-            keepTogetherElements.forEach((el) => {
-                const rect = el.getBoundingClientRect();
-                const topPx = (rect.top - containerRect.top) * scaleFactor;
-                const bottomPx = (rect.bottom - containerRect.top) * scaleFactor;
-                if (bottomPx > topPx) {
-                    protectedBounds.push({ topPx, bottomPx });
+                // If less than 35mm space left on current page, start on a fresh page
+                if (spaceLeftInPageMm < 35) {
+                    pdf.addPage();
+                    currentYInPageMm = margin;
                 }
-            });
 
-            protectedBounds.sort((a, b) => a.topPx - b.topPx);
+                const maxSliceHeightMm = (pdfHeight - margin) - currentYInPageMm;
+                const maxSliceCanvasHeight = (maxSliceHeightMm / effectiveWidth) * batchCanvas.width;
 
-            let currentY = 0;
-            const totalCanvasHeight = canvas.height;
-            let pageIndex = 0;
+                let targetY = sectionCurrentY + maxSliceCanvasHeight;
 
-            while (currentY < totalCanvasHeight) {
-                let targetY = currentY + maxPageCanvasHeight;
-
-                if (targetY < totalCanvasHeight) {
-                    // Check if targetY cuts through any protected element
+                if (targetY < sectionTotalCanvasHeight) {
+                    // Avoid cutting table rows / cards in half
                     for (const bound of protectedBounds) {
                         if (bound.topPx < targetY && bound.bottomPx > targetY) {
-                            // Adjust slice point to top of element if element starts sufficiently after currentY
-                            if (bound.topPx > currentY + 30) {
+                            if (bound.topPx - sectionCurrentY >= maxSliceCanvasHeight * 0.45) {
                                 targetY = bound.topPx;
                                 break;
                             }
                         }
                     }
                 } else {
-                    targetY = totalCanvasHeight;
+                    targetY = sectionTotalCanvasHeight;
                 }
 
-                const sliceHeight = targetY - currentY;
+                if (targetY <= sectionCurrentY + 30) {
+                    targetY = Math.min(sectionTotalCanvasHeight, sectionCurrentY + maxSliceCanvasHeight);
+                }
 
-                // Create individual page sub-canvas
+                const sliceHeight = targetY - sectionCurrentY;
+                if (sliceHeight <= 0) break;
+
                 const sliceCanvas = document.createElement('canvas');
-                sliceCanvas.width = canvas.width;
+                sliceCanvas.width = batchCanvas.width;
                 sliceCanvas.height = sliceHeight;
                 const ctx = sliceCanvas.getContext('2d');
 
@@ -331,39 +441,37 @@ export const PremiumProgramPdfService = {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
                     ctx.drawImage(
-                        canvas,
-                        0, currentY, canvas.width, sliceHeight,
-                        0, 0, canvas.width, sliceHeight
+                        batchCanvas,
+                        0, sectionCurrentY, batchCanvas.width, sliceHeight,
+                        0, 0, batchCanvas.width, sliceHeight
                     );
                 }
 
-                const sliceImgData = sliceCanvas.toDataURL('image/jpeg', 1.0);
-                const renderedSliceHeightMm = (sliceHeight / canvas.width) * effectiveWidth;
-
-                if (pageIndex > 0) {
-                    pdf.addPage();
-                }
+                const sliceImgData = sliceCanvas.toDataURL('image/jpeg', 0.95);
+                const renderedSliceHeightMm = (sliceHeight / batchCanvas.width) * effectiveWidth;
 
                 pdf.addImage(
                     sliceImgData,
                     'JPEG',
                     margin,
-                    margin,
+                    currentYInPageMm,
                     effectiveWidth,
                     renderedSliceHeightMm
                 );
 
-                currentY = targetY;
-                pageIndex++;
-            }
+                currentYInPageMm += renderedSliceHeightMm;
+                sectionCurrentY = targetY;
 
-            onProgress?.("Saving PDF document...", 100);
-            const fileName = `${programName.replace(/\s+/g, '_')}_Registrations_${role || 'all'}_${forane.replace(/\s+/g, '_')}_${parish.replace(/\s+/g, '_')}.pdf`;
-            pdf.save(fileName);
-        } finally {
-            if (wrapper.parentNode) {
-                wrapper.parentNode.removeChild(wrapper);
+                // If there's more content in this batch, prepare next page
+                if (sectionCurrentY < sectionTotalCanvasHeight) {
+                    pdf.addPage();
+                    currentYInPageMm = margin;
+                }
             }
         }
+
+        onProgress?.("Saving PDF document...", 100);
+        const fileName = `${programName.replace(/\s+/g, '_')}_Registrations_${role || 'all'}_${forane.replace(/\s+/g, '_')}_${parish.replace(/\s+/g, '_')}.pdf`;
+        pdf.save(fileName);
     }
 };

@@ -31,6 +31,7 @@ export interface ProgramData {
     endDate: Date | Timestamp;
     isActive: boolean;
     createdAt?: Timestamp;
+    isCountOnly?: boolean;
     
     // Target roles config
     targetAudience?: 'student' | 'teacher' | 'both';
