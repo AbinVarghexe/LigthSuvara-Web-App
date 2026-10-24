@@ -347,3 +347,77 @@ export const getAnimatorStats = async (year: string = getAcademicYear()) => {
         fullyAssigned: fullyAssignedInYear.length
     };
 };
+
+export interface BulkAnimatorRow {
+    name: string;
+    email: string;
+    password?: string;
+    phoneNumber?: string;
+    address?: string;
+    parishId: string;
+    parishName: string;
+}
+
+export const bulkCreateAnimators = async (
+    animators: BulkAnimatorRow[]
+): Promise<{
+    success: boolean;
+    created: number;
+    failed: number;
+    errors: { email: string; error: string }[];
+}> => {
+    if (!animators || animators.length === 0) {
+        return { success: true, created: 0, failed: 0, errors: [] };
+    }
+
+    const payload = animators.map(a => ({
+        name: a.name.trim(),
+        email: a.email.trim().toLowerCase(),
+        password: a.password || 'Suvara@123',
+        role: 'animator' as const,
+        parishId: a.parishId,
+        parishName: a.parishName,
+        phoneNumber: a.phoneNumber?.trim() || '',
+        address: a.address?.trim() || '',
+    }));
+
+    // Call bulkCreateUsers Cloud Function through userService
+    const result = await bulkCreateUsers(payload as any);
+
+    // Collect all emails that were not in errors
+    const errorEmails = new Set((result.errors || []).map(e => (e.email || '').toLowerCase().trim()));
+    const createdEmails = payload
+        .map(p => p.email)
+        .filter(email => !errorEmails.has(email));
+
+    // Initialize animator_assignments for successfully created animators
+    if (createdEmails.length > 0) {
+        try {
+            const usersRef = collection(db, 'users');
+            const chunkSize = 30;
+            for (let i = 0; i < createdEmails.length; i += chunkSize) {
+                const chunk = createdEmails.slice(i, i + chunkSize);
+                const q = query(usersRef, where('email', 'in', chunk));
+                const snap = await getDocs(q);
+
+                for (const userDoc of snap.docs) {
+                    const uData = userDoc.data();
+                    const assignmentDocRef = doc(db, 'animator_assignments', userDoc.id);
+                    const assignmentDoc = await getDoc(assignmentDocRef);
+                    if (!assignmentDoc.exists()) {
+                        await setDoc(assignmentDocRef, {
+                            animatorName: uData.name || uData.fullName || '',
+                            animatorEmail: uData.email || '',
+                            assignments: []
+                        });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error creating animator_assignments documents in bulk:', err);
+        }
+    }
+
+    return result;
+};
+

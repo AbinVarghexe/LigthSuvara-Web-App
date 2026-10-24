@@ -46,11 +46,14 @@ export const ProgramPdfSummaryHeader = ({
     const uniqueSchools = new Set(registrations.map(reg => reg.schoolUserId)).size;
 
     const regFee = paymentDetails?.registrationFee || 0;
+    const isGroup = paymentDetails?.feeType === 'group';
+    const maxMembers = isGroup ? Math.max(1, paymentDetails?.maxMembersPerGroup || 1) : 1;
+    const totalUnits = isGroup ? (totalCount > 0 ? Math.ceil(totalCount / maxMembers) : 0) : totalCount;
     const advType = paymentDetails?.advanceType || 'percentage';
     const advValue = paymentDetails?.advanceValue || 0;
-    const advFeePerHead = advType === 'fixed' ? advValue : regFee * (advValue / 100);
-    const totalExpectedFull = totalCount * regFee;
-    const totalExpectedAdvance = totalCount * advFeePerHead;
+    const advFeePerUnit = advType === 'fixed' ? advValue : regFee * (advValue / 100);
+    const totalExpectedFull = totalUnits * regFee;
+    const totalExpectedAdvance = totalUnits * advFeePerUnit;
 
     const approvedOrLockedRegs = registrations.filter(
         (reg) => reg.status === 'approved_parish' || reg.status === 'locked'
@@ -75,7 +78,8 @@ export const ProgramPdfSummaryHeader = ({
         return sum + count;
     }, 0);
 
-    const totalActualPaidAdvance = totalPaidCount * advFeePerHead;
+    const totalPaidUnits = isGroup ? (totalPaidCount > 0 ? Math.ceil(totalPaidCount / maxMembers) : 0) : totalPaidCount;
+    const totalActualPaidAdvance = totalPaidUnits * advFeePerUnit;
 
     return (
         <div style={{
@@ -135,13 +139,13 @@ export const ProgramPdfSummaryHeader = ({
                         <div style={{ padding: '8px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}>
                             <div style={{ fontSize: '7.5px', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase' }}>Expected Advance</div>
                             <div style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8', marginTop: '1px' }}>₹{formatAmount(totalExpectedAdvance)}</div>
-                            <div style={{ fontSize: '7.5px', color: '#1e40af', marginTop: '1px' }}>₹{formatAmount(advFeePerHead)} / head ({advValue}{advType === 'percentage' ? '%' : ' fixed'})</div>
+                            <div style={{ fontSize: '7.5px', color: '#1e40af', marginTop: '1px' }}>₹{formatAmount(advFeePerUnit)} / {isGroup ? 'team' : 'head'} ({advValue}{advType === 'percentage' ? '%' : ' fixed'})</div>
                         </div>
 
                         <div style={{ padding: '8px 10px', background: '#fefce8', border: '1px solid #fef08a', borderRadius: '6px' }}>
                             <div style={{ fontSize: '7.5px', fontWeight: 700, color: '#854d0e', textTransform: 'uppercase' }}>Actual Paid Adv</div>
                             <div style={{ fontSize: '13px', fontWeight: 800, color: '#a16207', marginTop: '1px' }}>₹{formatAmount(totalActualPaidAdvance)}</div>
-                            <div style={{ fontSize: '7.5px', color: '#854d0e', marginTop: '1px' }}>{totalPaidCount} / {totalCount} Heads Paid</div>
+                            <div style={{ fontSize: '7.5px', color: '#854d0e', marginTop: '1px' }}>{totalPaidCount} / {totalCount} Heads Paid{isGroup ? ` (${totalPaidUnits} teams)` : ''}</div>
                         </div>
                     </>
                 ) : (
@@ -167,7 +171,7 @@ export const ProgramPdfSummaryHeader = ({
                 }}>
                     <div>
                         <span style={{ fontWeight: 700, color: '#334155' }}>Program Fee Structure: </span>
-                        <span style={{ color: '#475569' }}>Total Fee: ₹{formatAmount(regFee)} per head | Advance Required: ₹{formatAmount(advFeePerHead)}</span>
+                        <span style={{ color: '#475569' }}>Total Fee: ₹{formatAmount(regFee)} {isGroup ? `per team (max ${maxMembers} members)` : 'per head'} | Advance Required: ₹{formatAmount(advFeePerUnit)} {isGroup ? 'per team' : ''}</span>
                     </div>
                     <div>
                         <span style={{ fontWeight: 700, color: '#334155' }}>Total Expected Full: </span>
@@ -199,9 +203,11 @@ export const ProgramPdfParishSection = ({
     paymentDetails,
 }: ProgramPdfParishSectionProps) => {
     const regFee = paymentDetails?.registrationFee || 0;
+    const isGroup = paymentDetails?.feeType === 'group';
+    const maxMembers = isGroup ? Math.max(1, paymentDetails?.maxMembersPerGroup || 1) : 1;
     const advType = paymentDetails?.advanceType || 'percentage';
     const advValue = paymentDetails?.advanceValue || 0;
-    const advFeePerHead = advType === 'fixed' ? advValue : regFee * (advValue / 100);
+    const advFeePerUnit = advType === 'fixed' ? advValue : regFee * (advValue / 100);
 
     const sortedRegs = [...parishRegs].sort((a, b) => {
         const nameA = a.studentName || '';
@@ -212,8 +218,10 @@ export const ProgramPdfParishSection = ({
     const parishPaidCount = sortedRegs
         .filter((r) => !!r.paymentScreenshotUrl)
         .reduce((sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
-    const parishPaidAdv = parishPaidCount * advFeePerHead;
-    const parishExpectedAdv = totalCount * advFeePerHead;
+    const parishUnits = isGroup ? (totalCount > 0 ? Math.ceil(totalCount / maxMembers) : 0) : totalCount;
+    const parishPaidUnits = isGroup ? (parishPaidCount > 0 ? Math.ceil(parishPaidCount / maxMembers) : 0) : parishPaidCount;
+    const parishPaidAdv = parishPaidUnits * advFeePerUnit;
+    const parishExpectedAdv = parishUnits * advFeePerUnit;
 
     const earliestReg = sortedRegs.find((r) => !!r.submittedAt);
     const parishDateStr = earliestReg?.submittedAt ? formatTimestamp(earliestReg.submittedAt) : '';

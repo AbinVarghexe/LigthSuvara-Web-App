@@ -1,0 +1,3754 @@
+From 4dbca363c0b1befdd86bdeb09cbbbb6ad2da3947 Mon Sep 17 00:00:00 2001
+From: AlinsBinuP <alinsbinupalamoottil@gmail.com>
+Date: Sat, 24 Oct 2026 13:13:19 +0530
+Subject: [PATCH] feat(kalolsavam): complete kalolsavam management
+ implementation snapshot before archiving
+
+---
+ src/components/layout/Sidebar.tsx             |    7 +
+ .../components/KalolsavamUserFormDialog.tsx   |  364 +++++
+ .../components/LiveDisplayBoard.tsx           |  440 ++++++
+ .../components/LiveStageControlDialog.tsx     |  275 ++++
+ .../components/ProgramFormDialog.tsx          |  245 ++++
+ .../components/ResultUploadDialog.tsx         |  335 +++++
+ .../kalolsavam/components/StageFormDialog.tsx |  174 +++
+ .../kalolsavam/services/kalolsavamService.ts  |  511 +++++++
+ src/features/kalolsavam/types/index.ts        |   95 ++
+ src/pages/kalolsavam/Kalolsavam.tsx           | 1184 +++++++++++++++++
+ src/routes/index.tsx                          |    2 +
+ 11 files changed, 3632 insertions(+)
+ create mode 100644 src/features/kalolsavam/components/KalolsavamUserFormDialog.tsx
+ create mode 100644 src/features/kalolsavam/components/LiveDisplayBoard.tsx
+ create mode 100644 src/features/kalolsavam/components/LiveStageControlDialog.tsx
+ create mode 100644 src/features/kalolsavam/components/ProgramFormDialog.tsx
+ create mode 100644 src/features/kalolsavam/components/ResultUploadDialog.tsx
+ create mode 100644 src/features/kalolsavam/components/StageFormDialog.tsx
+ create mode 100644 src/features/kalolsavam/services/kalolsavamService.ts
+ create mode 100644 src/features/kalolsavam/types/index.ts
+ create mode 100644 src/pages/kalolsavam/Kalolsavam.tsx
+
+diff --git a/src/components/layout/Sidebar.tsx b/src/components/layout/Sidebar.tsx
+index 40bd309..54432f4 100644
+--- a/src/components/layout/Sidebar.tsx
++++ b/src/components/layout/Sidebar.tsx
+@@ -23,6 +23,7 @@ import {
+   Radio,
+   BookOpen,
+   Flame,
++  Trophy,
+ } from "lucide-react";
+ import { useState } from "react";
+ import { useAuth } from "../../context/AuthContext";
+@@ -86,6 +87,12 @@ const navigation: NavItem[] = [
+   { name: "Saints", href: "/saints", icon: Sparkles },
+   { name: "Catechetical Hour (വിശ്വാസപരിശീലന മണിക്കൂർ)", href: "/catechism", icon: BookOpen },
+   { name: "Word of Life (ജീവൻ്റെ വചനം)", href: "/word-of-life", icon: Flame },
++  {
++    name: "Kalolsavam (കലോത്സവം)",
++    href: "/kalolsavam",
++    icon: Trophy,
++    adminOnly: true,
++  },
+   {
+     name: "Theme & Programs",
+     href: "/theme",
+diff --git a/src/features/kalolsavam/components/KalolsavamUserFormDialog.tsx b/src/features/kalolsavam/components/KalolsavamUserFormDialog.tsx
+new file mode 100644
+index 0000000..9887a0a
+--- /dev/null
++++ b/src/features/kalolsavam/components/KalolsavamUserFormDialog.tsx
+@@ -0,0 +1,364 @@
++import { useState, useEffect } from "react";
++import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
++import { Button } from "../../../components/ui/button";
++import { Input } from "../../../components/ui/input";
++import { Label } from "../../../components/ui/label";
++import { Checkbox } from "../../../components/ui/checkbox";
++import { Switch } from "../../../components/ui/switch";
++import { KalolsavamUser, KalolsavamStage, KalolsavamProgram } from "../types";
++import { createKalolsavamUser, updateKalolsavamUser, updateStage } from "../services/kalolsavamService";
++import { toast } from "sonner";
++import { Loader2, ShieldCheck, Eye, EyeOff, Lock, Mail } from "lucide-react";
++
++interface KalolsavamUserFormDialogProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  user: KalolsavamUser | null;
++  stages: KalolsavamStage[];
++  programs: KalolsavamProgram[];
++}
++
++export function KalolsavamUserFormDialog({
++  open,
++  onOpenChange,
++  user,
++  stages,
++  programs,
++}: KalolsavamUserFormDialogProps) {
++  const [name, setName] = useState("");
++  const [email, setEmail] = useState("");
++  const [password, setPassword] = useState("");
++  const [showPassword, setShowPassword] = useState(false);
++  const [phone, setPhone] = useState("");
++  const [assignedStageIds, setAssignedStageIds] = useState<string[]>([]);
++  const [assignedProgramIds, setAssignedProgramIds] = useState<string[]>([]);
++  const [isActive, setIsActive] = useState(true);
++  const [loading, setLoading] = useState(false);
++
++  useEffect(() => {
++    if (user) {
++      setName(user.name || "");
++      setEmail(user.email || "");
++      setPassword("");
++      setPhone(user.phone || "");
++      setAssignedStageIds(user.assignedStageIds || []);
++      setAssignedProgramIds(user.assignedProgramIds || []);
++      setIsActive(user.isActive ?? true);
++    } else {
++      setName("");
++      setEmail("");
++      setPassword("");
++      setPhone("");
++      setAssignedStageIds([]);
++      setAssignedProgramIds([]);
++      setIsActive(true);
++    }
++  }, [user, open]);
++
++  const toggleStage = (stageId: string) => {
++    setAssignedStageIds((prev) => {
++      const exists = prev.includes(stageId);
++      if (exists) {
++        return prev.filter((id) => id !== stageId);
++      } else {
++        return [...prev, stageId];
++      }
++    });
++
++    // Also clean up programs if stage was removed
++    setAssignedProgramIds((prev) => {
++      const stageProgIds = programs.filter((p) => p.stageId === stageId).map((p) => p.id);
++      return prev.filter((id) => !stageProgIds.includes(id));
++    });
++  };
++
++  const toggleProgram = (progId: string) => {
++    setAssignedProgramIds((prev) => {
++      if (prev.includes(progId)) {
++        return prev.filter((id) => id !== progId);
++      } else {
++        return [...prev, progId];
++      }
++    });
++  };
++
++  // Filter programs that belong to the currently selected stages
++  const relevantPrograms = programs.filter((p) => assignedStageIds.includes(p.stageId));
++
++  const handleSubmit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!name.trim()) {
++      toast.error("Please enter the user's name");
++      return;
++    }
++    if (!email.trim()) {
++      toast.error("Please enter a login email");
++      return;
++    }
++    if (!user && (!password.trim() || password.length < 6)) {
++      toast.error("Please provide a password of at least 6 characters");
++      return;
++    }
++    if (assignedStageIds.length === 0) {
++      toast.error("Please assign at least one stage to this stage manager");
++      return;
++    }
++
++    const assignedStageNames = stages
++      .filter((s) => assignedStageIds.includes(s.id))
++      .map((s) => s.name);
++
++    const assignedProgramNames = programs
++      .filter((p) => assignedProgramIds.includes(p.id))
++      .map((p) => p.title);
++
++    setLoading(true);
++    try {
++      if (user) {
++        await updateKalolsavamUser(user.id, {
++          name: name.trim(),
++          email: email.trim(),
++          phone: phone.trim(),
++          assignedStageIds,
++          assignedStageNames,
++          assignedProgramIds,
++          assignedProgramNames,
++          isActive,
++        });
++
++        // Sync stage documents' assignedUserIds
++        for (const stage of stages) {
++          const isAssigned = assignedStageIds.includes(stage.id);
++          const currentList = stage.assignedUserIds || [];
++          if (isAssigned && !currentList.includes(user.id)) {
++            await updateStage(stage.id, { assignedUserIds: [...currentList, user.id] });
++          } else if (!isAssigned && currentList.includes(user.id)) {
++            await updateStage(stage.id, { assignedUserIds: currentList.filter((id) => id !== user.id) });
++          }
++        }
++
++        toast.success("Stage manager updated successfully!");
++      } else {
++        const newUserId = await createKalolsavamUser(
++          {
++            name: name.trim(),
++            email: email.trim(),
++            phone: phone.trim(),
++            role: "stage_manager",
++            assignedStageIds,
++            assignedStageNames,
++            assignedProgramIds,
++            assignedProgramNames,
++            isActive,
++          },
++          password.trim()
++        );
++
++        // Add user to stages
++        for (const stageId of assignedStageIds) {
++          const stage = stages.find((s) => s.id === stageId);
++          if (stage) {
++            const currentList = stage.assignedUserIds || [];
++            await updateStage(stageId, { assignedUserIds: [...currentList, newUserId] });
++          }
++        }
++
++        toast.success("Stage manager account created successfully with email & password!");
++      }
++      onOpenChange(false);
++    } catch (err: any) {
++      console.error(err);
++      toast.error(err?.message || "Failed to save stage manager account");
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
++        <form onSubmit={handleSubmit}>
++          <DialogHeader>
++            <DialogTitle className="flex items-center gap-2">
++              <ShieldCheck className="w-5 h-5 text-primary" />
++              {user ? "Edit Stage Manager" : "Create Stage Manager User"}
++            </DialogTitle>
++          </DialogHeader>
++
++          <div className="space-y-4 py-4">
++            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
++              <div className="space-y-2">
++                <Label htmlFor="usr-name">Full Name *</Label>
++                <Input
++                  id="usr-name"
++                  value={name}
++                  onChange={(e) => setName(e.target.value)}
++                  placeholder="e.g. Thomas George"
++                  required
++                />
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="usr-phone">Phone Number</Label>
++                <Input
++                  id="usr-phone"
++                  value={phone}
++                  onChange={(e) => setPhone(e.target.value)}
++                  placeholder="e.g. 9876543210"
++                />
++              </div>
++            </div>
++
++            {/* Email & Password Authentication Login Section */}
++            <div className="p-3.5 bg-muted/40 rounded-xl border border-border space-y-3">
++              <span className="text-xs font-bold uppercase tracking-wider text-primary block">
++                Mobile App Login Credentials
++              </span>
++
++              <div className="space-y-2">
++                <Label htmlFor="usr-email" className="text-xs font-semibold flex items-center gap-1.5">
++                  <Mail className="w-3.5 h-3.5" /> Login Email *
++                </Label>
++                <Input
++                  id="usr-email"
++                  type="email"
++                  value={email}
++                  onChange={(e) => setEmail(e.target.value)}
++                  placeholder="stagemanager@example.com"
++                  required
++                />
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="usr-pass" className="text-xs font-semibold flex items-center gap-1.5">
++                  <Lock className="w-3.5 h-3.5" /> Login Password {user ? "(Leave blank to keep existing)" : "*"}
++                </Label>
++                <div className="relative">
++                  <Input
++                    id="usr-pass"
++                    type={showPassword ? "text" : "password"}
++                    value={password}
++                    onChange={(e) => setPassword(e.target.value)}
++                    placeholder={user ? "••••••••" : "Minimum 6 characters"}
++                    className="pr-10"
++                    required={!user}
++                    minLength={6}
++                  />
++                  <button
++                    type="button"
++                    onClick={() => setShowPassword(!showPassword)}
++                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
++                  >
++                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
++                  </button>
++                </div>
++                <p className="text-[11px] text-muted-foreground">
++                  The stage manager will use this email and password to log into the mobile app.
++                </p>
++              </div>
++            </div>
++
++            {/* Stages Assignment */}
++            <div className="space-y-2">
++              <Label className="font-semibold text-sm">
++                Assign Stage(s) to Manage *
++              </Label>
++              <p className="text-xs text-muted-foreground">
++                Select which stage(s) this user has permission to control and update chest numbers for.
++              </p>
++              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto p-2 border rounded-md bg-background">
++                {stages.length === 0 ? (
++                  <p className="text-xs text-muted-foreground col-span-2 py-2">
++                    No stages created yet. Please create a stage first.
++                  </p>
++                ) : (
++                  stages.map((stage) => {
++                    const checked = assignedStageIds.includes(stage.id);
++                    return (
++                      <label
++                        key={stage.id}
++                        className={`flex items-center space-x-2.5 p-2 rounded-md border text-sm cursor-pointer select-none transition-colors ${
++                          checked
++                            ? "bg-primary/10 border-primary text-primary font-medium"
++                            : "bg-muted/20 border-border hover:bg-muted/40"
++                        }`}
++                      >
++                        <Checkbox
++                          checked={checked}
++                          onCheckedChange={() => toggleStage(stage.id)}
++                        />
++                        <span className="truncate">{stage.name}</span>
++                      </label>
++                    );
++                  })
++                )}
++              </div>
++            </div>
++
++            {/* Program Specific Assignment */}
++            {relevantPrograms.length > 0 && (
++              <div className="space-y-2">
++                <Label className="font-semibold text-sm">
++                  Assign Specific Programs (Optional)
++                </Label>
++                <p className="text-xs text-muted-foreground">
++                  Leave all unselected to grant control over ALL programs on the assigned stages.
++                </p>
++                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-h-36 overflow-y-auto p-2 border rounded-md bg-background">
++                  {relevantPrograms.map((prog) => {
++                    const checked = assignedProgramIds.includes(prog.id);
++                    return (
++                      <label
++                        key={prog.id}
++                        className={`flex items-center space-x-2.5 p-2 rounded-md border text-xs cursor-pointer select-none transition-colors ${
++                          checked
++                            ? "bg-primary/10 border-primary text-primary font-medium"
++                            : "bg-muted/20 border-border hover:bg-muted/40"
++                        }`}
++                      >
++                        <Checkbox
++                          checked={checked}
++                          onCheckedChange={() => toggleProgram(prog.id)}
++                        />
++                        <span className="truncate">
++                          {prog.title} ({prog.category})
++                        </span>
++                      </label>
++                    );
++                  })}
++                </div>
++              </div>
++            )}
++
++            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
++              <div>
++                <Label htmlFor="usr-active" className="cursor-pointer font-medium text-sm">
++                  Active Account
++                </Label>
++                <p className="text-xs text-muted-foreground">
++                  When deactivated, this manager cannot log in to update stages.
++                </p>
++              </div>
++              <Switch id="usr-active" checked={isActive} onCheckedChange={setIsActive} />
++            </div>
++          </div>
++
++          <DialogFooter>
++            <Button
++              type="button"
++              variant="outline"
++              onClick={() => onOpenChange(false)}
++              disabled={loading}
++            >
++              Cancel
++            </Button>
++            <Button type="submit" disabled={loading}>
++              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
++              {user ? "Save Changes" : "Create User"}
++            </Button>
++          </DialogFooter>
++        </form>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/features/kalolsavam/components/LiveDisplayBoard.tsx b/src/features/kalolsavam/components/LiveDisplayBoard.tsx
+new file mode 100644
+index 0000000..db15a73
+--- /dev/null
++++ b/src/features/kalolsavam/components/LiveDisplayBoard.tsx
+@@ -0,0 +1,440 @@
++import { useState } from "react";
++import { KalolsavamStage, KalolsavamProgram, KalolsavamResult, KalolsavamSettings } from "../types";
++import { Card, CardContent } from "../../../components/ui/card";
++import { Badge } from "../../../components/ui/badge";
++import { Button } from "../../../components/ui/button";
++import { Input } from "../../../components/ui/input";
++import {
++  Search,
++  Radio,
++  FileText,
++  Download,
++  ExternalLink,
++  MapPin,
++  Clock,
++  Users,
++  Trophy,
++  Megaphone,
++  Pause,
++  CheckCircle2,
++  Sparkles,
++  Layers,
++} from "lucide-react";
++
++interface LiveDisplayBoardProps {
++  settings: KalolsavamSettings | null;
++  stages: KalolsavamStage[];
++  programs: KalolsavamProgram[];
++  results: KalolsavamResult[];
++  isPublic?: boolean;
++}
++
++export function LiveDisplayBoard({
++  settings,
++  stages,
++  programs,
++  results,
++  isPublic = false,
++}: LiveDisplayBoardProps) {
++  const [selectedStageId, setSelectedStageId] = useState<string>("all");
++  const [searchQuery, setSearchQuery] = useState("");
++  const [activeTab, setActiveTab] = useState<"stages" | "programs" | "results">("stages");
++
++  // Filter programs based on stage & search
++  const filteredPrograms = programs.filter((p) => {
++    const matchesStage = selectedStageId === "all" || p.stageId === selectedStageId;
++    const matchesSearch =
++      searchQuery === "" ||
++      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
++      p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
++      (p.stageName && p.stageName.toLowerCase().includes(searchQuery.toLowerCase()));
++    return matchesStage && matchesSearch;
++  });
++
++  // Filter stages based on selection
++  const filteredStages =
++    selectedStageId === "all"
++      ? stages
++      : stages.filter((s) => s.id === selectedStageId);
++
++  // Published results
++  const publishedResults = results.filter((r) => r.isPublished);
++
++  const getStatusBadge = (status: string) => {
++    switch (status) {
++      case "active":
++      case "ongoing":
++        return (
++          <Badge className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 gap-1.5 animate-pulse font-semibold">
++            <span className="h-2 w-2 rounded-full bg-emerald-500" />
++            LIVE ON STAGE
++          </Badge>
++        );
++      case "break":
++        return (
++          <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 gap-1.5 font-semibold">
++            <Pause className="w-3 h-3" />
++            ON BREAK
++          </Badge>
++        );
++      case "completed":
++        return (
++          <Badge className="bg-muted text-muted-foreground border gap-1.5">
++            <CheckCircle2 className="w-3 h-3" />
++            CONCLUDED
++          </Badge>
++        );
++      case "results_published":
++        return (
++          <Badge className="bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 gap-1.5 font-semibold">
++            <Trophy className="w-3 h-3" />
++            RESULTS PUBLISHED
++          </Badge>
++        );
++      default:
++        return (
++          <Badge variant="outline" className="text-muted-foreground gap-1.5">
++            <Clock className="w-3 h-3" />
++            SCHEDULED
++          </Badge>
++        );
++    }
++  };
++
++  return (
++    <div className="space-y-6">
++      {/* Announcement Marquee / Banner if active */}
++      {settings?.announcement && (
++        <div className="bg-gradient-to-r from-amber-500/15 via-primary/10 to-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-xs">
++          <Megaphone className="w-4 h-4 shrink-0 text-amber-500 animate-bounce" />
++          <div className="overflow-hidden whitespace-nowrap text-xs md:text-sm font-medium">
++            <span>{settings.announcement}</span>
++          </div>
++        </div>
++      )}
++
++      {/* Control Bar: Tabs, Stage Filter, Search */}
++      <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
++        <div className="flex bg-muted/60 p-1 rounded-xl border border-border">
++          <button
++            onClick={() => setActiveTab("stages")}
++            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
++              activeTab === "stages"
++                ? "bg-background text-primary shadow-xs"
++                : "text-muted-foreground hover:text-foreground"
++            }`}
++          >
++            <Radio className="w-3.5 h-3.5" />
++            Live Stages ({stages.length})
++          </button>
++          <button
++            onClick={() => setActiveTab("programs")}
++            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
++              activeTab === "programs"
++                ? "bg-background text-primary shadow-xs"
++                : "text-muted-foreground hover:text-foreground"
++            }`}
++          >
++            <Layers className="w-3.5 h-3.5" />
++            All Programs ({programs.length})
++          </button>
++          <button
++            onClick={() => setActiveTab("results")}
++            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
++              activeTab === "results"
++                ? "bg-background text-primary shadow-xs"
++                : "text-muted-foreground hover:text-foreground"
++            }`}
++          >
++            <Trophy className="w-3.5 h-3.5" />
++            Results PDFs ({publishedResults.length})
++          </button>
++        </div>
++
++        <div className="flex flex-col sm:flex-row gap-2.5 items-center">
++          {/* Stage Filter */}
++          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
++            <Button
++              variant={selectedStageId === "all" ? "default" : "outline"}
++              size="sm"
++              onClick={() => setSelectedStageId("all")}
++              className="text-xs h-8 rounded-lg"
++            >
++              All Stages
++            </Button>
++            {stages.map((stg) => (
++              <Button
++                key={stg.id}
++                variant={selectedStageId === stg.id ? "default" : "outline"}
++                size="sm"
++                onClick={() => setSelectedStageId(stg.id)}
++                className="text-xs h-8 rounded-lg shrink-0"
++              >
++                {stg.shortCode || stg.name}
++              </Button>
++            ))}
++          </div>
++
++          {/* Search Box */}
++          <div className="relative w-full sm:w-56">
++            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
++            <Input
++              value={searchQuery}
++              onChange={(e) => setSearchQuery(e.target.value)}
++              placeholder="Search program..."
++              className="pl-9 h-8 text-xs rounded-lg"
++            />
++          </div>
++        </div>
++      </div>
++
++      {/* TAB 1: LIVE STAGES VIEW */}
++      {activeTab === "stages" && (
++        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
++          {filteredStages.length === 0 ? (
++            <div className="col-span-full text-center py-12 border rounded-xl bg-card">
++              <Radio className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
++              <p className="text-sm font-medium text-muted-foreground">No stages found.</p>
++            </div>
++          ) : (
++            filteredStages.map((stage) => {
++              // Find programs running or scheduled on this stage
++              const thisStagePrograms = programs.filter((p) => p.stageId === stage.id);
++              const activeProgram =
++                thisStagePrograms.find((p) => p.id === stage.currentProgramId) ||
++                thisStagePrograms.find((p) => p.status === "ongoing") ||
++                thisStagePrograms[0];
++
++              return (
++                <Card
++                  key={stage.id}
++                  className="overflow-hidden border-2 hover:border-primary/50 transition-all shadow-md bg-card/80 backdrop-blur-sm"
++                >
++                  {/* Stage Header */}
++                  <div className="p-4 bg-muted/40 border-b flex items-start justify-between">
++                    <div>
++                      <div className="flex items-center gap-2">
++                        <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-primary text-primary-foreground font-bold">
++                          {stage.shortCode || `Stage ${stage.order}`}
++                        </span>
++                        <h3 className="font-bold text-base text-foreground leading-tight">
++                          {stage.name}
++                        </h3>
++                      </div>
++                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
++                        <MapPin className="w-3.5 h-3.5" />
++                        {stage.location || "Main Stage"}
++                      </p>
++                    </div>
++                    {getStatusBadge(stage.status)}
++                  </div>
++
++                  <CardContent className="p-5 space-y-4">
++                    {/* Active Competition Item */}
++                    <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/15 space-y-1.5">
++                      <div className="flex items-center justify-between text-xs text-primary font-bold">
++                        <span className="flex items-center gap-1">
++                          <Sparkles className="w-3.5 h-3.5" /> CURRENT COMPETITION
++                        </span>
++                        {activeProgram?.category && (
++                          <Badge variant="outline" className="text-[10px] uppercase font-bold">
++                            {activeProgram.category}
++                          </Badge>
++                        )}
++                      </div>
++                      <p className="text-base font-bold text-foreground">
++                        {stage.currentProgramTitle || activeProgram?.title || "Competition Starting Soon"}
++                      </p>
++                      {activeProgram?.scheduledTime && (
++                        <p className="text-xs text-muted-foreground flex items-center gap-1">
++                          <Clock className="w-3 h-3" /> Scheduled: {activeProgram.scheduledTime}
++                        </p>
++                      )}
++                    </div>
++
++                    {/* BIG RUNNING CHEST NUMBER */}
++                    <div className="grid grid-cols-2 gap-3 text-center">
++                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
++                        <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 dark:text-emerald-300 block">
++                          ON STAGE CHEST NO
++                        </span>
++                        <span className="text-3xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5 block">
++                          {stage.currentChestNumber && stage.currentChestNumber !== "-"
++                            ? stage.currentChestNumber
++                            : "--"}
++                        </span>
++                      </div>
++
++                      <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/25">
++                        <span className="text-[10px] font-bold tracking-wider uppercase text-blue-700 dark:text-blue-300 block">
++                          NEXT TO REPORT
++                        </span>
++                        <span className="text-3xl font-extrabold font-mono text-blue-600 dark:text-blue-400 mt-0.5 block">
++                          {stage.nextChestNumber && stage.nextChestNumber !== "-"
++                            ? stage.nextChestNumber
++                            : "--"}
++                        </span>
++                      </div>
++                    </div>
++
++                    {/* Stage Note / Announcement */}
++                    {stage.stageNote && (
++                      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2">
++                        <Megaphone className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
++                        <span className="font-medium leading-snug">{stage.stageNote}</span>
++                      </div>
++                    )}
++
++                    {/* Associated Result PDF if published */}
++                    {activeProgram?.resultPdfUrl && activeProgram.isResultPublished && (
++                      <a
++                        href={activeProgram.resultPdfUrl}
++                        target="_blank"
++                        rel="noreferrer"
++                        className="w-full"
++                      >
++                        <Button
++                          variant="outline"
++                          size="sm"
++                          className="w-full text-xs font-semibold gap-2 border-primary/40 text-primary hover:bg-primary/10 mt-1"
++                        >
++                          <Trophy className="w-3.5 h-3.5 text-amber-500" />
++                          View Results (PDF)
++                          <ExternalLink className="w-3 h-3 ml-auto" />
++                        </Button>
++                      </a>
++                    )}
++                  </CardContent>
++                </Card>
++              );
++            })
++          )}
++        </div>
++      )}
++
++      {/* TAB 2: ALL PROGRAMS SCHEDULE VIEW */}
++      {activeTab === "programs" && (
++        <div className="space-y-3">
++          {filteredPrograms.length === 0 ? (
++            <div className="text-center py-12 border rounded-xl bg-card">
++              <p className="text-sm text-muted-foreground">No matching programs found.</p>
++            </div>
++          ) : (
++            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
++              {filteredPrograms.map((prog) => (
++                <div
++                  key={prog.id}
++                  className="p-4 rounded-xl border bg-card/70 hover:bg-card hover:border-primary/40 transition-all flex flex-col justify-between space-y-3 shadow-xs"
++                >
++                  <div className="flex items-start justify-between gap-2">
++                    <div>
++                      <div className="flex items-center gap-2">
++                        <Badge variant="outline" className="text-[10px] font-bold">
++                          {prog.category}
++                        </Badge>
++                        <span className="text-xs font-medium text-muted-foreground">
++                          {prog.stageName || "Stage"}
++                        </span>
++                      </div>
++                      <h4 className="font-bold text-base mt-1 text-foreground">{prog.title}</h4>
++                    </div>
++                    {getStatusBadge(prog.status)}
++                  </div>
++
++                  <div className="flex flex-wrap items-center justify-between text-xs text-muted-foreground pt-2 border-t">
++                    <span className="flex items-center gap-1">
++                      <Clock className="w-3 h-3" /> Time: {prog.scheduledTime || "TBD"}
++                    </span>
++                    {prog.totalParticipants ? (
++                      <span className="flex items-center gap-1">
++                        <Users className="w-3 h-3" /> {prog.totalParticipants} Participants
++                      </span>
++                    ) : null}
++
++                    {/* Result link if available */}
++                    {prog.resultPdfUrl && prog.isResultPublished ? (
++                      <a
++                        href={prog.resultPdfUrl}
++                        target="_blank"
++                        rel="noreferrer"
++                        className="inline-flex items-center gap-1.5 font-bold text-primary hover:underline"
++                      >
++                        <FileText className="w-3.5 h-3.5" />
++                        View Results PDF
++                      </a>
++                    ) : (
++                      <span className="text-xs text-muted-foreground">
++                        Current Chest: {prog.currentChestNumber || "-"}
++                      </span>
++                    )}
++                  </div>
++                </div>
++              ))}
++            </div>
++          )}
++        </div>
++      )}
++
++      {/* TAB 3: PUBLISHED RESULTS PDF VIEW */}
++      {activeTab === "results" && (
++        <div className="space-y-4">
++          {publishedResults.length === 0 ? (
++            <div className="text-center py-16 border rounded-xl bg-card space-y-2">
++              <Trophy className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
++              <h3 className="font-bold text-base">Results Awaited</h3>
++              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
++                Official result PDFs will be published here as soon as competitions conclude and evaluations are finalized.
++              </p>
++            </div>
++          ) : (
++            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
++              {publishedResults.map((result) => (
++                <Card
++                  key={result.id}
++                  className="border-2 border-amber-500/20 hover:border-amber-500/40 transition-all shadow-sm"
++                >
++                  <CardContent className="p-4 space-y-3">
++                    <div className="flex items-start justify-between gap-2">
++                      <div>
++                        <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] mb-1">
++                          {result.category || "Official Result"}
++                        </Badge>
++                        <h4 className="font-bold text-sm text-foreground leading-tight">
++                          {result.programTitle}
++                        </h4>
++                        <p className="text-xs text-muted-foreground mt-0.5">
++                          {result.stageName || "Festival Stage"}
++                        </p>
++                      </div>
++                      <div className="p-2 bg-amber-500/10 text-amber-600 rounded-lg">
++                        <Trophy className="w-5 h-5" />
++                      </div>
++                    </div>
++
++                    {result.remarks && (
++                      <p className="text-xs text-muted-foreground italic bg-muted/40 p-2 rounded-md">
++                        "{result.remarks}"
++                      </p>
++                    )}
++
++                    <div className="pt-2 border-t flex items-center justify-between">
++                      <span className="text-[11px] text-muted-foreground truncate max-w-[140px]">
++                        {result.pdfName}
++                      </span>
++                      <a href={result.pdfUrl} target="_blank" rel="noreferrer">
++                        <Button size="sm" className="h-8 gap-1.5 text-xs bg-primary">
++                          <Download className="w-3.5 h-3.5" />
++                          View PDF
++                        </Button>
++                      </a>
++                    </div>
++                  </CardContent>
++                </Card>
++              ))}
++            </div>
++          )}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/features/kalolsavam/components/LiveStageControlDialog.tsx b/src/features/kalolsavam/components/LiveStageControlDialog.tsx
+new file mode 100644
+index 0000000..8349cf3
+--- /dev/null
++++ b/src/features/kalolsavam/components/LiveStageControlDialog.tsx
+@@ -0,0 +1,275 @@
++import { useState, useEffect } from "react";
++import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
++import { Button } from "../../../components/ui/button";
++import { Input } from "../../../components/ui/input";
++import { Label } from "../../../components/ui/label";
++import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
++import { Textarea } from "../../../components/ui/textarea";
++import { KalolsavamStage, KalolsavamProgram, StageStatus } from "../types";
++import { updateStage, updateStageChestNumber } from "../services/kalolsavamService";
++import { toast } from "sonner";
++import { Loader2, Plus, Minus, Megaphone, Radio, Play, Pause, CheckCircle } from "lucide-react";
++
++interface LiveStageControlDialogProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  stage: KalolsavamStage | null;
++  stagePrograms: KalolsavamProgram[];
++  updatedBy?: string;
++}
++
++export function LiveStageControlDialog({
++  open,
++  onOpenChange,
++  stage,
++  stagePrograms,
++  updatedBy = "Admin",
++}: LiveStageControlDialogProps) {
++  const [chestNumber, setChestNumber] = useState("");
++  const [nextChestNumber, setNextChestNumber] = useState("");
++  const [currentProgramId, setCurrentProgramId] = useState<string>("");
++  const [stageStatus, setStageStatus] = useState<StageStatus>("active");
++  const [stageNote, setStageNote] = useState("");
++  const [saving, setSaving] = useState(false);
++
++  useEffect(() => {
++    if (stage) {
++      setChestNumber(stage.currentChestNumber || "");
++      setNextChestNumber(stage.nextChestNumber || "");
++      setCurrentProgramId(stage.currentProgramId || (stagePrograms[0]?.id ?? ""));
++      setStageStatus(stage.status || "active");
++      setStageNote(stage.stageNote || "");
++    }
++  }, [stage, stagePrograms, open]);
++
++  if (!stage) return null;
++
++  // Quick increment/decrement chest number
++  const incrementChest = (delta: number) => {
++    const num = parseInt(chestNumber, 10);
++    if (!isNaN(num)) {
++      const nextVal = Math.max(0, num + delta);
++      setChestNumber(String(nextVal));
++      setNextChestNumber(String(nextVal + 1));
++    } else {
++      setChestNumber("1");
++      setNextChestNumber("2");
++    }
++  };
++
++  const handleSave = async () => {
++    setSaving(true);
++    try {
++      const selectedProg = stagePrograms.find((p) => p.id === currentProgramId);
++      const programTitle = selectedProg ? selectedProg.title : "";
++
++      await updateStageChestNumber(
++        stage.id,
++        chestNumber.trim() || "-",
++        nextChestNumber.trim() || "-",
++        stageNote.trim(),
++        currentProgramId || undefined,
++        updatedBy
++      );
++
++      await updateStage(stage.id, {
++        status: stageStatus,
++        currentProgramId: currentProgramId || null,
++        currentProgramTitle: programTitle,
++      });
++
++      toast.success("Live stage updated successfully!");
++      onOpenChange(false);
++    } catch (err: any) {
++      console.error(err);
++      toast.error(err?.message || "Failed to update stage");
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-[540px]">
++        <DialogHeader>
++          <div className="flex items-center justify-between">
++            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
++              <span className="flex h-3 w-3 rounded-full bg-emerald-500 animate-ping" />
++              Live Control: {stage.name}
++            </DialogTitle>
++          </div>
++          <p className="text-xs text-muted-foreground">
++            Location: {stage.location || "Venue Stage"}
++          </p>
++        </DialogHeader>
++
++        <div className="space-y-5 py-3">
++          {/* Active Program Selection */}
++          <div className="space-y-2">
++            <Label className="text-sm font-semibold">Active Program on Stage</Label>
++            {stagePrograms.length === 0 ? (
++              <p className="text-xs text-amber-500">
++                No programs assigned to this stage yet. Add programs to this stage from the Programs tab.
++              </p>
++            ) : (
++              <Select value={currentProgramId} onValueChange={setCurrentProgramId}>
++                <SelectTrigger className="font-medium h-11">
++                  <SelectValue placeholder="Select active competition" />
++                </SelectTrigger>
++                <SelectContent>
++                  {stagePrograms.map((prog) => (
++                    <SelectItem key={prog.id} value={prog.id}>
++                      {prog.title} ({prog.category}) - {prog.scheduledTime || "Scheduled"}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++            )}
++          </div>
++
++          {/* Large Chest Number Modifier */}
++          <div className="p-4 bg-muted/40 rounded-xl border border-border space-y-3">
++            <div className="flex items-center justify-between">
++              <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
++                Current Chest Number on Stage
++              </Label>
++              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
++                <Radio className="w-3.5 h-3.5" /> LIVE NOW
++              </span>
++            </div>
++
++            <div className="flex items-center justify-center gap-3">
++              <Button
++                type="button"
++                variant="outline"
++                size="icon"
++                onClick={() => incrementChest(-1)}
++                className="h-14 w-14 rounded-xl border-2 text-xl hover:bg-muted"
++              >
++                <Minus className="w-6 h-6" />
++              </Button>
++
++              <Input
++                value={chestNumber}
++                onChange={(e) => setChestNumber(e.target.value)}
++                placeholder="Chest #"
++                className="text-center font-bold text-3xl h-14 w-40 rounded-xl font-mono tracking-wider border-2 border-primary/50 focus:border-primary shadow-inner"
++              />
++
++              <Button
++                type="button"
++                variant="outline"
++                size="icon"
++                onClick={() => incrementChest(1)}
++                className="h-14 w-14 rounded-xl border-2 text-xl hover:bg-muted"
++              >
++                <Plus className="w-6 h-6" />
++              </Button>
++            </div>
++
++            <div className="pt-2 flex items-center justify-between border-t border-border/50 text-xs">
++              <span className="text-muted-foreground font-medium">Next to Perform / Reporting:</span>
++              <div className="flex items-center gap-2">
++                <Input
++                  value={nextChestNumber}
++                  onChange={(e) => setNextChestNumber(e.target.value)}
++                  placeholder="e.g. 15"
++                  className="h-8 w-24 text-center text-xs font-mono font-semibold"
++                />
++              </div>
++            </div>
++          </div>
++
++          {/* Stage Status Selector */}
++          <div className="grid grid-cols-2 gap-3">
++            <div className="space-y-1.5">
++              <Label className="text-xs font-semibold">Stage Status</Label>
++              <Select value={stageStatus} onValueChange={(val: StageStatus) => setStageStatus(val)}>
++                <SelectTrigger className="h-9">
++                  <SelectValue placeholder="Status" />
++                </SelectTrigger>
++                <SelectContent>
++                  <SelectItem value="active">
++                    <span className="flex items-center gap-2 text-emerald-600">
++                      <Play className="w-3.5 h-3.5" /> Active / Ongoing
++                    </span>
++                  </SelectItem>
++                  <SelectItem value="break">
++                    <span className="flex items-center gap-2 text-amber-600">
++                      <Pause className="w-3.5 h-3.5" /> On Short Break
++                    </span>
++                  </SelectItem>
++                  <SelectItem value="paused">
++                    <span className="flex items-center gap-2 text-blue-600">
++                      <Pause className="w-3.5 h-3.5" /> Paused
++                    </span>
++                  </SelectItem>
++                  <SelectItem value="completed">
++                    <span className="flex items-center gap-2 text-slate-500">
++                      <CheckCircle className="w-3.5 h-3.5" /> Stage Concluded
++                    </span>
++                  </SelectItem>
++                </SelectContent>
++              </Select>
++            </div>
++
++            <div className="space-y-1.5">
++              <Label className="text-xs font-semibold">Quick Stage Broadcast</Label>
++              <div className="flex gap-1.5">
++                <Button
++                  type="button"
++                  variant="outline"
++                  size="sm"
++                  className="text-[11px] h-9 px-2"
++                  onClick={() => setStageNote("Next 3 participants report to backstage")}
++                >
++                  Report Next 3
++                </Button>
++                <Button
++                  type="button"
++                  variant="outline"
++                  size="sm"
++                  className="text-[11px] h-9 px-2"
++                  onClick={() => setStageNote("10-minute break in progress")}
++                >
++                  10m Break
++                </Button>
++              </div>
++            </div>
++          </div>
++
++          {/* Stage Note */}
++          <div className="space-y-2">
++            <Label htmlFor="stage-notes" className="text-xs font-semibold flex items-center gap-1.5">
++              <Megaphone className="w-3.5 h-3.5 text-primary" />
++              Live Announcement Note for Participants
++            </Label>
++            <Textarea
++              id="stage-notes"
++              value={stageNote}
++              onChange={(e) => setStageNote(e.target.value)}
++              placeholder="e.g. Chest numbers 25 to 30 please report to green room. Judge evaluation underway."
++              rows={2}
++              className="text-xs resize-none"
++            />
++          </div>
++        </div>
++
++        <DialogFooter className="gap-2 sm:gap-0">
++          <Button
++            type="button"
++            variant="outline"
++            onClick={() => onOpenChange(false)}
++            disabled={saving}
++          >
++            Cancel
++          </Button>
++          <Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90">
++            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
++            Broadcast Live Update
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/features/kalolsavam/components/ProgramFormDialog.tsx b/src/features/kalolsavam/components/ProgramFormDialog.tsx
+new file mode 100644
+index 0000000..0c0cbe7
+--- /dev/null
++++ b/src/features/kalolsavam/components/ProgramFormDialog.tsx
+@@ -0,0 +1,245 @@
++import { useState, useEffect } from "react";
++import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
++import { Button } from "../../../components/ui/button";
++import { Input } from "../../../components/ui/input";
++import { Label } from "../../../components/ui/label";
++import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
++import { KalolsavamProgram, KalolsavamStage, ProgramStatus } from "../types";
++import { createProgram, updateProgram } from "../services/kalolsavamService";
++import { toast } from "sonner";
++import { Loader2 } from "lucide-react";
++
++interface ProgramFormDialogProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  program: KalolsavamProgram | null;
++  stages: KalolsavamStage[];
++  defaultStageId?: string;
++}
++
++const CATEGORIES = [
++  "Sub-Junior",
++  "Junior",
++  "Senior",
++  "Super Senior",
++  "General",
++  "Common",
++];
++
++export function ProgramFormDialog({
++  open,
++  onOpenChange,
++  program,
++  stages,
++  defaultStageId,
++}: ProgramFormDialogProps) {
++  const [title, setTitle] = useState("");
++  const [code, setCode] = useState("");
++  const [category, setCategory] = useState("Junior");
++  const [stageId, setStageId] = useState("");
++  const [orderInStage, setOrderInStage] = useState<number>(1);
++  const [scheduledTime, setScheduledTime] = useState("");
++  const [totalParticipants, setTotalParticipants] = useState<number>(0);
++  const [status, setStatus] = useState<ProgramStatus>("upcoming");
++  const [loading, setLoading] = useState(false);
++
++  useEffect(() => {
++    if (program) {
++      setTitle(program.title || "");
++      setCode(program.code || "");
++      setCategory(program.category || "Junior");
++      setStageId(program.stageId || "");
++      setOrderInStage(program.orderInStage ?? 1);
++      setScheduledTime(program.scheduledTime || "");
++      setTotalParticipants(program.totalParticipants ?? 0);
++      setStatus(program.status || "upcoming");
++    } else {
++      setTitle("");
++      setCode("");
++      setCategory("Junior");
++      setStageId(defaultStageId || (stages[0]?.id ?? ""));
++      setOrderInStage(1);
++      setScheduledTime("");
++      setTotalParticipants(0);
++      setStatus("upcoming");
++    }
++  }, [program, defaultStageId, stages, open]);
++
++  const handleSubmit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!title.trim()) {
++      toast.error("Please enter a program title");
++      return;
++    }
++    if (!stageId) {
++      toast.error("Please assign a stage for this program");
++      return;
++    }
++
++    const selectedStage = stages.find((s) => s.id === stageId);
++    const stageName = selectedStage ? selectedStage.name : "";
++
++    setLoading(true);
++    try {
++      if (program) {
++        await updateProgram(program.id, {
++          title: title.trim(),
++          code: code.trim(),
++          category,
++          stageId,
++          stageName,
++          orderInStage: Number(orderInStage) || 1,
++          scheduledTime: scheduledTime.trim(),
++          totalParticipants: Number(totalParticipants) || 0,
++          status,
++        });
++        toast.success("Program updated successfully!");
++      } else {
++        await createProgram({
++          title: title.trim(),
++          code: code.trim(),
++          category,
++          stageId,
++          stageName,
++          orderInStage: Number(orderInStage) || 1,
++          scheduledTime: scheduledTime.trim(),
++          totalParticipants: Number(totalParticipants) || 0,
++          currentChestNumber: "-",
++          status,
++          isResultPublished: false,
++        });
++        toast.success("Program added successfully!");
++      }
++      onOpenChange(false);
++    } catch (err: any) {
++      console.error(err);
++      toast.error(err?.message || "Failed to save program");
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-[500px]">
++        <form onSubmit={handleSubmit}>
++          <DialogHeader>
++            <DialogTitle>{program ? "Edit Competition Program" : "Add Competition Program"}</DialogTitle>
++          </DialogHeader>
++
++          <div className="space-y-4 py-4">
++            <div className="space-y-2">
++              <Label htmlFor="prog-title">Program Title / Item Name *</Label>
++              <Input
++                id="prog-title"
++                value={title}
++                onChange={(e) => setTitle(e.target.value)}
++                placeholder="e.g. Margamkali, Bharatanatyam, Elocution Malayalam"
++                required
++              />
++            </div>
++
++            <div className="grid grid-cols-2 gap-3">
++              <div className="space-y-2">
++                <Label htmlFor="prog-stage">Assigned Stage *</Label>
++                <Select value={stageId} onValueChange={setStageId}>
++                  <SelectTrigger id="prog-stage">
++                    <SelectValue placeholder="Choose stage" />
++                  </SelectTrigger>
++                  <SelectContent>
++                    {stages.map((s) => (
++                      <SelectItem key={s.id} value={s.id}>
++                        {s.name}
++                      </SelectItem>
++                    ))}
++                  </SelectContent>
++                </Select>
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="prog-category">Category</Label>
++                <Select value={category} onValueChange={setCategory}>
++                  <SelectTrigger id="prog-category">
++                    <SelectValue placeholder="Category" />
++                  </SelectTrigger>
++                  <SelectContent>
++                    {CATEGORIES.map((cat) => (
++                      <SelectItem key={cat} value={cat}>
++                        {cat}
++                      </SelectItem>
++                    ))}
++                  </SelectContent>
++                </Select>
++              </div>
++            </div>
++
++            <div className="grid grid-cols-3 gap-3">
++              <div className="space-y-2">
++                <Label htmlFor="prog-order">Order in Stage</Label>
++                <Input
++                  id="prog-order"
++                  type="number"
++                  min={1}
++                  value={orderInStage}
++                  onChange={(e) => setOrderInStage(parseInt(e.target.value) || 1)}
++                />
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="prog-time">Time</Label>
++                <Input
++                  id="prog-time"
++                  value={scheduledTime}
++                  onChange={(e) => setScheduledTime(e.target.value)}
++                  placeholder="e.g. 10:30 AM"
++                />
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="prog-participants">Participants</Label>
++                <Input
++                  id="prog-participants"
++                  type="number"
++                  min={0}
++                  value={totalParticipants}
++                  onChange={(e) => setTotalParticipants(parseInt(e.target.value) || 0)}
++                  placeholder="Count"
++                />
++              </div>
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="prog-status">Current Status</Label>
++              <Select value={status} onValueChange={(val: ProgramStatus) => setStatus(val)}>
++                <SelectTrigger id="prog-status">
++                  <SelectValue placeholder="Status" />
++                </SelectTrigger>
++                <SelectContent>
++                  <SelectItem value="upcoming">Upcoming</SelectItem>
++                  <SelectItem value="ongoing">Ongoing (Live)</SelectItem>
++                  <SelectItem value="completed">Completed</SelectItem>
++                  <SelectItem value="results_published">Results Published</SelectItem>
++                </SelectContent>
++              </Select>
++            </div>
++          </div>
++
++          <DialogFooter>
++            <Button
++              type="button"
++              variant="outline"
++              onClick={() => onOpenChange(false)}
++              disabled={loading}
++            >
++              Cancel
++            </Button>
++            <Button type="submit" disabled={loading}>
++              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
++              {program ? "Save Changes" : "Add Program"}
++            </Button>
++          </DialogFooter>
++        </form>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/features/kalolsavam/components/ResultUploadDialog.tsx b/src/features/kalolsavam/components/ResultUploadDialog.tsx
+new file mode 100644
+index 0000000..8cdf2da
+--- /dev/null
++++ b/src/features/kalolsavam/components/ResultUploadDialog.tsx
+@@ -0,0 +1,335 @@
++import { useState, useEffect } from "react";
++import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
++import { Button } from "../../../components/ui/button";
++import { Input } from "../../../components/ui/input";
++import { Label } from "../../../components/ui/label";
++import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
++import { Switch } from "../../../components/ui/switch";
++import { Textarea } from "../../../components/ui/textarea";
++import { KalolsavamProgram, KalolsavamStage } from "../types";
++import { uploadResultPdf, uploadTotalResultPdf } from "../services/kalolsavamService";
++import { toast } from "sonner";
++import { Loader2, FileUp, FileText, CheckCircle2, Trophy, ListOrdered } from "lucide-react";
++
++interface ResultUploadDialogProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  programs: KalolsavamProgram[];
++  stages: KalolsavamStage[];
++  defaultProgramId?: string;
++  defaultResultType?: "total" | "program";
++  adminName?: string;
++}
++
++export function ResultUploadDialog({
++  open,
++  onOpenChange,
++  programs,
++  stages,
++  defaultProgramId,
++  defaultResultType = "total",
++  adminName = "Admin",
++}: ResultUploadDialogProps) {
++  const [resultType, setResultType] = useState<"total" | "program">(defaultResultType);
++  const [totalTitle, setTotalTitle] = useState("ആകെ ഫലം (Overall Championship / Total Points)");
++  const [selectedProgramId, setSelectedProgramId] = useState("");
++  const [selectedFile, setSelectedFile] = useState<File | null>(null);
++  const [remarks, setRemarks] = useState("");
++  const [isPublished, setIsPublished] = useState(true);
++  const [uploading, setUploading] = useState(false);
++
++  useEffect(() => {
++    if (defaultProgramId) {
++      setSelectedProgramId(defaultProgramId);
++      setResultType("program");
++    } else if (defaultResultType) {
++      setResultType(defaultResultType);
++      if (programs.length > 0) {
++        setSelectedProgramId(programs[0].id);
++      }
++    }
++    setSelectedFile(null);
++    setRemarks("");
++    setIsPublished(true);
++  }, [defaultProgramId, defaultResultType, programs, open]);
++
++  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
++    const file = e.target.files?.[0];
++    if (file) {
++      if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
++        toast.error("Please upload a PDF document (.pdf)");
++        return;
++      }
++      setSelectedFile(file);
++    }
++  };
++
++  const handleSubmit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!selectedFile) {
++      toast.error("Please select a PDF file to upload");
++      return;
++    }
++
++    if (resultType === "total") {
++      if (!totalTitle.trim()) {
++        toast.error("Please enter a title for the Total Result");
++        return;
++      }
++
++      setUploading(true);
++      try {
++        await uploadTotalResultPdf(selectedFile, {
++          title: totalTitle.trim(),
++          isPublished,
++          remarks: remarks.trim(),
++          uploadedBy: adminName,
++        });
++
++        toast.success(`Overall / Total Result PDF published successfully!`);
++        onOpenChange(false);
++      } catch (err: any) {
++        console.error("Total Result upload error:", err);
++        toast.error(err?.message || "Failed to upload Total Result PDF");
++      } finally {
++        setUploading(false);
++      }
++      return;
++    }
++
++    // Individual Program Result
++    if (!selectedProgramId) {
++      toast.error("Please select a competition program");
++      return;
++    }
++
++    const program = programs.find((p) => p.id === selectedProgramId);
++    if (!program) {
++      toast.error("Selected program not found");
++      return;
++    }
++
++    const stage = stages.find((s) => s.id === program.stageId);
++
++    setUploading(true);
++    try {
++      await uploadResultPdf(selectedFile, {
++        programId: program.id,
++        programTitle: program.title,
++        category: program.category,
++        stageId: program.stageId,
++        stageName: stage?.name || program.stageName || "Main Stage",
++        isPublished,
++        remarks: remarks.trim(),
++        uploadedBy: adminName,
++      });
++
++      toast.success(`Result PDF for "${program.title}" published successfully!`);
++      onOpenChange(false);
++    } catch (err: any) {
++      console.error("Result upload error:", err);
++      toast.error(err?.message || "Failed to upload result PDF");
++    } finally {
++      setUploading(false);
++    }
++  };
++
++  const selectedProgram = programs.find((p) => p.id === selectedProgramId);
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-[520px]">
++        <form onSubmit={handleSubmit}>
++          <DialogHeader>
++            <DialogTitle className="flex items-center gap-2 text-lg">
++              <FileUp className="w-5 h-5 text-primary" />
++              Upload & Publish Competition Results
++            </DialogTitle>
++          </DialogHeader>
++
++          <div className="space-y-4 py-4">
++            {/* Mode Selector: Total Result vs Individual Program */}
++            <div className="space-y-2">
++              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
++                Select Result Type *
++              </Label>
++              <div className="grid grid-cols-2 gap-2 p-1 bg-muted/40 rounded-xl border">
++                <button
++                  type="button"
++                  onClick={() => setResultType("total")}
++                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
++                    resultType === "total"
++                      ? "bg-amber-600 text-white shadow-xs"
++                      : "text-muted-foreground hover:text-foreground"
++                  }`}
++                >
++                  <Trophy className="w-4 h-4" />
++                  ആകെ ഫലം (Total Result)
++                </button>
++                <button
++                  type="button"
++                  onClick={() => setResultType("program")}
++                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
++                    resultType === "program"
++                      ? "bg-primary text-primary-foreground shadow-xs"
++                      : "text-muted-foreground hover:text-foreground"
++                  }`}
++                >
++                  <ListOrdered className="w-4 h-4" />
++                  മത്സരഫലം (By Program)
++                </button>
++              </div>
++            </div>
++
++            {/* Total Result Fields */}
++            {resultType === "total" && (
++              <div className="space-y-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
++                <div className="flex items-center gap-2">
++                  <Trophy className="w-4 h-4 text-amber-600" />
++                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
++                    Grand Championship / Overall Total Points Result
++                  </span>
++                </div>
++                <div className="space-y-1.5">
++                  <Label htmlFor="total-title" className="text-xs font-semibold">
++                    Result Sheet Title *
++                  </Label>
++                  <Input
++                    id="total-title"
++                    value={totalTitle}
++                    onChange={(e) => setTotalTitle(e.target.value)}
++                    placeholder="e.g. ആകെ ഫലം (Overall Points Table - Kalolsavam)"
++                    className="h-9 bg-background text-sm"
++                    required
++                  />
++                </div>
++                <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-tight">
++                  This will publish a single consolidated points table / championship PDF for all participants to view in the app.
++                </p>
++              </div>
++            )}
++
++            {/* Individual Program Fields */}
++            {resultType === "program" && (
++              <div className="space-y-2">
++                <Label htmlFor="res-program">Select Competition Program *</Label>
++                {programs.length === 0 ? (
++                  <p className="text-xs text-amber-600 p-2.5 bg-amber-50 rounded-lg border border-amber-200">
++                    No programs added yet. You can use <strong>ആകെ ഫലം (Total Result)</strong> above to publish the overall points list!
++                  </p>
++                ) : (
++                  <>
++                    <Select value={selectedProgramId} onValueChange={setSelectedProgramId}>
++                      <SelectTrigger id="res-program" className="h-10">
++                        <SelectValue placeholder="Choose program" />
++                      </SelectTrigger>
++                      <SelectContent>
++                        {programs.map((prog) => (
++                          <SelectItem key={prog.id} value={prog.id}>
++                            {prog.title} ({prog.category}) - {prog.stageName || "Stage"}
++                          </SelectItem>
++                        ))}
++                      </SelectContent>
++                    </Select>
++                    {selectedProgram?.resultPdfUrl && (
++                      <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
++                        <CheckCircle2 className="w-3.5 h-3.5" />
++                        Note: A result PDF already exists for this program. Uploading a new one will replace it.
++                      </p>
++                    )}
++                  </>
++                )}
++              </div>
++            )}
++
++            {/* File Drag/Drop or Select */}
++            <div className="space-y-2">
++              <Label>Result Document (PDF format only) *</Label>
++              <div className="border-2 border-dashed border-border rounded-xl p-5 text-center hover:bg-muted/30 transition-colors cursor-pointer relative">
++                <input
++                  type="file"
++                  accept="application/pdf,.pdf"
++                  onChange={handleFileChange}
++                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
++                  required={!selectedFile}
++                />
++                <div className="flex flex-col items-center justify-center space-y-2">
++                  <div className="p-3 bg-primary/10 rounded-full text-primary">
++                    <FileText className="w-6 h-6" />
++                  </div>
++                  {selectedFile ? (
++                    <div>
++                      <p className="text-sm font-semibold text-foreground">{selectedFile.name}</p>
++                      <p className="text-xs text-muted-foreground">
++                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB - Click or drag to replace
++                      </p>
++                    </div>
++                  ) : (
++                    <div>
++                      <p className="text-sm font-medium text-foreground">
++                        Click or drag & drop the Result PDF here
++                      </p>
++                      <p className="text-xs text-muted-foreground">
++                        {resultType === "total"
++                          ? "Upload official total points sheet (.pdf)"
++                          : "Upload official score sheet / rank list (.pdf)"}
++                      </p>
++                    </div>
++                  )}
++                </div>
++              </div>
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="res-remarks">Remarks / Special Mentions (Optional)</Label>
++              <Textarea
++                id="res-remarks"
++                value={remarks}
++                onChange={(e) => setRemarks(e.target.value)}
++                placeholder="e.g. Declared by Diocese Kalolsavam Committee. Verified by Chief Judge."
++                rows={2}
++                className="text-xs"
++              />
++            </div>
++
++            <div className="flex items-center justify-between p-3 border rounded-xl bg-muted/20">
++              <div>
++                <Label htmlFor="res-publish" className="cursor-pointer font-medium text-sm">
++                  Publish to Participants Immediately
++                </Label>
++                <p className="text-xs text-muted-foreground">
++                  When enabled, participants can view & download this result PDF in the app right away.
++                </p>
++              </div>
++              <Switch id="res-publish" checked={isPublished} onCheckedChange={setIsPublished} />
++            </div>
++          </div>
++
++          <DialogFooter>
++            <Button
++              type="button"
++              variant="outline"
++              onClick={() => onOpenChange(false)}
++              disabled={uploading}
++            >
++              Cancel
++            </Button>
++            <Button
++              type="submit"
++              disabled={uploading || (resultType === "program" && programs.length === 0)}
++              className={resultType === "total" ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}
++            >
++              {uploading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
++              {uploading
++                ? "Uploading PDF..."
++                : resultType === "total"
++                ? "🏆 Publish Total Result"
++                : "Publish Program Result"}
++            </Button>
++          </DialogFooter>
++        </form>
++      </DialogContent>
++    </Dialog>
++  );
++}
++
+diff --git a/src/features/kalolsavam/components/StageFormDialog.tsx b/src/features/kalolsavam/components/StageFormDialog.tsx
+new file mode 100644
+index 0000000..49fcc60
+--- /dev/null
++++ b/src/features/kalolsavam/components/StageFormDialog.tsx
+@@ -0,0 +1,174 @@
++import { useState, useEffect } from "react";
++import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
++import { Button } from "../../../components/ui/button";
++import { Input } from "../../../components/ui/input";
++import { Label } from "../../../components/ui/label";
++import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
++import { KalolsavamStage, StageStatus } from "../types";
++import { createStage, updateStage } from "../services/kalolsavamService";
++import { toast } from "sonner";
++import { Loader2 } from "lucide-react";
++
++interface StageFormDialogProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  stage: KalolsavamStage | null;
++  totalStagesCount: number;
++}
++
++export function StageFormDialog({
++  open,
++  onOpenChange,
++  stage,
++  totalStagesCount,
++}: StageFormDialogProps) {
++  const [name, setName] = useState("");
++  const [shortCode, setShortCode] = useState("");
++  const [location, setLocation] = useState("");
++  const [order, setOrder] = useState<number>(1);
++  const [status, setStatus] = useState<StageStatus>("active");
++  const [loading, setLoading] = useState(false);
++
++  useEffect(() => {
++    if (stage) {
++      setName(stage.name || "");
++      setShortCode(stage.shortCode || "");
++      setLocation(stage.location || "");
++      setOrder(stage.order ?? 1);
++      setStatus(stage.status || "active");
++    } else {
++      setName("");
++      setShortCode(`Stage ${totalStagesCount + 1}`);
++      setLocation("");
++      setOrder(totalStagesCount + 1);
++      setStatus("active");
++    }
++  }, [stage, totalStagesCount, open]);
++
++  const handleSubmit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!name.trim()) {
++      toast.error("Please provide a stage name");
++      return;
++    }
++
++    setLoading(true);
++    try {
++      if (stage) {
++        await updateStage(stage.id, {
++          name: name.trim(),
++          shortCode: shortCode.trim(),
++          location: location.trim(),
++          order: Number(order) || 1,
++          status,
++        });
++        toast.success("Stage updated successfully!");
++      } else {
++        await createStage({
++          name: name.trim(),
++          shortCode: shortCode.trim(),
++          location: location.trim(),
++          order: Number(order) || totalStagesCount + 1,
++          status,
++          currentChestNumber: "-",
++          nextChestNumber: "-",
++          assignedUserIds: [],
++        });
++        toast.success("Stage created successfully!");
++      }
++      onOpenChange(false);
++    } catch (err: any) {
++      console.error(err);
++      toast.error(err?.message || "Failed to save stage");
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-[480px]">
++        <form onSubmit={handleSubmit}>
++          <DialogHeader>
++            <DialogTitle>{stage ? "Edit Stage" : "Add New Stage"}</DialogTitle>
++          </DialogHeader>
++
++          <div className="space-y-4 py-4">
++            <div className="space-y-2">
++              <Label htmlFor="stage-name">Stage Name *</Label>
++              <Input
++                id="stage-name"
++                value={name}
++                onChange={(e) => setName(e.target.value)}
++                placeholder="e.g. Stage 1 - Main Auditorium"
++                required
++              />
++            </div>
++
++            <div className="grid grid-cols-2 gap-3">
++              <div className="space-y-2">
++                <Label htmlFor="stage-code">Short Code / Label</Label>
++                <Input
++                  id="stage-code"
++                  value={shortCode}
++                  onChange={(e) => setShortCode(e.target.value)}
++                  placeholder="e.g. Stage 1"
++                />
++              </div>
++              <div className="space-y-2">
++                <Label htmlFor="stage-order">Display Order</Label>
++                <Input
++                  id="stage-order"
++                  type="number"
++                  min={1}
++                  value={order}
++                  onChange={(e) => setOrder(parseInt(e.target.value) || 1)}
++                />
++              </div>
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="stage-location">Location / Venue Description</Label>
++              <Input
++                id="stage-location"
++                value={location}
++                onChange={(e) => setLocation(e.target.value)}
++                placeholder="e.g. Main Block, Ground Floor"
++              />
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="stage-status">Stage Initial Status</Label>
++              <Select value={status} onValueChange={(val: StageStatus) => setStatus(val)}>
++                <SelectTrigger id="stage-status">
++                  <SelectValue placeholder="Select status" />
++                </SelectTrigger>
++                <SelectContent>
++                  <SelectItem value="active">Active (Ongoing)</SelectItem>
++                  <SelectItem value="break">On Break</SelectItem>
++                  <SelectItem value="paused">Paused</SelectItem>
++                  <SelectItem value="completed">Concluded</SelectItem>
++                </SelectContent>
++              </Select>
++            </div>
++          </div>
++
++          <DialogFooter>
++            <Button
++              type="button"
++              variant="outline"
++              onClick={() => onOpenChange(false)}
++              disabled={loading}
++            >
++              Cancel
++            </Button>
++            <Button type="submit" disabled={loading}>
++              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
++              {stage ? "Save Changes" : "Create Stage"}
++            </Button>
++          </DialogFooter>
++        </form>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/features/kalolsavam/services/kalolsavamService.ts b/src/features/kalolsavam/services/kalolsavamService.ts
+new file mode 100644
+index 0000000..d96cb8c
+--- /dev/null
++++ b/src/features/kalolsavam/services/kalolsavamService.ts
+@@ -0,0 +1,511 @@
++import {
++  collection,
++  doc,
++  getDoc,
++  getDocs,
++  setDoc,
++  addDoc,
++  updateDoc,
++  deleteDoc,
++  query,
++  orderBy,
++  where,
++  onSnapshot,
++  serverTimestamp,
++  Unsubscribe,
++} from "firebase/firestore";
++import { db } from "../../../config/firebase";
++import {
++  KalolsavamSettings,
++  KalolsavamStage,
++  KalolsavamProgram,
++  KalolsavamUser,
++  KalolsavamResult,
++} from "../types";
++import { uploadFile } from "../../../lib/upload";
++
++const SETTINGS_DOC_ID = "kalolsavam_settings";
++const SETTINGS_COLLECTION = "settings";
++const STAGES_COLLECTION = "kalolsavam_stages";
++const PROGRAMS_COLLECTION = "kalolsavam_programs";
++const USERS_COLLECTION = "kalolsavam_users";
++const RESULTS_COLLECTION = "kalolsavam_results";
++
++// ----------------- SETTINGS -----------------
++
++export const getKalolsavamSettings = async (): Promise<KalolsavamSettings> => {
++  const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  const snap = await getDoc(docRef);
++  if (snap.exists()) {
++    return { id: snap.id, ...snap.data() } as KalolsavamSettings;
++  }
++  return {
++    isActive: false,
++    festivalName: "Diocesan Kalolsavam",
++    academicYear: "2025-2026",
++    festivalDate: new Date().toISOString().split("T")[0],
++    venue: "Main Campus Grounds",
++    announcement: "Welcome to Kalolsavam! Live stage updates will be shown below.",
++  };
++};
++
++export const saveKalolsavamSettings = async (
++  settings: Partial<KalolsavamSettings>
++): Promise<void> => {
++  const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  await setDoc(
++    docRef,
++    {
++      ...settings,
++      updatedAt: serverTimestamp(),
++    },
++    { merge: true }
++  );
++};
++
++export const toggleKalolsavamActive = async (isActive: boolean): Promise<void> => {
++  const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  await setDoc(docRef, { isActive, updatedAt: serverTimestamp() }, { merge: true });
++};
++
++export const subscribeKalolsavamSettings = (
++  callback: (settings: KalolsavamSettings) => void
++): Unsubscribe => {
++  const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  return onSnapshot(docRef, (snap) => {
++    if (snap.exists()) {
++      callback({ id: snap.id, ...snap.data() } as KalolsavamSettings);
++    } else {
++      callback({
++        isActive: false,
++        festivalName: "Diocesan Kalolsavam",
++        announcement: "Kalolsavam is currently offline.",
++      });
++    }
++  });
++};
++
++// ----------------- STAGES -----------------
++
++export const getStages = async (): Promise<KalolsavamStage[]> => {
++  const q = query(collection(db, STAGES_COLLECTION), orderBy("order", "asc"));
++  const snap = await getDocs(q);
++  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamStage));
++};
++
++export const subscribeStages = (
++  callback: (stages: KalolsavamStage[]) => void
++): Unsubscribe => {
++  const q = query(collection(db, STAGES_COLLECTION), orderBy("order", "asc"));
++  return onSnapshot(q, (snap) => {
++    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamStage));
++    callback(list);
++  });
++};
++
++export const createStage = async (
++  stage: Omit<KalolsavamStage, "id" | "lastUpdated">
++): Promise<string> => {
++  const docRef = await addDoc(collection(db, STAGES_COLLECTION), {
++    ...stage,
++    lastUpdated: serverTimestamp(),
++  });
++  return docRef.id;
++};
++
++export const updateStage = async (
++  stageId: string,
++  data: Partial<KalolsavamStage>
++): Promise<void> => {
++  const docRef = doc(db, STAGES_COLLECTION, stageId);
++  await updateDoc(docRef, {
++    ...data,
++    lastUpdated: serverTimestamp(),
++  });
++};
++
++export const deleteStage = async (stageId: string): Promise<void> => {
++  const docRef = doc(db, STAGES_COLLECTION, stageId);
++  await deleteDoc(docRef);
++};
++
++export const updateStageChestNumber = async (
++  stageId: string,
++  chestNumber: string,
++  nextChestNumber?: string,
++  stageNote?: string,
++  programId?: string,
++  updatedBy?: string
++): Promise<void> => {
++  const docRef = doc(db, STAGES_COLLECTION, stageId);
++  const updatePayload: Record<string, any> = {
++    currentChestNumber: chestNumber,
++    lastUpdated: serverTimestamp(),
++  };
++  if (nextChestNumber !== undefined) updatePayload.nextChestNumber = nextChestNumber;
++  if (stageNote !== undefined) updatePayload.stageNote = stageNote;
++  if (programId !== undefined) updatePayload.currentProgramId = programId;
++  if (updatedBy) updatePayload.lastUpdatedBy = updatedBy;
++
++  await updateDoc(docRef, updatePayload);
++
++  // If a program is linked, also update the program's current chest number
++  if (programId) {
++    const progDocRef = doc(db, PROGRAMS_COLLECTION, programId);
++    await updateDoc(progDocRef, {
++      currentChestNumber: chestNumber,
++      status: "ongoing",
++      updatedAt: serverTimestamp(),
++    }).catch(() => {});
++  }
++};
++
++// ----------------- PROGRAMS -----------------
++
++export const getPrograms = async (): Promise<KalolsavamProgram[]> => {
++  const q = query(collection(db, PROGRAMS_COLLECTION), orderBy("orderInStage", "asc"));
++  const snap = await getDocs(q);
++  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamProgram));
++};
++
++export const subscribePrograms = (
++  callback: (programs: KalolsavamProgram[]) => void
++): Unsubscribe => {
++  const q = query(collection(db, PROGRAMS_COLLECTION), orderBy("orderInStage", "asc"));
++  return onSnapshot(q, (snap) => {
++    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamProgram));
++    callback(list);
++  });
++};
++
++export const createProgram = async (
++  program: Omit<KalolsavamProgram, "id" | "createdAt" | "updatedAt">
++): Promise<string> => {
++  const docRef = await addDoc(collection(db, PROGRAMS_COLLECTION), {
++    ...program,
++    createdAt: serverTimestamp(),
++    updatedAt: serverTimestamp(),
++  });
++  return docRef.id;
++};
++
++export const updateProgram = async (
++  programId: string,
++  data: Partial<KalolsavamProgram>
++): Promise<void> => {
++  const docRef = doc(db, PROGRAMS_COLLECTION, programId);
++  await updateDoc(docRef, {
++    ...data,
++    updatedAt: serverTimestamp(),
++  });
++};
++
++export const deleteProgram = async (programId: string): Promise<void> => {
++  const docRef = doc(db, PROGRAMS_COLLECTION, programId);
++  await deleteDoc(docRef);
++};
++
++// ----------------- USERS / STAGE MANAGERS -----------------
++
++export const getKalolsavamUsers = async (): Promise<KalolsavamUser[]> => {
++  const snap = await getDocs(collection(db, USERS_COLLECTION));
++  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamUser));
++};
++
++export const subscribeKalolsavamUsers = (
++  callback: (users: KalolsavamUser[]) => void
++): Unsubscribe => {
++  return onSnapshot(collection(db, USERS_COLLECTION), (snap) => {
++    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamUser));
++    callback(list);
++  });
++};
++
++import { bulkCreateUsers } from "../../users/services/userService";
++
++export const createKalolsavamUser = async (
++  user: Omit<KalolsavamUser, "id" | "createdAt">,
++  password?: string
++): Promise<string> => {
++  let createdUid: string | undefined;
++
++  // If password is provided, securely create the Firebase Auth login using Cloud Function
++  if (user.email && password) {
++    const authResult = await bulkCreateUsers([
++      {
++        email: user.email,
++        password: password,
++        name: user.name,
++        fullName: user.name,
++        phoneNumber: user.phone || "",
++        role: "stage_manager" as any,
++      } as any,
++    ]);
++
++    if (!authResult.success) {
++      const err = authResult.errors?.[0]?.error || "Failed to create user login credentials";
++      // If user already exists in auth, we can still link them
++      if (!err.toLowerCase().includes("already-exists") && !err.toLowerCase().includes("already in use")) {
++        throw new Error(err);
++      }
++    }
++
++    // Lookup user by email to get UID
++    const q = query(collection(db, "users"), where("email", "==", user.email));
++    const snap = await getDocs(q);
++    if (!snap.empty) {
++      createdUid = snap.docs[0].id;
++      await setDoc(doc(db, "users", createdUid), {
++        fullName: user.name,
++        name: user.name,
++        email: user.email,
++        phoneNumber: user.phone || "",
++        role: "stage_manager",
++        assignedStageIds: user.assignedStageIds,
++        assignedStageNames: user.assignedStageNames,
++        assignedProgramIds: user.assignedProgramIds,
++        assignedProgramNames: user.assignedProgramNames,
++        updatedAt: serverTimestamp(),
++      }, { merge: true });
++    }
++  }
++
++  // Create kalolsavam_users record
++  const docRef = await addDoc(collection(db, USERS_COLLECTION), {
++    ...user,
++    uid: createdUid || "",
++    createdAt: serverTimestamp(),
++  });
++
++  return docRef.id;
++};
++
++export const updateKalolsavamUser = async (
++  userId: string,
++  data: Partial<KalolsavamUser>
++): Promise<void> => {
++  const docRef = doc(db, USERS_COLLECTION, userId);
++  await updateDoc(docRef, data);
++
++  // Sync to root users collection
++  try {
++    const rootUserRef = doc(db, "users", userId);
++    await updateDoc(rootUserRef, data);
++  } catch (e) {
++    // Non-blocking
++  }
++};
++
++export const deleteKalolsavamUser = async (userId: string): Promise<void> => {
++  const docRef = doc(db, USERS_COLLECTION, userId);
++  await deleteDoc(docRef);
++
++  try {
++    await deleteDoc(doc(db, "users", userId));
++  } catch (e) {
++    // Non-blocking
++  }
++};
++
++// ----------------- RESULTS & PDF UPLOAD -----------------
++
++export const getKalolsavamResults = async (): Promise<KalolsavamResult[]> => {
++  const q = query(collection(db, RESULTS_COLLECTION), orderBy("uploadedAt", "desc"));
++  const snap = await getDocs(q);
++  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamResult));
++};
++
++export const subscribeKalolsavamResults = (
++  callback: (results: KalolsavamResult[]) => void
++): Unsubscribe => {
++  const q = query(collection(db, RESULTS_COLLECTION), orderBy("uploadedAt", "desc"));
++  return onSnapshot(q, (snap) => {
++    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as KalolsavamResult));
++    callback(list);
++  });
++};
++
++export const uploadResultPdf = async (
++  file: File,
++  meta: {
++    programId: string;
++    programTitle: string;
++    category?: string;
++    stageId?: string;
++    stageName?: string;
++    isPublished?: boolean;
++    remarks?: string;
++    uploadedBy?: string;
++  }
++): Promise<string> => {
++  const path = `kalolsavam_results/${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
++  const pdfUrl = await uploadFile(file, path);
++
++  const resultDoc: Omit<KalolsavamResult, "id"> = {
++    programId: meta.programId,
++    programTitle: meta.programTitle,
++    category: meta.category || "",
++    stageId: meta.stageId || "",
++    stageName: meta.stageName || "",
++    pdfUrl,
++    pdfName: file.name,
++    fileSize: file.size,
++    isPublished: meta.isPublished ?? true,
++    remarks: meta.remarks || "",
++    uploadedAt: serverTimestamp(),
++    uploadedBy: meta.uploadedBy || "Admin",
++  };
++
++  const docRef = await addDoc(collection(db, RESULTS_COLLECTION), resultDoc);
++
++  // Also link to the program document so participants find it immediately on the program card
++  if (meta.programId) {
++    await updateProgram(meta.programId, {
++      resultPdfUrl: pdfUrl,
++      resultPdfName: file.name,
++      resultUploadedAt: serverTimestamp(),
++      isResultPublished: meta.isPublished ?? true,
++      status: "results_published",
++    });
++  }
++
++  return docRef.id;
++};
++
++export const uploadTotalResultPdf = async (
++  file: File,
++  meta: {
++    title?: string;
++    isPublished?: boolean;
++    remarks?: string;
++    uploadedBy?: string;
++  }
++): Promise<string> => {
++  const path = `kalolsavam_results/TOTAL_${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
++  const pdfUrl = await uploadFile(file, path);
++
++  const title = meta.title?.trim() || "ആകെ ഫലം (Overall Championship / Total Points)";
++  const isPublished = meta.isPublished ?? true;
++
++  // 1. Sync to settings doc (immediate global availability)
++  const settingsRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  await setDoc(
++    settingsRef,
++    {
++      totalResultPdfUrl: pdfUrl,
++      totalResultPdfName: file.name,
++      totalResultTitle: title,
++      isTotalResultPublished: isPublished,
++      totalResultUploadedAt: serverTimestamp(),
++      updatedAt: serverTimestamp(),
++    },
++    { merge: true }
++  );
++
++  // 2. Add or update in RESULTS_COLLECTION for unified results listing
++  const q = query(collection(db, RESULTS_COLLECTION), where("resultType", "==", "total"));
++  const existingSnap = await getDocs(q);
++  let docId: string;
++
++  const resultData: Omit<KalolsavamResult, "id"> = {
++    resultType: "total",
++    programId: "OVERALL_TOTAL",
++    programTitle: title,
++    category: "Overall Championship",
++    stageId: "",
++    stageName: "All Stages / General",
++    pdfUrl,
++    pdfName: file.name,
++    fileSize: file.size,
++    isPublished,
++    remarks: meta.remarks || "",
++    uploadedAt: serverTimestamp(),
++    uploadedBy: meta.uploadedBy || "Admin",
++  };
++
++  if (!existingSnap.empty) {
++    docId = existingSnap.docs[0].id;
++    await updateDoc(doc(db, RESULTS_COLLECTION, docId), resultData);
++  } else {
++    const docRef = await addDoc(collection(db, RESULTS_COLLECTION), resultData);
++    docId = docRef.id;
++  }
++
++  return docId;
++};
++
++export const toggleTotalResultPublished = async (isPublished: boolean): Promise<void> => {
++  const settingsRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  await updateDoc(settingsRef, {
++    isTotalResultPublished: isPublished,
++    updatedAt: serverTimestamp(),
++  });
++
++  const q = query(collection(db, RESULTS_COLLECTION), where("resultType", "==", "total"));
++  const snap = await getDocs(q);
++  for (const d of snap.docs) {
++    await updateDoc(doc(db, RESULTS_COLLECTION, d.id), { isPublished });
++  }
++};
++
++export const removeTotalResultPdf = async (): Promise<void> => {
++  const settingsRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++  await updateDoc(settingsRef, {
++    totalResultPdfUrl: null,
++    totalResultPdfName: null,
++    isTotalResultPublished: false,
++    updatedAt: serverTimestamp(),
++  });
++
++  const q = query(collection(db, RESULTS_COLLECTION), where("resultType", "==", "total"));
++  const snap = await getDocs(q);
++  for (const d of snap.docs) {
++    await deleteDoc(doc(db, RESULTS_COLLECTION, d.id));
++  }
++};
++
++export const toggleResultPublished = async (
++  resultId: string,
++  isPublished: boolean,
++  programId?: string,
++  resultType?: string
++): Promise<void> => {
++  const docRef = doc(db, RESULTS_COLLECTION, resultId);
++  await updateDoc(docRef, { isPublished });
++
++  if (resultType === "total" || programId === "OVERALL_TOTAL") {
++    const settingsRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++    await updateDoc(settingsRef, {
++      isTotalResultPublished: isPublished,
++      updatedAt: serverTimestamp(),
++    });
++  } else if (programId) {
++    await updateProgram(programId, { isResultPublished: isPublished });
++  }
++};
++
++export const deleteKalolsavamResult = async (
++  resultId: string,
++  programId?: string,
++  resultType?: string
++): Promise<void> => {
++  const docRef = doc(db, RESULTS_COLLECTION, resultId);
++  await deleteDoc(docRef);
++
++  if (resultType === "total" || programId === "OVERALL_TOTAL") {
++    const settingsRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
++    await updateDoc(settingsRef, {
++      totalResultPdfUrl: null,
++      totalResultPdfName: null,
++      isTotalResultPublished: false,
++      updatedAt: serverTimestamp(),
++    });
++  } else if (programId) {
++    await updateProgram(programId, {
++      resultPdfUrl: null,
++      resultPdfName: null,
++      isResultPublished: false,
++    });
++  }
++};
++
+diff --git a/src/features/kalolsavam/types/index.ts b/src/features/kalolsavam/types/index.ts
+new file mode 100644
+index 0000000..f09e3d5
+--- /dev/null
++++ b/src/features/kalolsavam/types/index.ts
+@@ -0,0 +1,95 @@
++import { Timestamp } from "firebase/firestore";
++
++export interface KalolsavamSettings {
++  id?: string;
++  isActive: boolean; // Controls whether Kalolsavam is visible to participants in app
++  festivalName: string;
++  academicYear?: string;
++  festivalDate?: string;
++  venue?: string;
++  announcement?: string;
++  totalResultPdfUrl?: string | null;
++  totalResultPdfName?: string | null;
++  totalResultTitle?: string;
++  isTotalResultPublished?: boolean;
++  totalResultUploadedAt?: Timestamp | any;
++  updatedAt?: Timestamp | any;
++}
++
++export type StageStatus = "active" | "break" | "completed" | "paused";
++
++export interface KalolsavamStage {
++  id: string;
++  name: string; // e.g., "Stage 1 - Main Auditorium"
++  shortCode?: string; // e.g., "STG-1"
++  location: string; // e.g., "Auditorium Hall, 1st Floor"
++  order: number;
++  status: StageStatus;
++  currentProgramId?: string | null;
++  currentProgramTitle?: string;
++  currentChestNumber?: string;
++  nextChestNumber?: string;
++  stageNote?: string; // e.g. "Chest numbers 12 to 18 please report to green room"
++  assignedUserIds: string[];
++  assignedUserNames?: string[];
++  lastUpdated?: Timestamp | any;
++  lastUpdatedBy?: string;
++}
++
++export type ProgramStatus = "upcoming" | "ongoing" | "completed" | "results_published";
++
++export interface KalolsavamProgram {
++  id: string;
++  title: string; // e.g., "Margamkali", "Bharatanatyam"
++  code?: string; // e.g., "PRG-101"
++  category: string; // e.g., "Sub-Junior", "Junior", "Senior", "General"
++  stageId: string; // The stage where this program takes place (one stage can handle multiple programs)
++  stageName?: string;
++  orderInStage: number; // 1, 2, 3...
++  scheduledTime?: string; // e.g. "10:00 AM"
++  totalParticipants?: number;
++  currentChestNumber?: string;
++  status: ProgramStatus;
++  resultPdfUrl?: string | null;
++  resultPdfName?: string | null;
++  resultUploadedAt?: Timestamp | any;
++  isResultPublished: boolean;
++  assignedUserIds?: string[];
++  createdAt?: Timestamp | any;
++  updatedAt?: Timestamp | any;
++}
++
++export interface KalolsavamUser {
++  id: string;
++  uid?: string;
++  name: string;
++  email?: string;
++  phone?: string;
++  role: "stage_manager";
++  assignedStageIds: string[];
++  assignedStageNames: string[];
++  assignedProgramIds: string[];
++  assignedProgramNames?: string[];
++  isActive: boolean;
++  createdAt?: Timestamp | any;
++  lastLoginAt?: Timestamp | any;
++}
++
++export type ResultType = "total" | "program";
++
++export interface KalolsavamResult {
++  id: string;
++  resultType?: ResultType;
++  programId?: string;
++  programTitle: string;
++  category?: string;
++  stageId?: string;
++  stageName?: string;
++  pdfUrl: string;
++  pdfName: string;
++  fileSize?: number;
++  isPublished: boolean;
++  remarks?: string;
++  uploadedAt: Timestamp | any;
++  uploadedBy?: string;
++}
+diff --git a/src/pages/kalolsavam/Kalolsavam.tsx b/src/pages/kalolsavam/Kalolsavam.tsx
+new file mode 100644
+index 0000000..996695e
+--- /dev/null
++++ b/src/pages/kalolsavam/Kalolsavam.tsx
+@@ -0,0 +1,1184 @@
++import { useState, useEffect } from "react";
++import {
++  KalolsavamSettings,
++  KalolsavamStage,
++  KalolsavamProgram,
++  KalolsavamUser,
++  KalolsavamResult,
++} from "../../features/kalolsavam/types";
++import {
++  subscribeKalolsavamSettings,
++  subscribeStages,
++  subscribePrograms,
++  subscribeKalolsavamUsers,
++  subscribeKalolsavamResults,
++  saveKalolsavamSettings,
++  toggleKalolsavamActive,
++  deleteStage,
++  deleteProgram,
++  deleteKalolsavamUser,
++  deleteKalolsavamResult,
++  toggleResultPublished,
++  toggleTotalResultPublished,
++  removeTotalResultPdf,
++} from "../../features/kalolsavam/services/kalolsavamService";
++import { StageFormDialog } from "../../features/kalolsavam/components/StageFormDialog";
++import { ProgramFormDialog } from "../../features/kalolsavam/components/ProgramFormDialog";
++import { KalolsavamUserFormDialog } from "../../features/kalolsavam/components/KalolsavamUserFormDialog";
++import { LiveStageControlDialog } from "../../features/kalolsavam/components/LiveStageControlDialog";
++import { ResultUploadDialog } from "../../features/kalolsavam/components/ResultUploadDialog";
++import { LiveDisplayBoard } from "../../features/kalolsavam/components/LiveDisplayBoard";
++import { Button } from "../../components/ui/button";
++import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
++import { Badge } from "../../components/ui/badge";
++import { Switch } from "../../components/ui/switch";
++import { Input } from "../../components/ui/input";
++import { Label } from "../../components/ui/label";
++import { Textarea } from "../../components/ui/textarea";
++import {
++  Trophy,
++  Radio,
++  Plus,
++  Edit2,
++  Trash2,
++  Users,
++  Layers,
++  FileUp,
++  FileText,
++  Sliders,
++  ExternalLink,
++  Megaphone,
++  MapPin,
++  Clock,
++  Eye,
++  Settings as SettingsIcon,
++  Sparkles,
++} from "lucide-react";
++import { toast } from "sonner";
++import { useAuth } from "../../context/AuthContext";
++
++export function Kalolsavam() {
++  const { currentUser } = useAuth();
++  const [settings, setSettings] = useState<KalolsavamSettings | null>(null);
++  const [stages, setStages] = useState<KalolsavamStage[]>([]);
++  const [programs, setPrograms] = useState<KalolsavamProgram[]>([]);
++  const [users, setUsers] = useState<KalolsavamUser[]>([]);
++  const [results, setResults] = useState<KalolsavamResult[]>([]);
++  const [loading, setLoading] = useState(true);
++
++  // Active top-level tab
++  const [activeTab, setActiveTab] = useState<
++    "live" | "stages_programs" | "managers" | "results" | "preview" | "settings"
++  >("live");
++
++  // Dialog States
++  const [stageDialogOpen, setStageDialogOpen] = useState(false);
++  const [editingStage, setEditingStage] = useState<KalolsavamStage | null>(null);
++
++  const [programDialogOpen, setProgramDialogOpen] = useState(false);
++  const [editingProgram, setEditingProgram] = useState<KalolsavamProgram | null>(null);
++
++  const [userDialogOpen, setUserDialogOpen] = useState(false);
++  const [editingUser, setEditingUser] = useState<KalolsavamUser | null>(null);
++
++  const [liveControlStage, setLiveControlStage] = useState<KalolsavamStage | null>(null);
++  const [resultDialogOpen, setResultDialogOpen] = useState(false);
++  const [resultDialogType, setResultDialogType] = useState<"total" | "program">("total");
++
++  // Settings form states
++  const [settingsFestivalName, setSettingsFestivalName] = useState("");
++  const [settingsDate, setSettingsDate] = useState("");
++  const [settingsVenue, setSettingsVenue] = useState("");
++  const [settingsAnnouncement, setSettingsAnnouncement] = useState("");
++
++  // Subscriptions
++  useEffect(() => {
++    const unsubSettings = subscribeKalolsavamSettings((s) => {
++      setSettings(s);
++      setSettingsFestivalName(s.festivalName || "");
++      setSettingsDate(s.festivalDate || "");
++      setSettingsVenue(s.venue || "");
++      setSettingsAnnouncement(s.announcement || "");
++    });
++
++    const unsubStages = subscribeStages((stgs) => setStages(stgs));
++    const unsubPrograms = subscribePrograms((progs) => setPrograms(progs));
++    const unsubUsers = subscribeKalolsavamUsers((usrs) => setUsers(usrs));
++    const unsubResults = subscribeKalolsavamResults((res) => {
++      setResults(res);
++      setLoading(false);
++    });
++
++    return () => {
++      unsubSettings();
++      unsubStages();
++      unsubPrograms();
++      unsubUsers();
++      unsubResults();
++    };
++  }, []);
++
++  // Toggle active for mobile participants
++  const handleToggleActive = async (newVal: boolean) => {
++    try {
++      await toggleKalolsavamActive(newVal);
++      if (newVal) {
++        toast.success("Kalolsavam is now LIVE and active in the mobile app for participants!");
++      } else {
++        toast.info("Kalolsavam is now hidden from participants in the mobile app.");
++      }
++    } catch (err: any) {
++      toast.error("Failed to update status");
++    }
++  };
++
++  // Save Settings
++  const handleSaveSettings = async (e: React.FormEvent) => {
++    e.preventDefault();
++    try {
++      await saveKalolsavamSettings({
++        festivalName: settingsFestivalName.trim(),
++        festivalDate: settingsDate,
++        venue: settingsVenue.trim(),
++        announcement: settingsAnnouncement.trim(),
++      });
++      toast.success("Kalolsavam settings updated successfully!");
++    } catch (err: any) {
++      toast.error("Failed to save settings");
++    }
++  };
++
++  // Delete helpers with confirm
++  const handleDeleteStage = async (id: string, name: string) => {
++    if (confirm(`Are you sure you want to delete "${name}"? All assigned programs should be re-assigned.`)) {
++      try {
++        await deleteStage(id);
++        toast.success("Stage deleted");
++      } catch (err: any) {
++        toast.error("Failed to delete stage");
++      }
++    }
++  };
++
++  const handleDeleteProgram = async (id: string, title: string) => {
++    if (confirm(`Delete competition program "${title}"?`)) {
++      try {
++        await deleteProgram(id);
++        toast.success("Program deleted");
++      } catch (err: any) {
++        toast.error("Failed to delete program");
++      }
++    }
++  };
++
++  const handleDeleteUser = async (id: string, name: string) => {
++    if (confirm(`Remove stage manager "${name}"?`)) {
++      try {
++        await deleteKalolsavamUser(id);
++        toast.success("Stage manager removed");
++      } catch (err: any) {
++        toast.error("Failed to remove user");
++      }
++    }
++  };
++
++  const handleDeleteResult = async (result: KalolsavamResult) => {
++    if (confirm(`Delete result PDF for "${result.programTitle}"?`)) {
++      try {
++        await deleteKalolsavamResult(result.id, result.programId, result.resultType);
++        toast.success("Result PDF removed");
++      } catch (err: any) {
++        toast.error("Failed to remove result PDF");
++      }
++    }
++  };
++
++  const handleToggleTotalResult = async (val: boolean) => {
++    try {
++      await toggleTotalResultPublished(val);
++      toast.success(
++        val
++          ? "Total / Overall Result is now visible to participants in app!"
++          : "Total / Overall Result is now hidden from app."
++      );
++    } catch (err: any) {
++      toast.error("Failed to update status");
++    }
++  };
++
++  const handleRemoveTotalResult = async () => {
++    if (confirm("Are you sure you want to remove the Total / Overall Result PDF?")) {
++      try {
++        await removeTotalResultPdf();
++        toast.success("Total Result PDF removed");
++      } catch (err: any) {
++        toast.error("Failed to remove Total Result");
++      }
++    }
++  };
++
++  const ongoingProgramsCount = programs.filter((p) => p.status === "ongoing").length;
++  const publishedResultsCount = results.filter((r) => r.isPublished).length;
++
++  return (
++    <div className="space-y-6 pb-12">
++      {/* Header Banner */}
++      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gradient-to-r from-card via-card/90 to-primary/5 p-6 rounded-2xl border border-border shadow-sm">
++        <div className="space-y-1">
++          <div className="flex items-center gap-2">
++            <span className="p-2 rounded-xl bg-primary/10 text-primary">
++              <Trophy className="w-6 h-6" />
++            </span>
++            <div>
++              <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-primary to-amber-600 bg-clip-text text-transparent">
++                Kalolsavam (കലോത്സവം)
++              </h1>
++              <p className="text-xs text-muted-foreground">
++                Diocesan Arts Festival & Stage Competition Management Hub
++              </p>
++            </div>
++          </div>
++        </div>
++
++        {/* Master Active Switch */}
++        <div className="flex flex-wrap items-center gap-3">
++          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border bg-background/80 shadow-xs">
++            <div className="text-right">
++              <span className="text-xs font-bold block text-foreground">
++                Mobile App Tab Status
++              </span>
++              <span className="text-[11px] text-muted-foreground block">
++                {settings?.isActive ? "Visible to participants" : "Hidden from participants"}
++              </span>
++            </div>
++            <Switch
++              checked={settings?.isActive ?? false}
++              onCheckedChange={handleToggleActive}
++              className="data-[state=checked]:bg-emerald-600"
++            />
++          </div>
++        </div>
++      </div>
++
++      {/* Metrics Row */}
++      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
++        <Card className="border-l-4 border-l-primary shadow-xs">
++          <CardContent className="p-4 flex items-center justify-between">
++            <div>
++              <p className="text-xs text-muted-foreground font-semibold">Total Stages</p>
++              <h3 className="text-2xl font-bold text-foreground mt-0.5">{stages.length}</h3>
++            </div>
++            <Radio className="w-8 h-8 text-primary opacity-30" />
++          </CardContent>
++        </Card>
++
++        <Card className="border-l-4 border-l-emerald-500 shadow-xs">
++          <CardContent className="p-4 flex items-center justify-between">
++            <div>
++              <p className="text-xs text-muted-foreground font-semibold">Live Competitions</p>
++              <h3 className="text-2xl font-bold text-emerald-600 mt-0.5">{ongoingProgramsCount}</h3>
++            </div>
++            <Sparkles className="w-8 h-8 text-emerald-500 opacity-30" />
++          </CardContent>
++        </Card>
++
++        <Card className="border-l-4 border-l-blue-500 shadow-xs">
++          <CardContent className="p-4 flex items-center justify-between">
++            <div>
++              <p className="text-xs text-muted-foreground font-semibold">Stage Managers</p>
++              <h3 className="text-2xl font-bold text-blue-600 mt-0.5">{users.length}</h3>
++            </div>
++            <Users className="w-8 h-8 text-blue-500 opacity-30" />
++          </CardContent>
++        </Card>
++
++        <Card className="border-l-4 border-l-amber-500 shadow-xs">
++          <CardContent className="p-4 flex items-center justify-between">
++            <div>
++              <p className="text-xs text-muted-foreground font-semibold">Results Published</p>
++              <h3 className="text-2xl font-bold text-amber-600 mt-0.5">{publishedResultsCount}</h3>
++            </div>
++            <Trophy className="w-8 h-8 text-amber-500 opacity-30" />
++          </CardContent>
++        </Card>
++      </div>
++
++      {/* Navigation Tabs */}
++      <div className="flex border-b border-border gap-2 sm:gap-6 overflow-x-auto pb-1 text-sm font-semibold">
++        <button
++          onClick={() => setActiveTab("live")}
++          className={`pb-3 border-b-2 px-1 cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap ${
++            activeTab === "live"
++              ? "border-primary text-primary"
++              : "border-transparent text-muted-foreground hover:text-foreground"
++          }`}
++        >
++          <Radio className="w-4 h-4" />
++          Live Stage Monitor
++        </button>
++
++        <button
++          onClick={() => setActiveTab("stages_programs")}
++          className={`pb-3 border-b-2 px-1 cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap ${
++            activeTab === "stages_programs"
++              ? "border-primary text-primary"
++              : "border-transparent text-muted-foreground hover:text-foreground"
++          }`}
++        >
++          <Layers className="w-4 h-4" />
++          Stages & Programs
++        </button>
++
++        <button
++          onClick={() => setActiveTab("managers")}
++          className={`pb-3 border-b-2 px-1 cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap ${
++            activeTab === "managers"
++              ? "border-primary text-primary"
++              : "border-transparent text-muted-foreground hover:text-foreground"
++          }`}
++        >
++          <Users className="w-4 h-4" />
++          Stage Managers ({users.length})
++        </button>
++
++        <button
++          onClick={() => setActiveTab("results")}
++          className={`pb-3 border-b-2 px-1 cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap ${
++            activeTab === "results"
++              ? "border-primary text-primary"
++              : "border-transparent text-muted-foreground hover:text-foreground"
++          }`}
++        >
++          <FileUp className="w-4 h-4" />
++          Results & PDFs ({results.length})
++        </button>
++
++        <button
++          onClick={() => setActiveTab("preview")}
++          className={`pb-3 border-b-2 px-1 cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap ${
++            activeTab === "preview"
++              ? "border-primary text-primary"
++              : "border-transparent text-muted-foreground hover:text-foreground"
++          }`}
++        >
++          <Eye className="w-4 h-4" />
++          Participant Live View
++        </button>
++
++        <button
++          onClick={() => setActiveTab("settings")}
++          className={`pb-3 border-b-2 px-1 cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap ${
++            activeTab === "settings"
++              ? "border-primary text-primary"
++              : "border-transparent text-muted-foreground hover:text-foreground"
++          }`}
++        >
++          <SettingsIcon className="w-4 h-4" />
++          Festival Settings
++        </button>
++      </div>
++
++      {/* TAB 1: LIVE STAGE MONITOR */}
++      {activeTab === "live" && (
++        <div className="space-y-4">
++          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
++            <div>
++              <h2 className="text-lg font-bold">Real-time Stage Controller</h2>
++              <p className="text-xs text-muted-foreground">
++                Click any stage card to update the running chest number, switch active program, or post live announcements.
++              </p>
++            </div>
++            <Button
++              onClick={() => {
++                setEditingStage(null);
++                setStageDialogOpen(true);
++              }}
++              size="sm"
++              className="gap-1.5"
++            >
++              <Plus className="w-4 h-4" /> Add Stage
++            </Button>
++          </div>
++
++          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
++            {stages.length === 0 ? (
++              <div className="col-span-full text-center py-16 border rounded-2xl bg-card space-y-3">
++                <Radio className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
++                <h3 className="font-bold text-base">No Stages Added Yet</h3>
++                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
++                  Create stages (e.g. Stage 1 - Main Hall, Stage 2 - Open Theatre) where different competitions will take place.
++                </p>
++                <Button
++                  onClick={() => {
++                    setEditingStage(null);
++                    setStageDialogOpen(true);
++                  }}
++                  size="sm"
++                  className="mt-2"
++                >
++                  <Plus className="w-4 h-4 mr-1.5" /> Add First Stage
++                </Button>
++              </div>
++            ) : (
++              stages.map((stage) => {
++                const stagePrograms = programs.filter((p) => p.stageId === stage.id);
++                const assignedManagers = users.filter((u) => u.assignedStageIds.includes(stage.id));
++
++                return (
++                  <Card
++                    key={stage.id}
++                    className="border-2 hover:border-primary transition-all shadow-sm overflow-hidden flex flex-col justify-between"
++                  >
++                    <div>
++                      <div className="p-4 bg-muted/40 border-b flex items-start justify-between">
++                        <div>
++                          <div className="flex items-center gap-2">
++                            <Badge className="font-mono text-xs">{stage.shortCode || `Stage ${stage.order}`}</Badge>
++                            <h3 className="font-bold text-base text-foreground">{stage.name}</h3>
++                          </div>
++                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
++                            <MapPin className="w-3.5 h-3.5" /> {stage.location || "Venue Stage"}
++                          </p>
++                        </div>
++                        <Badge
++                          variant={stage.status === "active" ? "default" : "outline"}
++                          className={stage.status === "active" ? "bg-emerald-600 text-white" : ""}
++                        >
++                          {stage.status.toUpperCase()}
++                        </Badge>
++                      </div>
++
++                      <CardContent className="p-5 space-y-4">
++                        {/* Current Program */}
++                        <div className="p-3 rounded-xl bg-primary/5 border border-primary/10">
++                          <span className="text-[10px] font-bold uppercase text-primary tracking-wider block">
++                            CURRENT PROGRAM
++                          </span>
++                          <p className="text-sm font-bold text-foreground mt-0.5">
++                            {stage.currentProgramTitle || "Ready for Program"}
++                          </p>
++                        </div>
++
++                        {/* Chest Numbers */}
++                        <div className="grid grid-cols-2 gap-3 text-center">
++                          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
++                            <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">
++                              ON STAGE CHEST NO
++                            </span>
++                            <span className="text-3xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-1 block">
++                              {stage.currentChestNumber || "-"}
++                            </span>
++                          </div>
++
++                          <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
++                            <span className="text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300 block">
++                              NEXT REPORTING
++                            </span>
++                            <span className="text-3xl font-extrabold font-mono text-blue-600 dark:text-blue-400 mt-1 block">
++                              {stage.nextChestNumber || "-"}
++                            </span>
++                          </div>
++                        </div>
++
++                        {/* Stage Note */}
++                        {stage.stageNote && (
++                          <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-1.5">
++                            <Megaphone className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
++                            <span className="line-clamp-2">{stage.stageNote}</span>
++                          </div>
++                        )}
++
++                        {/* Assigned Managers */}
++                        <div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
++                          <span className="flex items-center gap-1 font-medium">
++                            <Users className="w-3.5 h-3.5" /> Managers:
++                          </span>
++                          <span className="truncate max-w-[160px] font-medium text-foreground">
++                            {assignedManagers.length > 0
++                              ? assignedManagers.map((m) => m.name).join(", ")
++                              : "None assigned"}
++                          </span>
++                        </div>
++                      </CardContent>
++                    </div>
++
++                    <div className="p-3 bg-muted/20 border-t flex items-center gap-2">
++                      <Button
++                        onClick={() => setLiveControlStage(stage)}
++                        className="flex-1 text-xs font-semibold gap-1.5 bg-primary"
++                        size="sm"
++                      >
++                        <Radio className="w-3.5 h-3.5" /> Update Live Status
++                      </Button>
++                      <Button
++                        variant="outline"
++                        size="icon"
++                        onClick={() => {
++                          setEditingStage(stage);
++                          setStageDialogOpen(true);
++                        }}
++                        className="h-8 w-8"
++                      >
++                        <Edit2 className="w-3.5 h-3.5" />
++                      </Button>
++                    </div>
++                  </Card>
++                );
++              }))}
++            </div>
++          </div>
++        )}
++
++      {/* TAB 2: STAGES & PROGRAMS CONFIGURATION */}
++      {activeTab === "stages_programs" && (
++        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
++          {/* Stages List (4 cols) */}
++          <div className="lg:col-span-5 space-y-4">
++            <div className="flex items-center justify-between">
++              <div>
++                <h3 className="font-bold text-base">Festival Stages</h3>
++                <p className="text-xs text-muted-foreground">Manage physical or virtual stages</p>
++              </div>
++              <Button
++                size="sm"
++                onClick={() => {
++                  setEditingStage(null);
++                  setStageDialogOpen(true);
++                }}
++                className="gap-1 text-xs"
++              >
++                <Plus className="w-3.5 h-3.5" /> Add Stage
++              </Button>
++            </div>
++
++            <div className="space-y-3">
++              {stages.map((stg) => {
++                const progCount = programs.filter((p) => p.stageId === stg.id).length;
++                return (
++                  <div
++                    key={stg.id}
++                    className="p-4 rounded-xl border bg-card/80 hover:bg-card flex items-center justify-between transition-all"
++                  >
++                    <div className="space-y-1">
++                      <div className="flex items-center gap-2">
++                        <span className="font-mono text-xs font-bold px-2 py-0.5 bg-muted rounded">
++                          #{stg.order}
++                        </span>
++                        <h4 className="font-bold text-sm text-foreground">{stg.name}</h4>
++                      </div>
++                      <p className="text-xs text-muted-foreground flex items-center gap-1">
++                        <MapPin className="w-3 h-3" /> {stg.location || "Venue"} • {progCount} Programs
++                      </p>
++                    </div>
++
++                    <div className="flex items-center gap-1">
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        className="h-8 w-8"
++                        onClick={() => {
++                          setEditingStage(stg);
++                          setStageDialogOpen(true);
++                        }}
++                      >
++                        <Edit2 className="w-3.5 h-3.5" />
++                      </Button>
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        className="h-8 w-8 text-destructive hover:text-destructive"
++                        onClick={() => handleDeleteStage(stg.id, stg.name)}
++                      >
++                        <Trash2 className="w-3.5 h-3.5" />
++                      </Button>
++                    </div>
++                  </div>
++                );
++              })}
++            </div>
++          </div>
++
++          {/* Programs List (7 cols) */}
++          <div className="lg:col-span-7 space-y-4">
++            <div className="flex items-center justify-between">
++              <div>
++                <h3 className="font-bold text-base">Competition Programs</h3>
++                <p className="text-xs text-muted-foreground">
++                  One stage can host multiple programs. Schedule order and category.
++                </p>
++              </div>
++              <Button
++                size="sm"
++                onClick={() => {
++                  setEditingProgram(null);
++                  setProgramDialogOpen(true);
++                }}
++                className="gap-1 text-xs"
++                disabled={stages.length === 0}
++              >
++                <Plus className="w-3.5 h-3.5" /> Add Program
++              </Button>
++            </div>
++
++            {stages.length === 0 ? (
++              <div className="p-8 border rounded-xl bg-card text-center text-xs text-muted-foreground">
++                Please create at least one Stage before adding programs.
++              </div>
++            ) : programs.length === 0 ? (
++              <div className="p-8 border rounded-xl bg-card text-center space-y-2">
++                <Layers className="w-8 h-8 mx-auto text-muted-foreground opacity-40" />
++                <p className="text-sm font-semibold">No Programs Created Yet</p>
++                <p className="text-xs text-muted-foreground">
++                  Add dance, song, elocution, quiz, or acting competitions to stages.
++                </p>
++              </div>
++            ) : (
++              <div className="space-y-3">
++                {programs.map((prog) => (
++                  <div
++                    key={prog.id}
++                    className="p-4 rounded-xl border bg-card/80 hover:bg-card flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-all"
++                  >
++                    <div className="space-y-1">
++                      <div className="flex items-center gap-2">
++                        <Badge variant="outline" className="text-[10px] font-bold">
++                          {prog.category}
++                        </Badge>
++                        <h4 className="font-bold text-sm text-foreground">{prog.title}</h4>
++                      </div>
++                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
++                        <span className="font-medium text-foreground/80">
++                          Stage: {prog.stageName || "Assigned Stage"}
++                        </span>
++                        <span className="flex items-center gap-1">
++                          <Clock className="w-3 h-3" /> {prog.scheduledTime || "Time TBD"}
++                        </span>
++                        <span>Order #{prog.orderInStage}</span>
++                        {prog.resultPdfUrl && (
++                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
++                            <FileText className="w-3 h-3" /> Result PDF Attached
++                          </span>
++                        )}
++                      </div>
++                    </div>
++
++                    <div className="flex items-center gap-1.5 self-end sm:self-center">
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        className="h-8 w-8"
++                        onClick={() => {
++                          setEditingProgram(prog);
++                          setProgramDialogOpen(true);
++                        }}
++                      >
++                        <Edit2 className="w-3.5 h-3.5" />
++                      </Button>
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        className="h-8 w-8 text-destructive hover:text-destructive"
++                        onClick={() => handleDeleteProgram(prog.id, prog.title)}
++                      >
++                        <Trash2 className="w-3.5 h-3.5" />
++                      </Button>
++                    </div>
++                  </div>
++                ))}
++              </div>
++            )}
++          </div>
++        </div>
++      )}
++
++      {/* TAB 3: STAGE MANAGERS / USERS */}
++      {activeTab === "managers" && (
++        <div className="space-y-4">
++          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
++            <div>
++              <h2 className="text-lg font-bold">Assigned Stage Managers</h2>
++              <p className="text-xs text-muted-foreground">
++                Admin can create users and assign them specific stages & programs to manage in the app.
++              </p>
++            </div>
++            <Button
++              onClick={() => {
++                setEditingUser(null);
++                setUserDialogOpen(true);
++              }}
++              size="sm"
++              className="gap-1.5"
++            >
++              <Plus className="w-4 h-4" /> Add Stage Manager
++            </Button>
++          </div>
++
++          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
++            {users.length === 0 ? (
++              <div className="col-span-full text-center py-16 border rounded-2xl bg-card space-y-3">
++                <Users className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
++                <h3 className="font-bold text-base">No Stage Managers Created</h3>
++                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
++                  Create manager accounts and assign stages so assigned users can update the running chest numbers in the app.
++                </p>
++                <Button
++                  onClick={() => {
++                    setEditingUser(null);
++                    setUserDialogOpen(true);
++                  }}
++                  size="sm"
++                  className="mt-2"
++                >
++                  <Plus className="w-4 h-4 mr-1.5" /> Create Stage Manager
++                </Button>
++              </div>
++            ) : (
++              users.map((usr) => (
++                <Card key={usr.id} className="border shadow-xs hover:border-primary/40 transition-all">
++                  <CardContent className="p-5 space-y-3">
++                    <div className="flex items-start justify-between">
++                      <div>
++                        <h4 className="font-bold text-base text-foreground">{usr.name}</h4>
++                        <p className="text-xs text-muted-foreground">{usr.phone || usr.email || "Stage Volunteer"}</p>
++                      </div>
++                      <Badge variant={usr.isActive ? "default" : "secondary"} className="text-[10px]">
++                        {usr.isActive ? "Active" : "Inactive"}
++                      </Badge>
++                    </div>
++
++                    {/* Assigned Stages */}
++                    <div>
++                      <span className="text-[11px] font-semibold text-muted-foreground block mb-1">
++                        Assigned Stages ({usr.assignedStageNames?.length || 0}):
++                      </span>
++                      <div className="flex flex-wrap gap-1">
++                        {usr.assignedStageNames && usr.assignedStageNames.length > 0 ? (
++                          usr.assignedStageNames.map((sName, i) => (
++                            <Badge key={i} variant="outline" className="text-[11px] bg-primary/5">
++                              {sName}
++                            </Badge>
++                          ))
++                        ) : (
++                          <span className="text-xs text-amber-600">No stages assigned</span>
++                        )}
++                      </div>
++                    </div>
++
++                    <div className="pt-2 border-t flex items-center justify-between">
++                      <Button
++                        variant="outline"
++                        size="sm"
++                        className="text-xs h-8 gap-1.5"
++                        onClick={() => {
++                          setEditingUser(usr);
++                          setUserDialogOpen(true);
++                        }}
++                      >
++                        <Edit2 className="w-3 h-3" /> Edit
++                      </Button>
++                      <Button
++                        variant="ghost"
++                        size="sm"
++                        className="text-xs h-8 text-destructive hover:text-destructive"
++                        onClick={() => handleDeleteUser(usr.id, usr.name)}
++                      >
++                        <Trash2 className="w-3 h-3 mr-1" /> Remove
++                      </Button>
++                    </div>
++                  </CardContent>
++                </Card>
++              ))
++            )}
++          </div>
++        </div>
++      )}
++
++      {/* TAB 4: RESULTS & PDFS */}
++      {activeTab === "results" && (
++        <div className="space-y-5">
++          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
++            <div>
++              <h2 className="text-lg font-bold">Official Results & PDF Uploads</h2>
++              <p className="text-xs text-muted-foreground">
++                Publish the overall total championship points sheet or individual competition program results for participants.
++              </p>
++            </div>
++            <div className="flex flex-wrap items-center gap-2">
++              <Button
++                onClick={() => {
++                  setResultDialogType("total");
++                  setResultDialogOpen(true);
++                }}
++                size="sm"
++                className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-xs"
++              >
++                <Trophy className="w-4 h-4" /> 🏆 Publish Total Result (ആകെ ഫലം)
++              </Button>
++              <Button
++                onClick={() => {
++                  setResultDialogType("program");
++                  setResultDialogOpen(true);
++                }}
++                variant="outline"
++                size="sm"
++                className="gap-1.5"
++              >
++                <FileUp className="w-4 h-4" /> Program Result
++              </Button>
++            </div>
++          </div>
++
++          {/* FEATURED: GRAND TOTAL / OVERALL CHAMPIONSHIP BANNER */}
++          {settings?.totalResultPdfUrl ? (
++            <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-card border-2 border-amber-500/40 shadow-xs space-y-4">
++              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
++                <div className="flex items-center gap-3.5">
++                  <div className="p-3 bg-amber-500/20 text-amber-700 dark:text-amber-300 rounded-xl shrink-0">
++                    <Trophy className="w-7 h-7" />
++                  </div>
++                  <div>
++                    <div className="flex items-center gap-2">
++                      <Badge className="bg-amber-600 text-white text-[10px] font-extrabold uppercase tracking-wider">
++                        GRAND TOTAL RESULT (ആകെ ഫലം)
++                      </Badge>
++                      <Badge
++                        variant="outline"
++                        className={
++                          settings.isTotalResultPublished
++                            ? "border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
++                            : "border-slate-300 text-slate-500"
++                        }
++                      >
++                        {settings.isTotalResultPublished ? "Published in App" : "Draft / Hidden"}
++                      </Badge>
++                    </div>
++                    <h3 className="font-extrabold text-base sm:text-lg text-foreground mt-1">
++                      {settings.totalResultTitle || "ആകെ ഫലം (Overall Championship / Total Points Table)"}
++                    </h3>
++                    <p className="text-xs text-muted-foreground">
++                      Consolidated points table & grand championship rank list declared by Kalolsavam committee
++                    </p>
++                  </div>
++                </div>
++
++                {/* Publish Toggle */}
++                <div className="flex items-center gap-3 px-3 py-2 bg-background/80 rounded-xl border border-amber-500/20 shrink-0 self-start sm:self-auto">
++                  <span className="text-xs font-semibold">
++                    {settings.isTotalResultPublished ? "Active in App" : "Hidden"}
++                  </span>
++                  <Switch
++                    checked={settings.isTotalResultPublished ?? true}
++                    onCheckedChange={handleToggleTotalResult}
++                  />
++                </div>
++              </div>
++
++              <div className="flex flex-wrap items-center justify-between pt-3 border-t border-amber-500/20 gap-3">
++                <div className="flex items-center gap-2 text-xs text-muted-foreground">
++                  <FileText className="w-4 h-4 text-amber-600" />
++                  <span className="font-mono truncate max-w-[220px]">
++                    {settings.totalResultPdfName || "Total_Championship_Result.pdf"}
++                  </span>
++                </div>
++                <div className="flex items-center gap-2">
++                  <a href={settings.totalResultPdfUrl} target="_blank" rel="noreferrer">
++                    <Button size="sm" className="h-8 text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold">
++                      <Eye className="w-3.5 h-3.5" /> View Total PDF
++                    </Button>
++                  </a>
++                  <Button
++                    size="sm"
++                    variant="outline"
++                    className="h-8 text-xs gap-1"
++                    onClick={() => {
++                      setResultDialogType("total");
++                      setResultDialogOpen(true);
++                    }}
++                  >
++                    <FileUp className="w-3.5 h-3.5" /> Replace PDF
++                  </Button>
++                  <Button
++                    size="sm"
++                    variant="ghost"
++                    className="h-8 text-xs text-destructive hover:text-destructive"
++                    onClick={handleRemoveTotalResult}
++                  >
++                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
++                  </Button>
++                </div>
++              </div>
++            </div>
++          ) : (
++            <div className="p-4 rounded-xl border-2 border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
++              <div className="flex items-center gap-3">
++                <div className="p-2.5 bg-amber-500/20 text-amber-700 dark:text-amber-300 rounded-xl">
++                  <Trophy className="w-5 h-5" />
++                </div>
++                <div>
++                  <h4 className="text-sm font-bold text-foreground">
++                    Publish Total Result (ആകെ ഫലം / Overall Points)
++                  </h4>
++                  <p className="text-xs text-muted-foreground">
++                    Publish a single total points sheet or general championship PDF instead of or in addition to individual programs.
++                  </p>
++                </div>
++              </div>
++              <Button
++                onClick={() => {
++                  setResultDialogType("total");
++                  setResultDialogOpen(true);
++                }}
++                size="sm"
++                className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 font-bold shrink-0"
++              >
++                <Trophy className="w-3.5 h-3.5" /> 🏆 Publish Total Result
++              </Button>
++            </div>
++          )}
++
++          {/* Results Grid */}
++          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
++            {results.length === 0 ? (
++              <div className="col-span-full text-center py-16 border rounded-2xl bg-card space-y-3">
++                <FileText className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
++                <h3 className="font-bold text-base">No Results Uploaded Yet</h3>
++                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
++                  Upload total points sheets or program score sheets so participants can view official declarations in the app.
++                </p>
++                <div className="flex justify-center gap-2 mt-2">
++                  <Button
++                    onClick={() => {
++                      setResultDialogType("total");
++                      setResultDialogOpen(true);
++                    }}
++                    size="sm"
++                    className="bg-amber-600 hover:bg-amber-700 text-white"
++                  >
++                    <Trophy className="w-4 h-4 mr-1.5" /> Publish Total Result
++                  </Button>
++                  <Button
++                    onClick={() => {
++                      setResultDialogType("program");
++                      setResultDialogOpen(true);
++                    }}
++                    size="sm"
++                    variant="outline"
++                  >
++                    <FileUp className="w-4 h-4 mr-1.5" /> Program Result
++                  </Button>
++                </div>
++              </div>
++            ) : (
++              results.map((res) => {
++                const isTotal = res.resultType === "total" || res.programId === "OVERALL_TOTAL";
++                return (
++                  <Card
++                    key={res.id}
++                    className={`border shadow-xs hover:border-primary/40 transition-all ${
++                      isTotal ? "border-amber-500/50 bg-amber-500/5" : ""
++                    }`}
++                  >
++                    <CardContent className="p-5 space-y-3">
++                      <div className="flex items-start justify-between">
++                        <div>
++                          <Badge
++                            className={`text-[10px] mb-1 ${
++                              isTotal
++                                ? "bg-amber-600 text-white font-bold"
++                                : "bg-primary/10 text-primary border-primary/20"
++                            }`}
++                          >
++                            {isTotal ? "🏆 TOTAL RESULT" : res.category || "Program Result"}
++                          </Badge>
++                          <h4 className="font-bold text-base text-foreground">{res.programTitle}</h4>
++                          <p className="text-xs text-muted-foreground">
++                            {isTotal ? "Consolidated Points" : res.stageName || "Main Stage"}
++                          </p>
++                        </div>
++                        <div className="flex items-center gap-2">
++                          <Switch
++                            checked={res.isPublished}
++                            onCheckedChange={(val) =>
++                              toggleResultPublished(res.id, val, res.programId, res.resultType)
++                            }
++                            title="Toggle published status"
++                          />
++                        </div>
++                      </div>
++
++                      {res.remarks && (
++                        <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md italic">
++                          "{res.remarks}"
++                        </p>
++                      )}
++
++                      <div className="text-xs text-muted-foreground flex items-center justify-between">
++                        <span className="truncate max-w-[150px]">{res.pdfName}</span>
++                        <Badge
++                          variant="outline"
++                          className={res.isPublished ? "text-emerald-600" : "text-muted-foreground"}
++                        >
++                          {res.isPublished ? "Published to App" : "Draft / Hidden"}
++                        </Badge>
++                      </div>
++
++                      <div className="pt-2 border-t flex items-center justify-between">
++                        <a href={res.pdfUrl} target="_blank" rel="noreferrer">
++                          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
++                            <Eye className="w-3.5 h-3.5" /> View PDF
++                          </Button>
++                        </a>
++                        <Button
++                          variant="ghost"
++                          size="sm"
++                          className="h-8 text-xs text-destructive hover:text-destructive"
++                          onClick={() => handleDeleteResult(res)}
++                        >
++                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
++                        </Button>
++                      </div>
++                    </CardContent>
++                  </Card>
++                );
++              })
++            )}
++          </div>
++        </div>
++      )}
++
++      {/* TAB 5: PARTICIPANT LIVE BOARD PREVIEW */}
++      {activeTab === "preview" && (
++        <div className="space-y-4">
++          <div className="p-4 rounded-xl bg-muted/40 border flex items-center justify-between">
++            <div>
++              <h3 className="font-bold text-base">Participant Live Board Preview</h3>
++              <p className="text-xs text-muted-foreground">
++                This is the exact view participants see in the mobile app and on the public big screen live feed.
++              </p>
++            </div>
++            <a href="/kalolsavam/live" target="_blank" rel="noreferrer">
++              <Button size="sm" variant="outline" className="gap-1.5 text-xs">
++                Open in Fullscreen / Projector Mode <ExternalLink className="w-3 h-3" />
++              </Button>
++            </a>
++          </div>
++
++          <LiveDisplayBoard
++            settings={settings}
++            stages={stages}
++            programs={programs}
++            results={results}
++          />
++        </div>
++      )}
++
++      {/* TAB 6: FESTIVAL SETTINGS */}
++      {activeTab === "settings" && (
++        <Card className="max-w-2xl">
++          <CardHeader>
++            <CardTitle>Kalolsavam Festival Settings</CardTitle>
++            <CardDescription>
++              Configure the festival name, venue, date, and ticker broadcast message shown to participants.
++            </CardDescription>
++          </CardHeader>
++          <CardContent>
++            <form onSubmit={handleSaveSettings} className="space-y-4">
++              <div className="space-y-2">
++                <Label htmlFor="fest-name">Festival Name / Title *</Label>
++                <Input
++                  id="fest-name"
++                  value={settingsFestivalName}
++                  onChange={(e) => setSettingsFestivalName(e.target.value)}
++                  placeholder="e.g. Diocesan Sunday School Kalolsavam 2026"
++                  required
++                />
++              </div>
++
++              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
++                <div className="space-y-2">
++                  <Label htmlFor="fest-date">Festival Date</Label>
++                  <Input
++                    id="fest-date"
++                    type="date"
++                    value={settingsDate}
++                    onChange={(e) => setSettingsDate(e.target.value)}
++                  />
++                </div>
++
++                <div className="space-y-2">
++                  <Label htmlFor="fest-venue">Venue / Campus</Label>
++                  <Input
++                    id="fest-venue"
++                    value={settingsVenue}
++                    onChange={(e) => setSettingsVenue(e.target.value)}
++                    placeholder="e.g. St. Mary's Cathedral Ground"
++                  />
++                </div>
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="fest-announcement">
++                  Live Announcement Banner / Ticker Message
++                </Label>
++                <Textarea
++                  id="fest-announcement"
++                  value={settingsAnnouncement}
++                  onChange={(e) => setSettingsAnnouncement(e.target.value)}
++                  placeholder="e.g. Welcome to Diocesan Kalolsavam! Inaugural ceremony starts at 9:00 AM at Stage 1."
++                  rows={3}
++                />
++                <p className="text-xs text-muted-foreground">
++                  This message scrolls prominently across the top of the participant screen in the mobile app.
++                </p>
++              </div>
++
++              <div className="pt-2">
++                <Button type="submit">Save Festival Settings</Button>
++              </div>
++            </form>
++          </CardContent>
++        </Card>
++      )}
++
++      {/* MODALS */}
++      <StageFormDialog
++        open={stageDialogOpen}
++        onOpenChange={setStageDialogOpen}
++        stage={editingStage}
++        totalStagesCount={stages.length}
++      />
++
++      <ProgramFormDialog
++        open={programDialogOpen}
++        onOpenChange={setProgramDialogOpen}
++        program={editingProgram}
++        stages={stages}
++      />
++
++      <KalolsavamUserFormDialog
++        open={userDialogOpen}
++        onOpenChange={setUserDialogOpen}
++        user={editingUser}
++        stages={stages}
++        programs={programs}
++      />
++
++      <LiveStageControlDialog
++        open={!!liveControlStage}
++        onOpenChange={(open) => !open && setLiveControlStage(null)}
++        stage={liveControlStage}
++        stagePrograms={programs.filter((p) => p.stageId === liveControlStage?.id)}
++        updatedBy={currentUser?.displayName || currentUser?.email || "Admin"}
++      />
++
++      <ResultUploadDialog
++        open={resultDialogOpen}
++        onOpenChange={setResultDialogOpen}
++        programs={programs}
++        stages={stages}
++        defaultResultType={resultDialogType}
++        adminName={currentUser?.displayName || currentUser?.email || "Admin"}
++      />
++    </div>
++  );
++}
+diff --git a/src/routes/index.tsx b/src/routes/index.tsx
+index eee6622..c509a12 100644
+--- a/src/routes/index.tsx
++++ b/src/routes/index.tsx
+@@ -33,6 +33,7 @@ import { Saints } from "../pages/saints/Saints";
+ import { Calendar } from "../pages/calendar/Calendar";
+ import { Catechism } from "../pages/catechism/Catechism";
+ import { WordOfLife } from "../pages/word-of-life/WordOfLife";
++import { Kalolsavam } from "../pages/kalolsavam/Kalolsavam";
+ 
+ export const router = createBrowserRouter([
+   {
+@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
+           { path: "calendar", Component: Calendar },
+           { path: "catechism", Component: Catechism },
+           { path: "word-of-life", Component: WordOfLife },
++          { path: "kalolsavam", Component: Kalolsavam },
+         ],
+       },
+     ],
+-- 
+2.56.0.windows.2
+

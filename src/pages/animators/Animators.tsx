@@ -18,6 +18,8 @@ import {
   UserCheck,
   Eye,
   Sparkles,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   Card,
@@ -85,6 +87,7 @@ import {
 } from "../../features/animators/services/animatorService";
 import { Marks } from "../marks/Marks";
 import { Questions } from "../questions/Questions";
+import { ExcelAnimatorUpload } from "../../features/animators/components/ExcelAnimatorUpload";
 import { UserData, getUsers, resetUserPasswordByAdmin, toggleUserDisabledStatus } from "../../features/users/services/userService";
 import { Link } from "react-router";
 import {
@@ -125,6 +128,7 @@ export function AnimatorsList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedAnimator, setSelectedAnimator] =
@@ -175,19 +179,34 @@ export function AnimatorsList() {
   // Assignment form state
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
 
+  // Forane and School filtering states for dialogs
+  const [foranesList, setForanesList] = useState<string[]>([]);
+  const [createForaneFilter, setCreateForaneFilter] = useState<string>("all");
+  const [createSchoolSearch, setCreateSchoolSearch] = useState<string>("");
+  const [editForaneFilter, setEditForaneFilter] = useState<string>("all");
+  const [editSchoolSearch, setEditSchoolSearch] = useState<string>("");
+  const [assignForaneFilter, setAssignForaneFilter] = useState<string>("all");
+  const [assignSchoolSearch, setAssignSchoolSearch] = useState<string>("");
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [animatorsData, schoolsData, statsData, usersData] = await Promise.all([
+      const [animatorsData, schoolsData, statsData, usersData, foranesSnap] = await Promise.all([
         getAnimators(),
         getUnassignedSchools(selectedYear),
         getAnimatorStats(selectedYear),
         getUsers(),
+        getDocs(query(collection(db, "foranes"), orderBy("name"))).catch(() => null),
       ]);
       setAnimators(animatorsData);
       setUnassignedSchools(schoolsData as SchoolData[]);
       setStats(statsData);
       setAllUsers(usersData);
+      const foraneNames = foranesSnap
+        ? foranesSnap.docs.map((d) => (d.data().name as string || "").trim()).filter(Boolean)
+        : [];
+      setForanesList(foraneNames);
+
       // Collect all unique years from assignment data
       const yearsFromData = new Set<string>();
       animatorsData.forEach(a => a.assignments.forEach(asg => {
@@ -201,6 +220,92 @@ export function AnimatorsList() {
       setLoading(false);
     }
   };
+
+  // Distinct available foranes derived from foranes collection and school profiles
+  const availableForanes = useMemo(() => {
+    const set = new Set<string>(foranesList);
+    allUsers.forEach((u) => {
+      if (u.role === "school" && u.forane) {
+        const trimmed = u.forane.trim();
+        if (trimmed) set.add(trimmed);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [foranesList, allUsers]);
+
+  // All school users
+  const schoolUsers = useMemo(() => {
+    return allUsers.filter((u) => u.role === "school");
+  }, [allUsers]);
+
+  // Filtered schools for Create Animator dialog
+  const filteredSchoolsForCreate = useMemo(() => {
+    return schoolUsers.filter((school) => {
+      const schoolForane = (school.forane || "").trim().toLowerCase();
+      const matchesForane =
+        createForaneFilter === "all" ||
+        schoolForane === createForaneFilter.trim().toLowerCase();
+      if (!matchesForane) return false;
+
+      if (!createSchoolSearch.trim()) return true;
+      const search = createSchoolSearch.toLowerCase().trim();
+      const name = (school.schoolname || school.schoolName || school.name || school.fullName || school.email || "").toLowerCase();
+      const code = String(school.code || school.parishCode || "").toLowerCase();
+      const parish = (school.parish || "").toLowerCase();
+      return name.includes(search) || code.includes(search) || parish.includes(search);
+    });
+  }, [schoolUsers, createForaneFilter, createSchoolSearch]);
+
+  // Filtered schools for Edit Animator dialog
+  const filteredSchoolsForEdit = useMemo(() => {
+    return schoolUsers.filter((school) => {
+      const schoolForane = (school.forane || "").trim().toLowerCase();
+      const matchesForane =
+        editForaneFilter === "all" ||
+        schoolForane === editForaneFilter.trim().toLowerCase();
+      if (!matchesForane) return false;
+
+      if (!editSchoolSearch.trim()) return true;
+      const search = editSchoolSearch.toLowerCase().trim();
+      const name = (school.schoolname || school.schoolName || school.name || school.fullName || school.email || "").toLowerCase();
+      const code = String(school.code || school.parishCode || "").toLowerCase();
+      const parish = (school.parish || "").toLowerCase();
+      return name.includes(search) || code.includes(search) || parish.includes(search);
+    });
+  }, [schoolUsers, editForaneFilter, editSchoolSearch]);
+
+  // Filtered unassigned schools for Assign School dialog
+  const filteredUnassignedSchools = useMemo(() => {
+    return unassignedSchools.filter((school) => {
+      if (!selectedAnimator) return true;
+      const homeParish = selectedAnimator.parishName?.toLowerCase().trim() || "";
+      const schoolName = (school.schoolname || school.schoolName || "").toLowerCase().trim();
+      const schoolParish = (school.parish || "").toLowerCase().trim();
+
+      if (
+        homeParish &&
+        (schoolName.includes(homeParish) ||
+          homeParish.includes(schoolName) ||
+          (schoolParish && homeParish.includes(schoolParish)))
+      ) {
+        return false;
+      }
+
+      const schoolForane = (school.forane || "").trim().toLowerCase();
+      const matchesForane =
+        assignForaneFilter === "all" ||
+        schoolForane === assignForaneFilter.trim().toLowerCase();
+      if (!matchesForane) return false;
+
+      if (!assignSchoolSearch.trim()) return true;
+      const search = assignSchoolSearch.toLowerCase().trim();
+      return (
+        schoolName.includes(search) ||
+        schoolParish.includes(search) ||
+        schoolForane.includes(search)
+      );
+    });
+  }, [unassignedSchools, selectedAnimator, assignForaneFilter, assignSchoolSearch]);
 
   useEffect(() => {
     fetchData();
@@ -254,6 +359,10 @@ export function AnimatorsList() {
       parishId: animator.parishId || "",
       parishName: animator.parishName || animator.parish || "",
     });
+    // Set edit forane filter based on animator's school if available
+    const school = allUsers.find((u) => u.id === animator.parishId);
+    setEditForaneFilter(school?.forane || "all");
+    setEditSchoolSearch("");
     setIsEditDialogOpen(true);
   };
 
@@ -414,34 +523,66 @@ export function AnimatorsList() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Animator Management
         </h1>
-        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-          setIsCreateDialogOpen(open);
-          if (!open) {
-            setFormData({
-              email: "",
-              password: "",
-              name: "",
-              phoneNumber: "",
-              address: "",
-              parishId: "",
-              parishName: "",
-            });
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Animator
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Animator</DialogTitle>
-              <DialogDescription>
-                Add a new animator account to the system.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsUploadDialogOpen(true)}
+            className="border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700/50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600 dark:text-emerald-400" />
+            Bulk Upload
+          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) {
+              setFormData({
+                email: "",
+                password: "",
+                name: "",
+                phoneNumber: "",
+                address: "",
+                parishId: "",
+                parishName: "",
+              });
+              setCreateForaneFilter("all");
+              setCreateSchoolSearch("");
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Create Animator
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Animator</DialogTitle>
+                <DialogDescription>
+                  Add a new animator account to the system.
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Bulk upload shortcut callout */}
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Have multiple animators in an Excel/CSV file?</span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs bg-white dark:bg-gray-800 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 shrink-0"
+                  onClick={() => {
+                    setIsCreateDialogOpen(false);
+                    setIsUploadDialogOpen(true);
+                  }}
+                >
+                  Bulk Upload
+                </Button>
+              </div>
+
+              <div className="space-y-4 py-2">
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
@@ -504,31 +645,100 @@ export function AnimatorsList() {
                   autoComplete="off"
                 />
               </div>
+              {/* Forane Selector for easy school filtering */}
               <div className="space-y-2">
-                <Label htmlFor="school">School *</Label>
+                <Label htmlFor="create-forane">Forane</Label>
+                <Select
+                  value={createForaneFilter}
+                  onValueChange={(val) => {
+                    setCreateForaneFilter(val);
+                    setCreateSchoolSearch("");
+                    // Reset selected school if it doesn't match the newly chosen forane
+                    if (val !== "all" && formData.parishId) {
+                      const curSchool = schoolUsers.find((s) => s.id === formData.parishId);
+                      if (curSchool && (curSchool.forane || "").trim().toLowerCase() !== val.trim().toLowerCase()) {
+                        setFormData((prev) => ({ ...prev, parishId: "", parishName: "" }));
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger id="create-forane">
+                    <SelectValue placeholder="All Foranes (Filter school list)" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    <SelectItem value="all">All Foranes</SelectItem>
+                    {availableForanes.map((forane) => (
+                      <SelectItem key={forane} value={forane}>
+                        {forane}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Select a forane to filter the school list below, or leave as All Foranes.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="school">
+                  School *
+                  {createForaneFilter !== "all" && (
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                      ({filteredSchoolsForCreate.length} schools in {createForaneFilter})
+                    </span>
+                  )}
+                </Label>
                 <Select
                   value={formData.parishId}
                   onValueChange={(value) => {
-                    const schools = allUsers.filter((u) => u.role === "school");
-                    const selectedSchool = schools.find((s) => s.id === value);
+                    const selectedSchool = schoolUsers.find((s) => s.id === value);
                     setFormData({
                       ...formData,
                       parishId: value,
-                      parishName: selectedSchool ? (selectedSchool.schoolname || selectedSchool.schoolName || selectedSchool.fullName || selectedSchool.name || "") : "",
+                      parishName: selectedSchool
+                        ? (selectedSchool.schoolname || selectedSchool.schoolName || selectedSchool.fullName || selectedSchool.name || "")
+                        : "",
                     });
+                    // Auto-sync forane filter if currently "all"
+                    if (createForaneFilter === "all" && selectedSchool?.forane) {
+                      setCreateForaneFilter(selectedSchool.forane);
+                    }
                   }}
                 >
                   <SelectTrigger id="school">
                     <SelectValue placeholder="Select school" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {allUsers
-                      .filter((u) => u.role === "school")
-                      .map((school) => (
+                  <SelectContent className="max-h-72">
+                    <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
+                      <input
+                        placeholder="Search school name or code..."
+                        value={createSchoolSearch}
+                        onChange={(e) => setCreateSchoolSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="w-full text-xs px-2.5 py-1.5 rounded-md border border-input bg-background outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    {filteredSchoolsForCreate.map((school) => {
+                      const name = school.schoolname || school.schoolName || school.name || school.fullName || school.email;
+                      return (
                         <SelectItem key={school.id} value={school.id}>
-                          {school.schoolname || school.schoolName || school.name || school.fullName || school.email}
+                          <div className="flex items-center justify-between gap-2">
+                            <span>{name}</span>
+                            {school.forane && (
+                              <span className="text-[11px] text-muted-foreground">
+                                • {school.forane}
+                              </span>
+                            )}
+                          </div>
                         </SelectItem>
-                      ))}
+                      );
+                    })}
+                    {filteredSchoolsForCreate.length === 0 && (
+                      <div className="py-4 text-center text-xs text-muted-foreground italic">
+                        No Sunday schools found
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -546,6 +756,7 @@ export function AnimatorsList() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -818,6 +1029,29 @@ export function AnimatorsList() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
+              <Label>Forane</Label>
+              <Select
+                value={assignForaneFilter}
+                onValueChange={(val) => {
+                  setAssignForaneFilter(val);
+                  setAssignSchoolSearch("");
+                  setSelectedSchoolId("");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Foranes (Filter schools)" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="all">All Foranes</SelectItem>
+                  {availableForanes.map((forane) => (
+                    <SelectItem key={forane} value={forane}>
+                      {forane}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Select School</Label>
               <Select
                 value={selectedSchoolId}
@@ -826,39 +1060,35 @@ export function AnimatorsList() {
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a school..." />
                 </SelectTrigger>
-                <SelectContent>
-                  {(() => {
-                    const filtered = unassignedSchools.filter(school => {
-                      if (!selectedAnimator) return true;
-                      const homeParish = selectedAnimator.parishName?.toLowerCase().trim() || "";
-                      const schoolName = (school.schoolname || school.schoolName || "").toLowerCase().trim();
-                      const schoolParish = (school.parish || "").toLowerCase().trim();
-
-                      if (homeParish && (
-                        schoolName.includes(homeParish) ||
-                        homeParish.includes(schoolName) ||
-                        (schoolParish && homeParish.includes(schoolParish))
-                      )) {
-                        return false;
-                      }
-                      return true;
-                    });
-
-                    if (filtered.length === 0) {
-                      return (
-                        <SelectItem value="none" disabled>
-                          No eligible schools available
-                        </SelectItem>
-                      );
-                    }
-
-                    return filtered.map((school) => (
+                <SelectContent className="max-h-72">
+                  <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
+                    <input
+                      placeholder="Search unassigned school..."
+                      value={assignSchoolSearch}
+                      onChange={(e) => setAssignSchoolSearch(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="w-full text-xs px-2.5 py-1.5 rounded-md border border-input bg-background outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                  {filteredUnassignedSchools.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      No eligible schools available
+                    </SelectItem>
+                  ) : (
+                    filteredUnassignedSchools.map((school) => (
                       <SelectItem key={school.id} value={school.id}>
-                        {school.schoolname || school.schoolName} -{" "}
-                        {school.parish}
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{school.schoolname || school.schoolName} - {school.parish}</span>
+                          {school.forane && (
+                            <span className="text-[11px] text-muted-foreground">
+                              • {school.forane}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
-                    ));
-                  })()}
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -927,30 +1157,80 @@ export function AnimatorsList() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="edit-forane">Forane</Label>
+              <Select
+                value={editForaneFilter}
+                onValueChange={(val) => {
+                  setEditForaneFilter(val);
+                  setEditSchoolSearch("");
+                  if (val !== "all" && editFormData.parishId) {
+                    const curSchool = schoolUsers.find((s) => s.id === editFormData.parishId);
+                    if (curSchool && (curSchool.forane || "").trim().toLowerCase() !== val.trim().toLowerCase()) {
+                      setEditFormData((prev) => ({ ...prev, parishId: "", parishName: "" }));
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger id="edit-forane">
+                  <SelectValue placeholder="All Foranes (Filter school list)" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="all">All Foranes</SelectItem>
+                  {availableForanes.map((forane) => (
+                    <SelectItem key={forane} value={forane}>
+                      {forane}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-school">School *</Label>
               <Select
                 value={editFormData.parishId}
                 onValueChange={(value) => {
-                  const schools = allUsers.filter((u) => u.role === "school");
-                  const selectedSchool = schools.find((s) => s.id === value);
+                  const selectedSchool = schoolUsers.find((s) => s.id === value);
                   setEditFormData({
                     ...editFormData,
                     parishId: value,
                     parishName: selectedSchool ? (selectedSchool.schoolname || selectedSchool.schoolName || selectedSchool.fullName || selectedSchool.name || "") : "",
                   });
+                  if (editForaneFilter === "all" && selectedSchool?.forane) {
+                    setEditForaneFilter(selectedSchool.forane);
+                  }
                 }}
               >
                 <SelectTrigger id="edit-school">
                   <SelectValue placeholder="Select school" />
                 </SelectTrigger>
-                <SelectContent>
-                  {allUsers
-                    .filter((u) => u.role === "school")
-                    .map((school) => (
-                      <SelectItem key={school.id} value={school.id}>
-                        {school.schoolname || school.schoolName || school.name || school.fullName || school.email}
-                      </SelectItem>
-                    ))}
+                <SelectContent className="max-h-72">
+                  <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
+                    <input
+                      placeholder="Search school name or code..."
+                      value={editSchoolSearch}
+                      onChange={(e) => setEditSchoolSearch(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="w-full text-xs px-2.5 py-1.5 rounded-md border border-input bg-background outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                  {filteredSchoolsForEdit.map((school) => (
+                    <SelectItem key={school.id} value={school.id}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{school.schoolname || school.schoolName || school.name || school.fullName || school.email}</span>
+                        {school.forane && (
+                          <span className="text-[11px] text-muted-foreground">
+                            • {school.forane}
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {filteredSchoolsForEdit.length === 0 && (
+                    <div className="py-4 text-center text-xs text-muted-foreground italic">
+                      No Sunday schools found
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1057,6 +1337,14 @@ export function AnimatorsList() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Upload Dialog */}
+      <ExcelAnimatorUpload
+        isOpen={isUploadDialogOpen}
+        onClose={() => setIsUploadDialogOpen(false)}
+        onUploadComplete={fetchData}
+        existingAnimators={animators}
+      />
     </div>
   );
 }

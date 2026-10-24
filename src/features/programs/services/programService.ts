@@ -43,6 +43,8 @@ export interface ProgramData {
     // Payment details
     paymentDetails?: {
         isRequired?: boolean;
+        feeType?: 'individual' | 'group'; // 'individual' (per person) or 'group' (per team/group)
+        maxMembersPerGroup?: number; // max participants per group/team if feeType === 'group'
         registrationFee?: number;
         advancePercentage?: number; // legacy support
         advanceType?: 'percentage' | 'fixed';
@@ -52,6 +54,57 @@ export interface ProgramData {
         accountNumber?: string;
         ifscCode?: string;
         qrCodeUrl?: string;
+    };
+}
+
+export function calculateProgramPayment(
+    registrantCount: number,
+    paymentDetails?: ProgramData['paymentDetails']
+) {
+    const isRequired = !!paymentDetails?.isRequired;
+    const feeType = paymentDetails?.feeType || 'individual';
+    const isGroup = feeType === 'group';
+    const maxMembersPerGroup = isGroup ? Math.max(1, paymentDetails?.maxMembersPerGroup || 1) : 1;
+    const regFee = paymentDetails?.registrationFee || 0;
+    const advType = paymentDetails?.advanceType || 'percentage';
+    const advValue = paymentDetails?.advanceValue !== undefined 
+        ? paymentDetails.advanceValue 
+        : (paymentDetails?.advancePercentage !== undefined ? paymentDetails.advancePercentage : 100);
+
+    const units = isGroup 
+        ? (registrantCount > 0 ? Math.ceil(registrantCount / maxMembersPerGroup) : 0)
+        : registrantCount;
+
+    let advancePerUnit = regFee;
+    let advanceLabel = "";
+    if (advType === 'fixed') {
+        advancePerUnit = advValue;
+        advanceLabel = `₹${advValue} fixed`;
+    } else {
+        advancePerUnit = regFee * (advValue / 100);
+        advanceLabel = `${advValue}%`;
+    }
+
+    const fullExpectedAmount = units * regFee;
+    const totalAdvanceExpected = units * advancePerUnit;
+    const hasAdvance = advancePerUnit < regFee;
+    const unitLabel = isGroup ? 'team' : 'person';
+
+    return {
+        isRequired,
+        feeType,
+        isGroup,
+        maxMembersPerGroup,
+        units,
+        unitLabel,
+        regFee,
+        advType,
+        advValue,
+        advancePerUnit,
+        advanceLabel,
+        hasAdvance,
+        fullExpectedAmount,
+        totalAdvanceExpected,
     };
 }
 

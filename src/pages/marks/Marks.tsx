@@ -887,10 +887,10 @@ export function Marks() {
               {selectedMarks.maxTotalMarks}
             </TableCell>
           </TableRow>
-          </TableBody>
-        </Table>
-      );
-    };
+        </TableBody>
+      </Table>
+    );
+  };
 
   const renderDialogContent = () => {
     if (!selectedMarks) return null;

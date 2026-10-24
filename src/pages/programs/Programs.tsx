@@ -80,6 +80,7 @@ import {
   ProgramData,
   ProgramRegistration,
   CustomField,
+  calculateProgramPayment,
 } from "../../features/programs/services/programService";
 import { sendNewProgramNotification } from "../../features/notifications/services/notificationService";
 import { Timestamp } from "firebase/firestore";
@@ -306,6 +307,8 @@ export function Programs() {
     isCountOnly: false,
     targetAudience: "student" as 'student' | 'teacher' | 'both',
     paymentRequired: false,
+    feeType: "individual" as 'individual' | 'group',
+    maxMembersPerGroup: 5 as number | "",
     registrationFee: 0,
     advancePercentage: 100,
     advanceType: "percentage" as 'percentage' | 'fixed',
@@ -734,6 +737,8 @@ export function Programs() {
         teacherFields: formData.isCountOnly ? [] : (formData.targetAudience === 'student' ? [] : teacherFields),
         paymentDetails: {
           isRequired: formData.paymentRequired,
+          feeType: formData.feeType,
+          maxMembersPerGroup: formData.feeType === 'group' ? (Number(formData.maxMembersPerGroup) || 1) : 1,
           registrationFee: Number(formData.registrationFee) || 0,
           advancePercentage: formData.advanceType === 'percentage' ? (Number(formData.advanceValue) || 100) : 100,
           advanceType: formData.advanceType,
@@ -791,6 +796,8 @@ export function Programs() {
         teacherFields: formData.isCountOnly ? [] : (formData.targetAudience === 'student' ? [] : teacherFields),
         paymentDetails: {
           isRequired: formData.paymentRequired,
+          feeType: formData.feeType,
+          maxMembersPerGroup: formData.feeType === 'group' ? (Number(formData.maxMembersPerGroup) || 1) : 1,
           registrationFee: Number(formData.registrationFee) || 0,
           advancePercentage: formData.advanceType === 'percentage' ? (Number(formData.advanceValue) || 100) : 100,
           advanceType: formData.advanceType,
@@ -842,6 +849,8 @@ export function Programs() {
       isCountOnly: !!program.isCountOnly,
       targetAudience: program.targetAudience || "student",
       paymentRequired: program.paymentDetails?.isRequired || false,
+      feeType: program.paymentDetails?.feeType || "individual",
+      maxMembersPerGroup: program.paymentDetails?.maxMembersPerGroup || 5,
       registrationFee: program.paymentDetails?.registrationFee || 0,
       advancePercentage: program.paymentDetails?.advancePercentage !== undefined ? program.paymentDetails.advancePercentage : 100,
       advanceType: program.paymentDetails?.advanceType || "percentage",
@@ -877,6 +886,8 @@ export function Programs() {
       isCountOnly: false,
       targetAudience: "student",
       paymentRequired: false,
+      feeType: "individual",
+      maxMembersPerGroup: 5 as number | "",
       registrationFee: 0,
       advancePercentage: 100,
       advanceType: "percentage",
@@ -979,20 +990,13 @@ export function Programs() {
     }
 
     const pd = selectedProgram.paymentDetails;
-    const regFee = pd?.registrationFee || 0;
-    const advType = pd?.advanceType || 'percentage';
-    const advValue = pd?.advanceValue !== undefined ? pd.advanceValue : (pd?.advancePercentage !== undefined ? pd.advancePercentage : 100);
-    let advPerHead = regFee;
-    if (advType === 'fixed') {
-      advPerHead = advValue;
-    } else {
-      advPerHead = regFee * (advValue / 100);
-    }
-
     const totalCount = roleRegs.reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
     const approvedCount = roleRegs.filter((r: ProgramRegistration) => r.status === 'approved_parish' || r.status === 'locked').reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
     const pendingCount = roleRegs.filter((r: ProgramRegistration) => r.status === 'pending_parish').reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
     const paidCount = roleRegs.filter((r: ProgramRegistration) => !!r.paymentScreenshotUrl).reduce((sum: number, r: ProgramRegistration) => sum + (r.isCountOnly ? (r.studentCount || 1) : 1), 0);
+
+    const totalPayment = calculateProgramPayment(totalCount, pd);
+    const paidPayment = calculateProgramPayment(paidCount, pd);
 
     if (format === "csv") {
       // Complete Excel/CSV metadata & summary information rows
@@ -1006,10 +1010,12 @@ export function Programs() {
         `"Total Approved","${approvedCount}"`,
         `"Total Pending","${pendingCount}"`,
         ...(pd?.isRequired ? [
-          `"Registration Fee","₹${regFee}"`,
-          `"Total Full Expected","₹${totalCount * regFee}"`,
-          `"Total Advance Expected","₹${(totalCount * advPerHead).toFixed(1)}"`,
-          `"Advance Amount Received","₹${(paidCount * advPerHead).toFixed(1)}"`
+          `"Fee Collection Basis","${totalPayment.isGroup ? `Group/Team (Max ${totalPayment.maxMembersPerGroup} members/team)` : 'Individual (Per Person)'}"`,
+          ...(totalPayment.isGroup ? [`"Total Teams","${totalPayment.units}"`] : []),
+          `"Registration Fee","₹${totalPayment.regFee} per ${totalPayment.unitLabel}"`,
+          `"Total Full Expected","₹${totalPayment.fullExpectedAmount}"`,
+          `"Total Advance Expected","₹${totalPayment.totalAdvanceExpected.toFixed(1)}"`,
+          `"Advance Amount Received","₹${paidPayment.totalAdvanceExpected.toFixed(1)}"`
         ] : []),
         ""
       ];
@@ -1258,9 +1264,79 @@ export function Programs() {
 
                 {formData.paymentRequired && (
                   <div className="space-y-4 pl-6 border-l-2 border-blue-500 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/40 p-3 rounded-lg border">
+                      <div className="space-y-2">
+                        <Label htmlFor="feeType" className="font-medium">Fee Collection Basis</Label>
+                        <select
+                          id="feeType"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          value={formData.feeType}
+                          onChange={(e) =>
+                            setFormData({ ...formData, feeType: e.target.value as 'individual' | 'group' })
+                          }
+                        >
+                          <option value="individual">Individual (Per Person / Head)</option>
+                          <option value="group">Group / Team Payment</option>
+                        </select>
+                        <p className="text-[11px] text-muted-foreground">
+                          {formData.feeType === 'group'
+                            ? "Fee is charged per group/team (e.g. ₹400 for a team)"
+                            : "Fee is charged per registered person (e.g. ₹100 per person)"}
+                        </p>
+                      </div>
+
+                      {formData.feeType === 'group' ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="maxMembersPerGroup" className="font-medium">Max Members per Team / Group</Label>
+                          <Input
+                            id="maxMembersPerGroup"
+                            type="number"
+                            min="1"
+                            value={formData.maxMembersPerGroup}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setFormData({
+                                ...formData,
+                                maxMembersPerGroup: raw === "" ? "" : (parseInt(raw, 10) || "")
+                              });
+                            }}
+                            onBlur={() => {
+                              if (!formData.maxMembersPerGroup || Number(formData.maxMembersPerGroup) < 1) {
+                                setFormData((prev) => ({ ...prev, maxMembersPerGroup: 1 }));
+                              }
+                            }}
+                            placeholder="e.g. 5"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Max participants allowed per team paying this fee
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center text-xs text-muted-foreground pt-6">
+                          Each individual registrant is charged the fee independently.
+                        </div>
+                      )}
+                    </div>
+
+                    {formData.feeType === 'group' && (
+                      <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                        <span className="font-bold text-sm">💡</span>
+                        <div>
+                          <span className="font-semibold">Team Payment Mode:</span> A team consists of up to <strong>{formData.maxMembersPerGroup || 1} members</strong> paying <strong>₹{formData.registrationFee}</strong> per team.
+                          {formData.advanceType === 'percentage' ? (
+                            <span> Advance required is <strong>{formData.advanceValue}% (₹{((formData.registrationFee * (formData.advanceValue || 0)) / 100).toFixed(0)} per team)</strong>.</span>
+                          ) : (
+                            <span> Fixed advance required is <strong>₹{formData.advanceValue} per team</strong>.</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="registrationFee">Registration Fee (₹)</Label>
+                        <Label htmlFor="registrationFee">
+                          {formData.feeType === 'group' ? 'Team Fee (₹)' : 'Registration Fee (₹)'}
+                        </Label>
                         <Input
                           id="registrationFee"
                           type="number"
@@ -1268,7 +1344,7 @@ export function Programs() {
                           onChange={(e) =>
                             setFormData({ ...formData, registrationFee: parseFloat(e.target.value) || 0 })
                           }
-                          placeholder="e.g. 100"
+                          placeholder={formData.feeType === 'group' ? "e.g. 400" : "e.g. 100"}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1287,7 +1363,9 @@ export function Programs() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="advanceValue">
-                          {formData.advanceType === 'percentage' ? 'Advance Value (%)' : 'Advance Value (₹)'}
+                          {formData.advanceType === 'percentage'
+                            ? 'Advance Value (%)'
+                            : (formData.feeType === 'group' ? 'Advance (₹ / team)' : 'Advance (₹ / person)')}
                         </Label>
                         <Input
                           id="advanceValue"
@@ -1707,17 +1785,87 @@ export function Programs() {
 
               {formData.paymentRequired && (
                 <div className="space-y-4 pl-6 border-l-2 border-blue-500 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/40 p-3 rounded-lg border">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-feeType" className="font-medium">Fee Collection Basis</Label>
+                      <select
+                        id="edit-feeType"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={formData.feeType}
+                        onChange={(e) =>
+                          setFormData({ ...formData, feeType: e.target.value as 'individual' | 'group' })
+                        }
+                      >
+                        <option value="individual">Individual (Per Person / Head)</option>
+                        <option value="group">Group / Team Payment</option>
+                      </select>
+                      <p className="text-[11px] text-muted-foreground">
+                        {formData.feeType === 'group'
+                          ? "Fee is charged per group/team (e.g. ₹400 for a team)"
+                          : "Fee is charged per registered person (e.g. ₹100 per person)"}
+                      </p>
+                    </div>
+
+                    {formData.feeType === 'group' ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-maxMembersPerGroup" className="font-medium">Max Members per Team / Group</Label>
+                        <Input
+                          id="edit-maxMembersPerGroup"
+                          type="number"
+                          min="1"
+                          value={formData.maxMembersPerGroup}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setFormData({
+                              ...formData,
+                              maxMembersPerGroup: raw === "" ? "" : (parseInt(raw, 10) || "")
+                            });
+                          }}
+                          onBlur={() => {
+                            if (!formData.maxMembersPerGroup || Number(formData.maxMembersPerGroup) < 1) {
+                              setFormData((prev) => ({ ...prev, maxMembersPerGroup: 1 }));
+                            }
+                          }}
+                          placeholder="e.g. 5"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Max participants allowed per team paying this fee
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center text-xs text-muted-foreground pt-6">
+                        Each individual registrant is charged the fee independently.
+                      </div>
+                    )}
+                  </div>
+
+                  {formData.feeType === 'group' && (
+                    <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                      <span className="font-bold text-sm">💡</span>
+                      <div>
+                        <span className="font-semibold">Team Payment Mode:</span> A team consists of up to <strong>{formData.maxMembersPerGroup || 1} members</strong> paying <strong>₹{formData.registrationFee}</strong> per team.
+                        {formData.advanceType === 'percentage' ? (
+                          <span> Advance required is <strong>{formData.advanceValue}% (₹{((formData.registrationFee * (formData.advanceValue || 0)) / 100).toFixed(0)} per team)</strong>.</span>
+                        ) : (
+                          <span> Fixed advance required is <strong>₹{formData.advanceValue} per team</strong>.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-registrationFee">Registration Fee (₹)</Label>
+                      <Label htmlFor="edit-registrationFee">
+                        {formData.feeType === 'group' ? 'Team Fee (₹)' : 'Registration Fee (₹)'}
+                      </Label>
                       <Input
-                        id="edit-edit-registrationFee"
+                        id="edit-registrationFee"
                         type="number"
                         value={formData.registrationFee || ""}
                         onChange={(e) =>
                           setFormData({ ...formData, registrationFee: parseFloat(e.target.value) || 0 })
                         }
-                        placeholder="e.g. 100"
+                        placeholder={formData.feeType === 'group' ? "e.g. 400" : "e.g. 100"}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1736,7 +1884,9 @@ export function Programs() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="edit-advanceValue">
-                        {formData.advanceType === 'percentage' ? 'Advance Value (%)' : 'Advance Value (₹)'}
+                        {formData.advanceType === 'percentage'
+                          ? 'Advance Value (%)'
+                          : (formData.feeType === 'group' ? 'Advance (₹ / team)' : 'Advance (₹ / person)')}
                       </Label>
                       <Input
                         id="edit-advanceValue"
@@ -2191,19 +2341,10 @@ export function Programs() {
                           0
                         );
                         const pd = selectedProgram?.paymentDetails;
-                        const schoolRegFee = pd?.registrationFee || 0;
-                        const schoolAdvType = pd?.advanceType || 'percentage';
-                        const schoolAdvValue = pd?.advanceValue !== undefined ? pd.advanceValue : (pd?.advancePercentage !== undefined ? pd.advancePercentage : 100);
-                        let schoolAdvPerHead = schoolRegFee;
-                        if (schoolAdvType === 'fixed') {
-                          schoolAdvPerHead = schoolAdvValue;
-                        } else {
-                          schoolAdvPerHead = schoolRegFee * (schoolAdvValue / 100);
-                        }
-                        const schoolHasAdvance = schoolAdvPerHead < schoolRegFee;
-                        const schoolAmountPerPerson = schoolHasAdvance ? schoolAdvPerHead : schoolRegFee;
-                        const schoolAmountReceived = schoolPaidCount * schoolAmountPerPerson;
-                        const showPaymentAmount = pd?.isRequired && schoolRegFee > 0;
+                        const schoolPayment = calculateProgramPayment(totalSchoolCount, pd);
+                        const schoolPaidPayment = calculateProgramPayment(schoolPaidCount, pd);
+                        const schoolAmountReceived = schoolPaidCount > 0 ? schoolPaidPayment.totalAdvanceExpected : 0;
+                        const showPaymentAmount = pd?.isRequired && schoolPayment.regFee > 0;
                         return (
                           <div key={schoolName} className="space-y-3">
                             <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b pb-1 flex justify-between items-center flex-wrap gap-2">
@@ -2218,11 +2359,11 @@ export function Programs() {
                               <div className="flex items-center gap-2">
                                 {showPaymentAmount && (
                                   <Badge className="text-xs bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-                                    ₹{schoolAmountReceived.toFixed(1)} received
+                                    ₹{schoolAmountReceived.toFixed(1)} received {schoolPayment.isGroup ? `(${schoolPaidPayment.units}/${schoolPayment.units} teams)` : ''}
                                   </Badge>
                                 )}
                                 <Badge variant="outline" className="text-xs">
-                                  {totalSchoolCount} {role === 'student' ? 'students' : 'teachers'}
+                                  {totalSchoolCount} {role === 'student' ? 'students' : 'teachers'} {schoolPayment.isGroup ? `(${schoolPayment.units} teams)` : ''}
                                 </Badge>
                               </div>
                             </h4>
@@ -2423,42 +2564,32 @@ export function Programs() {
                   <div className="space-y-6">
                     {selectedProgram?.paymentDetails?.isRequired && (() => {
                       const pd = selectedProgram.paymentDetails;
-                      const regFee = pd.registrationFee || 0;
-                      const advType = pd.advanceType || 'percentage';
-                      const advValue = pd.advanceValue !== undefined ? pd.advanceValue : (pd.advancePercentage !== undefined ? pd.advancePercentage : 100);
-
-                      let advancePerHead = regFee;
-                      let advanceLabel = "";
-                      if (advType === 'fixed') {
-                        advancePerHead = advValue;
-                        advanceLabel = `₹${advValue} fixed`;
-                      } else {
-                        advancePerHead = regFee * (advValue / 100);
-                        advanceLabel = `${advValue}%`;
-                      }
-                      const hasAdvance = advancePerHead < regFee;
-
                       const totalRegistrants = (sStats?.total || 0) + (tStats?.total || 0);
                       const approvedRegistrants = (sStats?.approved || 0) + (sStats?.locked || 0) + (tStats?.approved || 0) + (tStats?.locked || 0);
-
-                      const totalExpectedFull = totalRegistrants * regFee;
-                      const totalExpectedAdvance = totalRegistrants * advancePerHead;
 
                       const allRegs = [...(filteredDetailRegistrations || [])];
                       const paidRegs = allRegs.filter(r => r.paymentScreenshotUrl);
                       const paidCount = paidRegs.reduce((sum, reg) => sum + (reg.isCountOnly ? (reg.studentCount || 1) : 1), 0);
-                      const amountPerPaidPerson = hasAdvance ? advancePerHead : regFee;
-                      const totalAmountReceived = paidCount * amountPerPaidPerson;
+
+                      const totalPayment = calculateProgramPayment(totalRegistrants, pd);
+                      const paidPayment = calculateProgramPayment(paidCount, pd);
+
+                      const totalExpectedFull = totalPayment.fullExpectedAmount;
+                      const totalExpectedAdvance = totalPayment.totalAdvanceExpected;
+                      const totalAmountReceived = paidCount > 0 ? paidPayment.totalAdvanceExpected : 0;
 
                       return (
                         <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-5 gap-4">
                           <div>
-                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Registration Fee</p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Fee Structure</p>
                             <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
-                              ₹{regFee}
-                              {hasAdvance && (
+                              ₹{totalPayment.regFee}
+                              <span className="text-xs text-muted-foreground block font-normal">
+                                per {totalPayment.unitLabel} {totalPayment.isGroup ? `(max ${totalPayment.maxMembersPerGroup} persons)` : ''}
+                              </span>
+                              {totalPayment.hasAdvance && (
                                 <span className="text-xs text-muted-foreground block font-normal">
-                                  (Advance: {advanceLabel} / ₹{advancePerHead.toFixed(1)})
+                                  (Advance: {totalPayment.advanceLabel} / ₹{totalPayment.advancePerUnit.toFixed(1)})
                                 </span>
                               )}
                             </p>
@@ -2467,6 +2598,11 @@ export function Programs() {
                             <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Full Amount Expected</p>
                             <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
                               ₹{totalExpectedFull}
+                              {totalPayment.isGroup && (
+                                <span className="text-xs text-muted-foreground block font-normal">
+                                  ({totalPayment.units} teams from {totalRegistrants} members)
+                                </span>
+                              )}
                             </p>
                           </div>
                           <div>
@@ -2487,7 +2623,11 @@ export function Programs() {
                               ₹{totalAmountReceived % 1 === 0 ? totalAmountReceived : totalAmountReceived.toFixed(1)} / ₹{totalExpectedAdvance % 1 === 0 ? totalExpectedAdvance : totalExpectedAdvance.toFixed(1)}
                             </p>
                             <p className="text-[10px] text-muted-foreground">
-                              ({paidCount} of {totalRegistrants} paid × ₹{amountPerPaidPerson % 1 === 0 ? amountPerPaidPerson : amountPerPaidPerson.toFixed(1)})
+                              {totalPayment.isGroup ? (
+                                `(${paidPayment.units} of ${totalPayment.units} teams paid × ₹${totalPayment.advancePerUnit.toFixed(0)})`
+                              ) : (
+                                `(${paidCount} of ${totalRegistrants} paid × ₹${totalPayment.advancePerUnit.toFixed(0)})`
+                              )}
                             </p>
                           </div>
                         </div>
