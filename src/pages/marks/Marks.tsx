@@ -64,6 +64,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../../components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { toast } from "sonner";
 // @ts-ignore
@@ -85,6 +93,7 @@ import {
   getMarksByParish,
   MarksData,
   MarksWithDetails,
+  AnimatorEvaluation,
 } from "../../features/marks/services/marksService";
 import { Timestamp } from "firebase/firestore";
 import { formatAcademicYear } from "../../features/animators/services/animatorService";
@@ -101,6 +110,8 @@ export function Marks() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewGrouping, setViewGrouping] = useState<"consolidated" | "individual">("consolidated");
+  const [selectedEvaluationTab, setSelectedEvaluationTab] = useState<string>("consolidated");
   const [stats, setStats] = useState({
     totalSubmissions: 0,
     lockedSubmissions: 0,
@@ -145,8 +156,9 @@ export function Marks() {
     try {
       setLoading(true);
       const yearFilter = selectedYear === "all" ? undefined : selectedYear;
+      const isRaw = viewGrouping === "individual";
       const [marksData, years, statsData] = await Promise.all([
-        searchTerm ? searchMarks(searchTerm, yearFilter) : getMarks(yearFilter),
+        searchTerm ? searchMarks(searchTerm, yearFilter) : getMarks(yearFilter, isRaw),
         getAvailableYears(),
         getMarksStats(yearFilter),
       ]);
@@ -163,7 +175,7 @@ export function Marks() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedYear]);
+  }, [selectedYear, viewGrouping]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -177,6 +189,7 @@ export function Marks() {
       const details = await getMarksWithDetails(marksId);
       if (details) {
         setSelectedMarks(details);
+        setSelectedEvaluationTab("consolidated");
         setShowAllQuestions(false);
         setIsEditingRemark(false);
         setEditRemarkText(details.remarks || "");
@@ -356,7 +369,7 @@ export function Marks() {
 
   const handleToggleLock = async (marksId: string, currentStatus: boolean) => {
     try {
-      await toggleMarksLock(marksId, currentStatus);
+      await toggleMarksLock(marksId, currentStatus, selectedMarks?.peerMarksIds);
       toast.success(
         `Marks ${!currentStatus ? "finalized" : "unfinalized"} successfully`,
       );
@@ -365,10 +378,12 @@ export function Marks() {
       fetchData();
 
       // Update local state if needed (for dialog)
-      if (selectedMarks && selectedMarks.id === marksId) {
+      if (selectedMarks && (selectedMarks.id === marksId || selectedMarks.peerMarksIds?.includes(marksId))) {
         setSelectedMarks({
           ...selectedMarks,
           locked: !currentStatus,
+          allLocked: !currentStatus,
+          evaluations: selectedMarks.evaluations?.map(ev => ({ ...ev, locked: !currentStatus }))
         });
       }
     } catch (error) {
@@ -378,7 +393,7 @@ export function Marks() {
   };
 
 
-  const generatePDF = async (marksData: MarksWithDetails) => {
+  const generatePDF = async (marksData: MarksWithDetails, customFilename?: string) => {
     toast.loading("Preparing professional report...", { id: "pdf-gen" });
     try {
       // 1. Render React component to static HTML string
@@ -406,10 +421,15 @@ export function Marks() {
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = fullHtml;
 
+      const cleanParish = (marksData.parish || 'School').replace(/\s+/g, '_');
+      const defaultFilename = marksData.isConsolidated && (marksData.submissionCount || 1) > 1
+        ? `Marks_${cleanParish}_Consolidated_${marksData.year}.pdf`
+        : `Marks_${cleanParish}_${(marksData.animatorName || 'Report').replace(/[^a-zA-Z0-9_-]/g, '_')}_${marksData.year}.pdf`;
+
       // 4. Configure html2pdf options
       const opt = {
         margin: 0, // Margins are already in the template's padding
-        filename: `Marks_${marksData.parish.replace(/\s+/g, '_')}_${marksData.year}.pdf`,
+        filename: customFilename || defaultFilename,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: {
           scale: 2.5, // High resolution for Malayalam text
@@ -430,6 +450,61 @@ export function Marks() {
       console.error("PDF generation error:", error);
       toast.error("Failed to generate PDF", { id: "pdf-gen" });
     }
+  };
+
+  const buildIndividualMarksDetails = (
+    baseMarks: MarksWithDetails,
+    evaluation: AnimatorEvaluation
+  ): MarksWithDetails => {
+    return {
+      ...baseMarks,
+      id: evaluation.marksId,
+      animatorId: evaluation.animatorId,
+      animatorName: evaluation.animatorName,
+      animatorNames: [evaluation.animatorName],
+      marks: evaluation.marks || {},
+      remarks: evaluation.remarks || '',
+      questionRemarks: evaluation.questionRemarks || {},
+      textValues: evaluation.textValues || baseMarks.textValues || {},
+      totalMarks: evaluation.totalMarks,
+      percentage: evaluation.percentage,
+      isConsolidated: false,
+      submissionCount: 1,
+      locked: evaluation.locked ?? false
+    };
+  };
+
+  const downloadIndividualPDF = async (baseMarks: MarksWithDetails, evaluation: AnimatorEvaluation) => {
+    const individualData = buildIndividualMarksDetails(baseMarks, evaluation);
+    const cleanParish = (baseMarks.parish || 'School').replace(/\s+/g, '_');
+    const cleanName = (evaluation.animatorName || 'Evaluator').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Marks_${cleanParish}_${cleanName}_${baseMarks.year}.pdf`;
+    await generatePDF(individualData, filename);
+  };
+
+  const downloadAllPDFs = async (baseMarks: MarksWithDetails) => {
+    if (!baseMarks.evaluations || baseMarks.evaluations.length <= 1) {
+      await generatePDF(baseMarks);
+      return;
+    }
+    const cleanParish = (baseMarks.parish || 'School').replace(/\s+/g, '_');
+    const totalCount = baseMarks.evaluations.length + 1;
+    toast.info(`Preparing ${totalCount} PDF reports for download...`, { id: "pdf-gen-all" });
+
+    // 1. Download Consolidated PDF
+    await generatePDF(
+      baseMarks,
+      `Marks_${cleanParish}_Consolidated_${baseMarks.year}.pdf`
+    );
+
+    // 2. Download each individual evaluator's PDF sequentially
+    for (let i = 0; i < baseMarks.evaluations.length; i++) {
+      await new Promise(res => setTimeout(res, 800));
+      const ev = baseMarks.evaluations[i];
+      await downloadIndividualPDF(baseMarks, ev);
+    }
+
+    toast.success(`All ${totalCount} reports downloaded successfully!`, { id: "pdf-gen-all" });
   };
 
   const formatDate = (date: Timestamp | undefined) => {
@@ -461,8 +536,135 @@ export function Marks() {
       .slice(0, 2);
   };
 
+  const renderAnimatorComparisonMatrix = () => {
+    if (!selectedMarks || !selectedMarks.evaluations) return null;
+    const evals = selectedMarks.evaluations;
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-50">
+            <TableHead className="w-12 font-semibold">
+              #
+            </TableHead>
+            <TableHead className="font-semibold">
+              Question
+            </TableHead>
+            <TableHead className="w-20 text-right font-semibold">
+              Max
+            </TableHead>
+            {evals.map((ev, idx) => (
+              <TableHead key={ev.marksId || idx} className="text-right font-semibold whitespace-nowrap min-w-[120px]">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs truncate max-w-[140px] font-semibold text-slate-900 dark:text-slate-100">{ev.animatorName}</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    {ev.totalMarks}/{selectedMarks.maxTotalMarks} ({ev.percentage.toFixed(1)}%)
+                  </span>
+                </div>
+              </TableHead>
+            ))}
+            <TableHead className="w-28 text-right font-semibold text-blue-700 dark:text-blue-400 bg-blue-50/60 dark:bg-blue-950/30">
+              Consolidated (Avg)
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {selectedMarks.questions
+            .slice(0, showAllQuestions ? undefined : 6)
+            .map((question, index) => {
+              const subFields = question.subFields || [];
+              const hasSubFields = subFields.length > 0;
+              const questionMaxMark = hasSubFields
+                ? subFields.reduce((sum, sf) => sum + (sf.maxMark || 0), 0)
+                : (question.maxMark || 0);
+
+              const avgMark = selectedMarks.marks[question.id!] !== undefined
+                ? selectedMarks.marks[question.id!]
+                : 0;
+
+              return (
+                <React.Fragment key={question.id}>
+                  <TableRow className={hasSubFields ? "bg-slate-50/50" : ""}>
+                    <TableCell className="font-medium text-muted-foreground align-top pt-4">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="text-sm py-3">
+                      <div className={`max-w-[140px] md:max-w-none md:whitespace-normal ${hasSubFields ? "font-bold" : ""}`}>
+                        {question.text}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground align-top pt-4 font-semibold">
+                      {questionMaxMark > 0 ? questionMaxMark : "-"}
+                    </TableCell>
+                    {evals.map((ev, idx) => {
+                      const evMark = ev.marks[question.id!] !== undefined ? ev.marks[question.id!] : "-";
+                      return (
+                        <TableCell key={ev.marksId || idx} className="text-right font-medium align-top pt-4">
+                          {evMark}
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell className="text-right font-bold text-blue-700 dark:text-blue-400 align-top pt-4 bg-blue-50/30 dark:bg-blue-950/10">
+                      {avgMark}
+                    </TableCell>
+                  </TableRow>
+
+                  {hasSubFields && subFields.map((sf, sfIndex) => {
+                    const subKey = `${question.id}_sub_${sfIndex}`;
+                    const labelText = selectedMarks.labelsMap?.[subKey] || sf.text || `Sub ${sfIndex + 1}`;
+                    const avgSubMark = selectedMarks.marks[subKey] !== undefined ? selectedMarks.marks[subKey] : "-";
+
+                    return (
+                      <TableRow key={subKey} className="bg-slate-50/30">
+                        <TableCell />
+                        <TableCell className="text-[12px] py-2 pl-8 border-l-2 border-blue-100">
+                          <span className="text-slate-700 font-medium">{labelText}</span>
+                        </TableCell>
+                        <TableCell className="text-right text-[11px] text-muted-foreground">
+                          {(sf.maxMark && sf.maxMark > 0) ? sf.maxMark : "-"}
+                        </TableCell>
+                        {evals.map((ev, idx) => {
+                          const sfMark = ev.marks[subKey] !== undefined ? ev.marks[subKey] : "-";
+                          return (
+                            <TableCell key={ev.marksId || idx} className="text-right text-[12px] font-medium">
+                              {sfMark}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-right text-[12px] text-blue-700 font-bold bg-blue-50/30 dark:bg-blue-950/10">
+                          {avgSubMark}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+
+          <TableRow className="bg-slate-50 dark:bg-slate-900/50 font-semibold border-t-2 font-bold">
+            <TableCell></TableCell>
+            <TableCell>Total</TableCell>
+            <TableCell className="text-right">{selectedMarks.maxTotalMarks}</TableCell>
+            {evals.map((ev, idx) => (
+              <TableCell key={ev.marksId || idx} className="text-right font-bold">
+                {ev.totalMarks}
+              </TableCell>
+            ))}
+            <TableCell className="text-right font-bold text-blue-700 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-950/10">
+              {selectedMarks.totalMarks}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+  };
+
   const renderQuestionsTable = () => {
     if (!selectedMarks) return null;
+
+    if (selectedMarks.isConsolidated && (selectedMarks.evaluations?.length || 0) > 1 && selectedEvaluationTab === "comparison") {
+      return renderAnimatorComparisonMatrix();
+    }
 
     if (isComparing) {
       const compYears = Array.from(new Set(comparisonData.map(r => r.year))).sort((a, b) => b.localeCompare(a));
@@ -551,7 +753,7 @@ export function Marks() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground align-top pt-4 font-semibold">
-                      {questionMaxMark}
+                      {questionMaxMark > 0 ? questionMaxMark : "-"}
                     </TableCell>
                     {compYears.map(year => {
                       const rec = comparisonData.find(r => r.year === year);
@@ -575,7 +777,7 @@ export function Marks() {
                           <span className="text-slate-700 font-medium">{labelText}</span>
                         </TableCell>
                         <TableCell className="text-right text-[11px] text-muted-foreground">
-                          {sf.maxMark}
+                          {(sf.maxMark && sf.maxMark > 0) ? sf.maxMark : "-"}
                         </TableCell>
                         {compYears.map(year => {
                           const rec = comparisonData.find(r => r.year === year);
@@ -658,6 +860,15 @@ export function Marks() {
       );
     }
 
+    const activeEval = (selectedMarks.evaluations && selectedMarks.evaluations.length > 1 && selectedEvaluationTab !== "consolidated" && selectedEvaluationTab !== "comparison")
+      ? selectedMarks.evaluations.find(e => e.marksId === selectedEvaluationTab)
+      : null;
+
+    const displayMarks = activeEval ? activeEval.marks : selectedMarks.marks;
+    const displayTextValues = activeEval ? (activeEval.textValues || {}) : (selectedMarks.textValues || {});
+    const displayQuestionRemarks = activeEval ? (activeEval.questionRemarks || {}) : (selectedMarks.questionRemarks || {});
+    const isIndividualView = !!activeEval;
+
     return (
       <Table>
         <TableHeader>
@@ -682,15 +893,15 @@ export function Marks() {
             .map((question, index) => {
               const subFields = question.subFields || [];
               const answeredSubkeys = subFields.map((_, i) => `${question.id}_sub_${i}`).filter(subKey => {
-                const mark = selectedMarks.marks[subKey];
-                const text = selectedMarks.textValues?.[subKey]?.trim();
+                const mark = displayMarks[subKey];
+                const text = displayTextValues[subKey]?.trim();
                 return (mark !== undefined && mark > 0) || (text !== undefined && text !== '');
               });
 
               const hasSubFields = answeredSubkeys.length > 0;
               const questionMarks = hasSubFields
-                ? answeredSubkeys.reduce((sum, key) => sum + (selectedMarks.marks[key] || 0), 0)
-                : (selectedMarks.marks[question.id!] || 0);
+                ? answeredSubkeys.reduce((sum, key) => sum + (displayMarks[key] || 0), 0)
+                : (displayMarks[question.id!] || 0);
 
               const questionMaxMark = hasSubFields
                 ? subFields.reduce((sum, sf) => sum + (sf.maxMark || 0), 0)
@@ -730,17 +941,17 @@ export function Marks() {
                               </div>
                             ) : (
                               <div className="flex items-start gap-2 group/remark">
-                                {selectedMarks.questionRemarks?.[question.id!] ? (
+                                {displayQuestionRemarks[question.id!] ? (
                                   <div className="flex-1 bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-dashed text-muted-foreground italic break-words text-[10px]">
                                     <span className="font-semibold not-italic mr-1">Remark:</span>
-                                    {selectedMarks.questionRemarks[question.id!]}
+                                    {displayQuestionRemarks[question.id!]}
                                   </div>
                                 ) : (
                                   <div className="flex-1 text-muted-foreground/50 italic py-1 text-[10px]">No remark</div>
                                 )}
-                                {!selectedMarks.locked && (
+                                {!selectedMarks.locked && !isIndividualView && !selectedMarks.isConsolidated && (
                                   <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover/remark:opacity-100" onClick={() => {
-                                    setEditingQuestionRemark(selectedMarks.questionRemarks?.[question.id!] || "");
+                                    setEditingQuestionRemark(displayQuestionRemarks[question.id!] || "");
                                     setEditingQuestionId(question.id!);
                                   }}>
                                     <Pencil className="h-3 w-3" />
@@ -796,7 +1007,7 @@ export function Marks() {
                       ) : (
                         <div className="flex items-center justify-end gap-1 group/mark">
                           <span>{questionMarks || "-"}</span>
-                          {!selectedMarks.locked && (
+                          {!selectedMarks.locked && !isIndividualView && !selectedMarks.isConsolidated && (
                             <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/mark:opacity-100 transition-opacity" onClick={() => {
                               setEditingMarkId(question.id!);
                               setEditingMarkValue(questionMarks.toString());
@@ -808,14 +1019,14 @@ export function Marks() {
                       )}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground align-top pt-4 font-semibold">
-                      {questionMaxMark}
+                      {questionMaxMark > 0 ? questionMaxMark : "-"}
                     </TableCell>
                   </TableRow>
 
                   {hasSubFields && answeredSubkeys.map((subKey, sfIndex) => {
                     const subIdx = parseInt(subKey.split('_sub_')[1]);
                     const sf = subFields[subIdx];
-                    const sfMark = selectedMarks.marks[subKey] || 0;
+                    const sfMark = displayMarks[subKey] || 0;
                     const labelText = selectedMarks.labelsMap?.[subKey] || (sf?.text) || `Sub ${sfIndex + 1}`;
 
                     return (
@@ -844,16 +1055,16 @@ export function Marks() {
                                 </div>
                               ) : (
                                 <div className="flex items-start gap-2 group/subremark">
-                                  {selectedMarks.textValues?.[subKey] ? (
+                                  {displayTextValues[subKey] ? (
                                     <div className="flex-1 bg-blue-50/50 dark:bg-blue-900/10 p-2 rounded border border-blue-100 dark:border-blue-800 text-blue-800 dark:text-blue-300 italic text-[10px]">
-                                      {selectedMarks.textValues[subKey]}
+                                      {displayTextValues[subKey]}
                                     </div>
                                   ) : (
                                     <div className="flex-1 text-muted-foreground/50 italic py-1 text-[10px]">No specific detail</div>
                                   )}
-                                  {!selectedMarks.locked && (
+                                  {!selectedMarks.locked && !isIndividualView && !selectedMarks.isConsolidated && (
                                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover/subremark:opacity-100" onClick={() => {
-                                      setEditingQuestionRemark(selectedMarks.textValues?.[subKey] || "");
+                                      setEditingQuestionRemark(displayTextValues[subKey] || "");
                                       setEditingQuestionId(subKey);
                                     }}>
                                       <Pencil className="h-3 w-3" />
@@ -868,7 +1079,7 @@ export function Marks() {
                           {sfMark || "-"}
                         </TableCell>
                         <TableCell className="text-right text-[11px] text-muted-foreground">
-                          {sf.maxMark}
+                          {(sf.maxMark && sf.maxMark > 0) ? sf.maxMark : "-"}
                         </TableCell>
                       </TableRow>
                     );
@@ -881,7 +1092,7 @@ export function Marks() {
             <TableCell></TableCell>
             <TableCell>Total</TableCell>
             <TableCell className="text-right">
-              {selectedMarks.totalMarks}
+              {activeEval ? activeEval.totalMarks : selectedMarks.totalMarks}
             </TableCell>
             <TableCell className="text-right">
               {selectedMarks.maxTotalMarks}
@@ -925,9 +1136,53 @@ export function Marks() {
           </div>
         </DialogHeader>
 
-        <div className="space-y-8">
+        <div className="space-y-6">
+          {/* Multi-Animator Evaluation Selector */}
+          {selectedMarks.isConsolidated && selectedMarks.evaluations && selectedMarks.evaluations.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 p-1.5 bg-muted/60 rounded-xl border">
+              <Button
+                type="button"
+                variant={selectedEvaluationTab === "consolidated" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 text-xs font-semibold gap-1.5"
+                onClick={() => setSelectedEvaluationTab("consolidated")}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Consolidated (Avg of {selectedMarks.submissionCount})
+              </Button>
+              <Button
+                type="button"
+                variant={selectedEvaluationTab === "comparison" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 text-xs font-semibold gap-1.5"
+                onClick={() => setSelectedEvaluationTab("comparison")}
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Side-by-Side Comparison
+              </Button>
+              <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
+              {selectedMarks.evaluations.map((ev, idx) => (
+                <Button
+                  key={ev.marksId || idx}
+                  type="button"
+                  variant={selectedEvaluationTab === ev.marksId ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 text-xs font-medium gap-1.5"
+                  onClick={() => setSelectedEvaluationTab(ev.marksId)}
+                >
+                  <Avatar className="h-4 w-4">
+                    <AvatarFallback className="text-[9px]">
+                      {getInitials(ev.animatorName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {ev.animatorName}
+                </Button>
+              ))}
+            </div>
+          )}
+
           {/* Info Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4">
             <div className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Parish
@@ -946,11 +1201,38 @@ export function Marks() {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Animator
+                Category
               </span>
-              <p className="font-semibold text-sm">
-                {selectedMarks.animatorName}
-              </p>
+              <div className="pt-0.5">
+                {selectedMarks.category ? (
+                  <Badge variant="outline" className={`font-semibold ${
+                    selectedMarks.category === 'A' ? 'border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300' :
+                    selectedMarks.category === 'B' ? 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' :
+                    'border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300'
+                  }`}>
+                    Cat {selectedMarks.category} (Max {selectedMarks.maxAnimators || (selectedMarks.category === 'A' ? 3 : selectedMarks.category === 'B' ? 2 : 1)})
+                  </Badge>
+                ) : (
+                  <span className="text-sm font-semibold text-muted-foreground">-</span>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {selectedMarks.isConsolidated && (selectedMarks.submissionCount || 1) > 1 ? "Animators" : "Animator"}
+              </span>
+              <div className="font-semibold text-sm">
+                {selectedMarks.isConsolidated && selectedMarks.animatorNames && selectedMarks.animatorNames.length > 1 ? (
+                  <div className="flex flex-col">
+                    <span>{selectedMarks.animatorNames.join(", ")}</span>
+                    <span className="text-[11px] text-muted-foreground font-normal">
+                      ({selectedMarks.submissionCount} submissions)
+                    </span>
+                  </div>
+                ) : (
+                  selectedMarks.animatorName
+                )}
+              </div>
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -963,39 +1245,74 @@ export function Marks() {
           </div>
 
           {/* Score Card */}
-          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 sm:p-6 border">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Score
-                </p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-gray-900 dark:text-gray-50">
-                    {selectedMarks.totalMarks}
-                  </span>
+          {(() => {
+            const activeEval = (selectedMarks.evaluations && selectedMarks.evaluations.length > 1 && selectedEvaluationTab !== "consolidated" && selectedEvaluationTab !== "comparison")
+              ? selectedMarks.evaluations.find(e => e.marksId === selectedEvaluationTab)
+              : null;
+            const currentTotal = activeEval ? activeEval.totalMarks : selectedMarks.totalMarks;
+            const currentPercentage = activeEval ? activeEval.percentage : selectedMarks.percentage;
+            const scoreLabel = activeEval
+              ? `Total Score (${activeEval.animatorName})`
+              : selectedMarks.isConsolidated && (selectedMarks.submissionCount || 1) > 1
+              ? `Consolidated Average Score (${selectedMarks.submissionCount} Animators)`
+              : "Total Score";
+
+            return (
+              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 sm:p-6 border">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {scoreLabel}
+                    </p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl font-bold text-gray-900 dark:text-gray-50">
+                        {currentTotal}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        / {selectedMarks.maxTotalMarks}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 min-w-[150px]">
+                    <div
+                      className={`text-2xl font-bold ${getScoreColor(
+                        currentPercentage,
+                      )}`}
+                    >
+                      {currentPercentage.toFixed(1)}%
+                    </div>
+                    <Progress
+                      value={currentPercentage}
+                      className="h-2 w-full"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-2 min-w-[150px]">
-                <div
-                  className={`text-2xl font-bold ${getScoreColor(
-                    selectedMarks.percentage,
-                  )}`}
-                >
-                  {selectedMarks.percentage.toFixed(1)}%
-                </div>
-                <Progress
-                  value={selectedMarks.percentage}
-                  className="h-2 w-full"
-                />
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Questions Table */}
           <div className="space-y-4">
-            <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-              Question Breakdown
-            </h4>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                Question Breakdown {selectedEvaluationTab === "comparison" ? "- Side-by-Side Comparison" : selectedEvaluationTab !== "consolidated" ? `- Evaluator: ${selectedMarks.evaluations?.find(e => e.marksId === selectedEvaluationTab)?.animatorName || ""}` : selectedMarks.isConsolidated && (selectedMarks.submissionCount || 1) > 1 ? "- Consolidated (Averaged)" : ""}
+              </h4>
+              {selectedMarks.isConsolidated && selectedEvaluationTab !== "consolidated" && selectedEvaluationTab !== "comparison" && (() => {
+                const currentEval = selectedMarks.evaluations?.find(e => e.marksId === selectedEvaluationTab);
+                if (!currentEval) return null;
+                return (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5 self-start sm:self-auto"
+                    onClick={() => downloadIndividualPDF(selectedMarks, currentEval)}
+                  >
+                    <Download className="h-3 w-3" />
+                    Download {currentEval.animatorName}'s PDF
+                  </Button>
+                );
+              })()}
+            </div>
             <div className="border rounded-lg overflow-hidden overflow-x-auto">
               {renderQuestionsTable()}
             </div>
@@ -1116,13 +1433,75 @@ export function Marks() {
                 </>
               )}
             </Button>
-            <Button
-              onClick={() => generatePDF(selectedMarks)}
-              variant="outline"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download PDF
-            </Button>
+            {selectedMarks.isConsolidated && selectedMarks.evaluations && selectedMarks.evaluations.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Download Reports ({selectedMarks.evaluations.length + 1})
+                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground font-semibold">
+                    CONSOLIDATED REPORT
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => generatePDF(selectedMarks)}
+                    className="cursor-pointer gap-2 py-2"
+                  >
+                    <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">Consolidated PDF</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Averaged marks of all {selectedMarks.submissionCount} animators
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground font-semibold">
+                    INDIVIDUAL EVALUATOR REPORTS
+                  </DropdownMenuLabel>
+                  {selectedMarks.evaluations.map((ev, idx) => (
+                    <DropdownMenuItem
+                      key={ev.marksId || idx}
+                      onClick={() => downloadIndividualPDF(selectedMarks, ev)}
+                      className="cursor-pointer gap-2 py-1.5"
+                    >
+                      <Avatar className="h-5 w-5 flex-shrink-0">
+                        <AvatarFallback className="text-[9px]">
+                          {getInitials(ev.animatorName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="font-medium text-sm truncate">{ev.animatorName}'s Report</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          Score: {ev.totalMarks}/{selectedMarks.maxTotalMarks} ({ev.percentage.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => downloadAllPDFs(selectedMarks)}
+                    className="cursor-pointer gap-2 font-semibold text-blue-600 hover:text-blue-700 py-2"
+                  >
+                    <Download className="h-4 w-4 flex-shrink-0" />
+                    <span>Download All ({selectedMarks.evaluations.length + 1} PDFs)</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                onClick={() => generatePDF(selectedMarks)}
+                variant="outline"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button>
+            )}
           </div>
         </div>
       </>
@@ -1276,6 +1655,29 @@ export function Marks() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* View grouping toggle: Consolidated vs All Submissions */}
+              <div className="flex items-center bg-muted/50 p-1 rounded-lg border">
+                <Button
+                  type="button"
+                  variant={viewGrouping === "consolidated" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 text-xs font-medium px-3"
+                  onClick={() => setViewGrouping("consolidated")}
+                >
+                  Consolidated
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewGrouping === "individual" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 text-xs font-medium px-3"
+                  onClick={() => setViewGrouping("individual")}
+                >
+                  All Submissions
+                </Button>
+              </div>
+
               <Tabs
                 value={viewMode}
                 onValueChange={(v: string) =>
@@ -1342,6 +1744,9 @@ export function Marks() {
                     <TableHead className="font-semibold">
                       Sunday School
                     </TableHead>
+                    <TableHead className="w-[90px] font-semibold text-center">
+                      Category
+                    </TableHead>
                     <TableHead className="font-semibold">Animator</TableHead>
                     <TableHead className="w-[100px] font-semibold">
                       Year
@@ -1380,15 +1785,44 @@ export function Marks() {
                           {mark.sundaySchool}
                         </div>
                       </TableCell>
+                      <TableCell className="text-center">
+                        {mark.category ? (
+                          <Badge variant="outline" className={`font-mono text-xs font-semibold ${
+                            mark.category === 'A' ? 'border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300' :
+                            mark.category === 'B' ? 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' :
+                            'border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300'
+                          }`}>
+                            Cat {mark.category}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7">
-                            <AvatarFallback className="text-xs bg-muted">
-                              {getInitials(mark.animatorName)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{mark.animatorName}</span>
-                        </div>
+                        {mark.isConsolidated && (mark.submissionCount || 1) > 1 ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/50 font-semibold">
+                                  {mark.submissionCount}A
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm font-medium">{mark.animatorName}</span>
+                            </div>
+                            <Badge variant="secondary" className="w-fit text-[10px] bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
+                              {mark.submissionCount} Animators Consolidated
+                            </Badge>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="text-xs bg-muted">
+                                {getInitials(mark.animatorName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{mark.animatorName}</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-mono">
@@ -1484,9 +1918,18 @@ export function Marks() {
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
                     <CardTitle className="text-base">{mark.parish}</CardTitle>
-                    <CardDescription className="flex items-center gap-1">
-                      <GraduationCap className="h-3 w-3" />
-                      {mark.sundaySchool}
+                    <CardDescription className="flex items-center gap-1.5 flex-wrap">
+                      <GraduationCap className="h-3.5 w-3.5" />
+                      <span>{mark.sundaySchool}</span>
+                      {mark.category && (
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-semibold ${
+                          mark.category === 'A' ? 'border-purple-300 bg-purple-50 text-purple-700' :
+                          mark.category === 'B' ? 'border-blue-300 bg-blue-50 text-blue-700' :
+                          'border-slate-300 bg-slate-50 text-slate-700'
+                        }`}>
+                          Cat {mark.category}
+                        </Badge>
+                      )}
                     </CardDescription>
                   </div>
                   {mark.locked ? (
@@ -1509,12 +1952,17 @@ export function Marks() {
                 <div className="flex items-center gap-3 mb-3">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                      {getInitials(mark.animatorName)}
+                      {mark.isConsolidated && (mark.submissionCount || 1) > 1 ? `${mark.submissionCount}A` : getInitials(mark.animatorName)}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">{mark.animatorName}</p>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{mark.animatorName}</p>
+                    {mark.isConsolidated && (mark.submissionCount || 1) > 1 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 mt-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                        {mark.submissionCount} Animators Consolidated
+                      </Badge>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {formatDate(mark.submittedAt)}
                     </p>
                   </div>

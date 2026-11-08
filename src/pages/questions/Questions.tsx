@@ -14,6 +14,23 @@ import {
   ChevronUp
 } from "lucide-react";
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Card,
   CardContent,
   CardHeader,
@@ -90,58 +107,111 @@ const intToRoman = (num: number): string => {
   return result;
 };
 
-interface QuestionRowProps {
+interface SortableQuestionRowProps {
   question: QuestionData;
+  sectionIndex: number;
   globalIndex: number;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onOpenMoveDialog: () => void;
   handleStartEdit: (question: QuestionData) => void;
   handleDeleteQuestion: (id: string) => void;
   handleToggleMandatory: (question: QuestionData) => void;
-  handleLongPress: (question: QuestionData) => void;
 }
 
-const QuestionRow = ({
+const SortableQuestionRow = ({
   question,
+  sectionIndex,
   globalIndex,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
+  onOpenMoveDialog,
   handleStartEdit,
   handleDeleteQuestion,
   handleToggleMandatory,
-  handleLongPress,
-}: QuestionRowProps) => {
+}: SortableQuestionRowProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: question.id! });
 
-  const pressTimer = React.useRef<NodeJS.Timeout | null>(null);
-
-  const startPress = (e: React.PointerEvent) => {
-    if (e.button !== 0) return; // only left click / tap
-    pressTimer.current = setTimeout(() => {
-      handleLongPress(question);
-    }, 600); // 600ms long press
-  };
-
-  const endPress = () => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current);
-      pressTimer.current = null;
-    }
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    position: isDragging ? 'relative' : undefined,
+    zIndex: isDragging ? 30 : undefined,
   };
 
   return (
     <TableRow
-      onPointerDown={startPress}
-      onPointerUp={endPress}
-      onPointerLeave={endPress}
-      onPointerCancel={endPress}
-      className="bg-card cursor-default"
+      ref={setNodeRef}
+      style={style}
+      className={`bg-card ${isDragging ? "bg-blue-50/70 shadow-sm" : ""}`}
     >
-      <TableCell className="font-medium">{globalIndex}</TableCell>
-      <TableCell>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="cursor-pointer touch-none text-blue-500 hover:bg-blue-50 hover:text-blue-700"
-          title="Long press to reorder"
+      <TableCell className="font-medium text-center w-[60px]">
+        <button
+          type="button"
+          onClick={onOpenMoveDialog}
+          className="group flex flex-col items-center justify-center mx-auto px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+          title={`Position #${sectionIndex} in this section (Click to change position)`}
         >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </Button>
+          <span className="font-bold text-sm text-gray-900 group-hover:text-blue-600">
+            {sectionIndex}
+          </span>
+          {globalIndex !== sectionIndex && (
+            <span className="text-[10px] text-muted-foreground leading-none">
+              #{globalIndex}
+            </span>
+          )}
+        </button>
+      </TableCell>
+      <TableCell className="w-[85px]">
+        <div className="flex items-center gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 cursor-grab active:cursor-grabbing text-gray-400 hover:text-blue-600 hover:bg-blue-50 touch-none select-none"
+            title="Drag to rearrange inside this section"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </Button>
+          <div className="flex flex-col">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={isFirst}
+              onClick={onMoveUp}
+              className="h-4 w-5 p-0 text-gray-400 hover:text-blue-600 hover:bg-transparent disabled:opacity-20"
+              title="Move Up inside section"
+            >
+              <ChevronUp className="h-3 w-3" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={isLast}
+              onClick={onMoveDown}
+              className="h-4 w-5 p-0 text-gray-400 hover:text-blue-600 hover:bg-transparent disabled:opacity-20"
+              title="Move Down inside section"
+            >
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
       </TableCell>
       <TableCell>
         <div className="flex flex-col space-y-1">
@@ -159,7 +229,7 @@ const QuestionRow = ({
         </div>
       </TableCell>
       <TableCell>
-        <span className="font-semibold">{(question.maxMark ?? 0) > 0 ? question.maxMark : ''}</span>
+        <span className="font-semibold">{(question.maxMark ?? 0) > 0 ? question.maxMark : '-'}</span>
       </TableCell>
       <TableCell>
         <div className="flex flex-col gap-2">
@@ -181,12 +251,13 @@ const QuestionRow = ({
             variant="ghost"
             size="icon"
             onClick={() => handleStartEdit(question)}
+            title="Edit question"
           >
             <Edit className="h-4 w-4" />
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" title="Delete question">
                 <Trash2 className="h-4 w-4 text-red-500" />
               </Button>
             </AlertDialogTrigger>
@@ -230,6 +301,20 @@ export function Questions() {
   // Manual Reorder Dialog States
   const [reorderQuestion, setReorderQuestion] = useState<QuestionData | null>(null);
   const [newOrderPos, setNewOrderPos] = useState<number | ''>('');
+  const [reorderCurrentPos, setReorderCurrentPos] = useState<number>(1);
+  const [reorderTotalInPart, setReorderTotalInPart] = useState<number>(1);
+
+  // DnD Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // global parts state
   const [parts, setParts] = useState<string[]>(DEFAULT_PARTS);
@@ -452,63 +537,90 @@ export function Questions() {
     }
   };
 
-  // Reordering array utility since arrayMove was stripped out with dndkit
-  const moveArrayItem = (arr: any[], fromIndex: number, toIndex: number) => {
-    const newArr = [...arr];
-    const element = newArr.splice(fromIndex, 1)[0];
-    newArr.splice(toIndex, 0, element);
-    return newArr;
+  const handleOpenMoveDialog = (question: QuestionData, currentPos: number, totalInPart: number) => {
+    setReorderQuestion(question);
+    setNewOrderPos(currentPos);
+    setReorderCurrentPos(currentPos);
+    setReorderTotalInPart(totalInPart);
   };
 
-  const handleManualOrderSave = async () => {
-    if (!reorderQuestion || newOrderPos === '' || newOrderPos < 1) return;
+  const applyNewPartOrder = async (part: string, newPartQuestions: QuestionData[]) => {
+    const updatedAllQuestions: QuestionData[] = [];
 
-    const currentGlobalItems = [...questions];
-    const currentIndex = currentGlobalItems.findIndex(q => q.id === reorderQuestion.id);
-    if (currentIndex === -1) return;
-
-    // We want to insert it at the specific target GLOBAL position.
-    // However, if the user picks #1 and the question currently has Part III,
-    // visually the list groups by part. Global #1 belongs to Part I.
-    // So the safest manual order behavior is modifying local part order?
-    // Actually, if we just arrayMove them across all global items and reconstruct!
-    // If they want it to be question #N globally, let's inject it into global items exactly there, mapping to the new part it lands on?
-    // No, better just change its part if needed, or just insert it exactly at that global index without checking parts and let parts sort themselves?
-    // If we let parts sort themselves, its global number will change again based on its Part. 
-    // To literally become Question N: it MUST take on the Part of the question currently at N.
-
-    // Instead of forcing part changes, changing visual position inside its CURRENT part is more intuitive.
-    // "Order inside Part {part}":
-    const partItems = currentGlobalItems.filter(q => (q.part || 'I') === (reorderQuestion.part || 'I'));
-    const oldPartIndex = partItems.findIndex(q => q.id === reorderQuestion.id);
-    const targetPartIndex = Math.min(Math.max(1, newOrderPos), partItems.length) - 1;
-
-    let newPartItems = moveArrayItem(partItems, oldPartIndex, targetPartIndex);
-
-    // Stitch it back
-    const orderedQuestions: QuestionData[] = [];
     parts.forEach(p => {
-      if (p === (reorderQuestion.part || 'I')) {
-        orderedQuestions.push(...newPartItems);
+      if (p === part) {
+        updatedAllQuestions.push(...newPartQuestions);
       } else {
-        orderedQuestions.push(...currentGlobalItems.filter(q => (q.part || 'I') === p));
+        updatedAllQuestions.push(...questions.filter(q => (q.part || 'I') === p));
       }
     });
 
-    const updatedItems = orderedQuestions.map((item, index) => ({
+    // Catch any questions with missing or unrecognized part keys
+    const unassigned = questions.filter(q => !updatedAllQuestions.some(uq => uq.id === q.id));
+    updatedAllQuestions.push(...unassigned);
+
+    const resequenced = updatedAllQuestions.map((item, index) => ({
       ...item,
       order: index + 1,
     }));
 
-    setQuestions(updatedItems);
-    setReorderQuestion(null);
+    // Optimistically update local UI state immediately
+    setQuestions(resequenced);
 
     try {
-      await reorderQuestions(updatedItems);
+      await reorderQuestions(resequenced);
       toast.success("Question order updated");
-    } catch {
+    } catch (error) {
+      console.error("Failed to update question order:", error);
       toast.error("Failed to update order");
+      fetchQuestions(); // Revert on failure
     }
+  };
+
+  const handleDragEnd = (part: string, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const partQuestions = questions.filter(q => (q.part || 'I') === part);
+    const oldIndex = partQuestions.findIndex(q => q.id === active.id);
+    const newIndex = partQuestions.findIndex(q => q.id === over.id);
+
+    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+      const reorderedPart = arrayMove(partQuestions, oldIndex, newIndex);
+      applyNewPartOrder(part, reorderedPart);
+    }
+  };
+
+  const handleMoveInPart = (question: QuestionData, direction: 'up' | 'down') => {
+    const part = question.part || 'I';
+    const partQuestions = questions.filter(q => (q.part || 'I') === part);
+    const currentIndex = partQuestions.findIndex(q => q.id === question.id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= partQuestions.length) return;
+
+    const reorderedPart = arrayMove(partQuestions, currentIndex, targetIndex);
+    applyNewPartOrder(part, reorderedPart);
+  };
+
+  const handleManualOrderSave = async () => {
+    if (!reorderQuestion || newOrderPos === '' || newOrderPos < 1) return;
+    const targetPos = Number(newOrderPos);
+    if (targetPos === reorderCurrentPos) {
+      setReorderQuestion(null);
+      return;
+    }
+
+    const part = reorderQuestion.part || 'I';
+    const partQuestions = questions.filter(q => (q.part || 'I') === part);
+    const oldIndex = partQuestions.findIndex(q => q.id === reorderQuestion.id);
+    if (oldIndex === -1) return;
+
+    const targetIndex = Math.min(Math.max(1, targetPos), partQuestions.length) - 1;
+    const reorderedPart = arrayMove(partQuestions, oldIndex, targetIndex);
+    setReorderQuestion(null);
+    await applyNewPartOrder(part, reorderedPart);
   };
 
   const addSubField = () => {
@@ -783,54 +895,157 @@ export function Questions() {
                     </CardHeader>
                     <CardContent className="p-0">
                       <div className="hidden md:block">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-[50px]">#</TableHead>
-                              <TableHead className="w-[50px]"></TableHead>
-                              <TableHead>Question Details</TableHead>
-                              <TableHead className="w-[100px]">Marks</TableHead>
-                              <TableHead className="w-[120px]">Mandatory</TableHead>
-                              <TableHead className="w-[120px] text-right">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {partQuestions.length > 0 ? (
-                              partQuestions.map((question) => (
-                                <QuestionRow
-                                  key={question.id}
-                                  question={question}
-                                  globalIndex={questions.findIndex(q => q.id === question.id) + 1}
-                                  handleStartEdit={handleStartEdit}
-                                  handleDeleteQuestion={handleDeleteQuestion}
-                                  handleToggleMandatory={handleToggleMandatory}
-                                  handleLongPress={setReorderQuestion}
-                                />
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-gray-500 bg-gray-50/50">
-                                  No questions in this part
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event) => handleDragEnd(part, event)}
+                        >
+                          <SortableContext
+                            items={partQuestions.map(q => q.id!)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-[60px] text-center">#</TableHead>
+                                  <TableHead className="w-[85px]">Arrange</TableHead>
+                                  <TableHead>Question Details</TableHead>
+                                  <TableHead className="w-[100px]">Marks</TableHead>
+                                  <TableHead className="w-[120px]">Mandatory</TableHead>
+                                  <TableHead className="w-[120px] text-right">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {partQuestions.length > 0 ? (
+                                  partQuestions.map((question, pIdx) => (
+                                    <SortableQuestionRow
+                                      key={question.id}
+                                      question={question}
+                                      sectionIndex={pIdx + 1}
+                                      globalIndex={questions.findIndex(q => q.id === question.id) + 1}
+                                      isFirst={pIdx === 0}
+                                      isLast={pIdx === partQuestions.length - 1}
+                                      onMoveUp={() => handleMoveInPart(question, 'up')}
+                                      onMoveDown={() => handleMoveInPart(question, 'down')}
+                                      onOpenMoveDialog={() => handleOpenMoveDialog(question, pIdx + 1, partQuestions.length)}
+                                      handleStartEdit={handleStartEdit}
+                                      handleDeleteQuestion={handleDeleteQuestion}
+                                      handleToggleMandatory={handleToggleMandatory}
+                                    />
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center text-gray-500 bg-gray-50/50">
+                                      No questions in this part
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </SortableContext>
+                        </DndContext>
                       </div>
 
                       <div className="md:hidden p-4 space-y-4 min-h-[50px]">
                         {partQuestions.length > 0 ? (
-                          partQuestions.map((question) => (
-                            <div key={question.id}>
-                              <QuestionRow
-                                key={question.id}
-                                question={question}
-                                globalIndex={questions.findIndex(q => q.id === question.id) + 1}
-                                handleStartEdit={handleStartEdit}
-                                handleDeleteQuestion={handleDeleteQuestion}
-                                handleToggleMandatory={handleToggleMandatory}
-                                handleLongPress={setReorderQuestion}
-                              />
+                          partQuestions.map((question, pIdx) => (
+                            <div key={question.id} className="border rounded-lg p-3.5 bg-card shadow-sm space-y-3">
+                              <div className="flex items-center justify-between border-b pb-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenMoveDialog(question, pIdx + 1, partQuestions.length)}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-50 text-blue-700 font-bold text-xs hover:bg-blue-100 transition-colors"
+                                  title={`Position #${pIdx + 1} (Click to change position)`}
+                                >
+                                  <span>Position #{pIdx + 1}</span>
+                                  {questions.findIndex(q => q.id === question.id) + 1 !== pIdx + 1 && (
+                                    <span className="text-[10px] text-blue-500 font-normal">
+                                      (Global #{questions.findIndex(q => q.id === question.id) + 1})
+                                    </span>
+                                  )}
+                                </button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={pIdx === 0}
+                                    onClick={() => handleMoveInPart(question, 'up')}
+                                    className="h-7 px-2 text-xs"
+                                    title="Move Up"
+                                  >
+                                    <ChevronUp className="h-3.5 w-3.5 mr-0.5" /> Up
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={pIdx === partQuestions.length - 1}
+                                    onClick={() => handleMoveInPart(question, 'down')}
+                                    className="h-7 px-2 text-xs"
+                                    title="Move Down"
+                                  >
+                                    <ChevronDown className="h-3.5 w-3.5 mr-0.5" /> Down
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                {question.part && (
+                                  <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-sm w-fit inline-block">
+                                    Part {question.part}{question.partTitle ? `: ${question.partTitle}` : ''}
+                                  </span>
+                                )}
+                                <p className="text-sm text-foreground">{question.text}</p>
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs pt-1 border-t text-muted-foreground">
+                                <div>
+                                  Marks: <span className="font-semibold text-foreground">{question.maxMark && question.maxMark > 0 ? question.maxMark : '-'}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span>Mandatory:</span>
+                                  <Switch
+                                    checked={question.isMandatory !== false}
+                                    onCheckedChange={() => handleToggleMandatory(question)}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => handleStartEdit(question)}
+                                    title="Edit question"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" title="Delete question">
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Question</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Are you sure you want to delete this question?
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeleteQuestion(question.id!)}
+                                          className="bg-red-600 hover:bg-red-700"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </div>
                             </div>
                           ))
                         ) : (
@@ -1014,36 +1229,76 @@ export function Questions() {
       </Dialog>
 
       <Dialog open={!!reorderQuestion} onOpenChange={(open) => !open && setReorderQuestion(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Manual Reorder</DialogTitle>
+            <DialogTitle>Arrange Question</DialogTitle>
             <DialogDescription>
-              Assign a strict position for this question within Part {(reorderQuestion?.part || 'I')}.
+              Move this question to a new position inside Part {(reorderQuestion?.part || 'I')}.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="bg-muted p-3 rounded-md text-sm text-foreground/80 line-clamp-2">
-              {reorderQuestion?.text}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleManualOrderSave();
+            }}
+            className="py-3 space-y-4"
+          >
+            <div className="bg-muted/70 p-3 rounded-md text-sm text-foreground/90 border">
+              <div className="font-semibold text-xs text-blue-600 uppercase mb-1">
+                Part {reorderQuestion?.part || 'I'} • Current Position #{reorderCurrentPos}
+              </div>
+              <p className="line-clamp-2">{reorderQuestion?.text}</p>
             </div>
-            <div className="space-y-2">
-              <Label>Position inside Part</Label>
-              <Input
-                type="number"
-                min={1}
-                max={questions.filter(q => (q.part || 'I') === (reorderQuestion?.part || 'I')).length}
-                value={newOrderPos}
-                onChange={e => setNewOrderPos(parseInt(e.target.value) || '')}
-                placeholder="e.g. 1"
-              />
-              <p className="text-xs text-muted-foreground">
-                Total questions in this part: {questions.filter(q => (q.part || 'I') === (reorderQuestion?.part || 'I')).length}
-              </p>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">
+                Target Position in Part {reorderQuestion?.part || 'I'} (1 to {reorderTotalInPart})
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={reorderTotalInPart}
+                  value={newOrderPos}
+                  onChange={e => setNewOrderPos(parseInt(e.target.value) || '')}
+                  placeholder={`1 to ${reorderTotalInPart}`}
+                  className="font-semibold text-center text-base"
+                  autoFocus
+                />
+              </div>
+
+              {reorderTotalInPart > 1 && reorderTotalInPart <= 15 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-xs text-muted-foreground">Quick select position:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.from({ length: reorderTotalInPart }, (_, i) => i + 1).map(pos => (
+                      <Button
+                        key={pos}
+                        type="button"
+                        size="sm"
+                        variant={newOrderPos === pos ? "default" : "outline"}
+                        className={`h-7 w-8 p-0 text-xs ${pos === reorderCurrentPos ? "border-blue-500 font-bold" : ""}`}
+                        onClick={() => setNewOrderPos(pos)}
+                      >
+                        {pos}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReorderQuestion(null)}>Cancel</Button>
-            <Button onClick={handleManualOrderSave} className="bg-blue-600 hover:bg-blue-700">Update Order</Button>
-          </DialogFooter>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setReorderQuestion(null)}>Cancel</Button>
+              <Button
+                type="submit"
+                disabled={newOrderPos === '' || newOrderPos < 1 || newOrderPos > reorderTotalInPart}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Move Question
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div >

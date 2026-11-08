@@ -327,10 +327,8 @@ export function ExcelAnimatorUpload({
           }
         }
 
-        if (!matchedSchoolId) {
-          if (!schoolCode && !schoolNameInput) {
-            errors.push("Missing Sunday School Code or Name");
-          } else {
+        if (schoolCode || schoolNameInput) {
+          if (!matchedSchoolId) {
             errors.push(`Sunday School '${schoolCode || schoolNameInput}' not found`);
           }
         }
@@ -442,8 +440,8 @@ export function ExcelAnimatorUpload({
           password: r.password || "Suvara@123",
           phoneNumber: r.phone,
           address: r.address,
-          parishId: r.matchedSchoolId!,
-          parishName: r.matchedSchoolName!,
+          parishId: r.matchedSchoolId || "",
+          parishName: r.matchedSchoolName || "",
         }));
 
         const result = await bulkCreateAnimators(animatorsPayload);
@@ -702,9 +700,13 @@ export function ExcelAnimatorUpload({
                                   Code: {row.schoolCode || "matched by name"}
                                 </span>
                               </div>
-                            ) : (
+                            ) : row.schoolCode || row.schoolNameInput ? (
                               <span className="text-red-500 font-medium">
-                                {row.schoolCode || row.schoolNameInput || "-"}
+                                {row.schoolCode || row.schoolNameInput}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground italic">
+                                None (Optional)
                               </span>
                             )}
                           </td>

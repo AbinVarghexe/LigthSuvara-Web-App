@@ -76,14 +76,19 @@ export const getNextQuestionOrder = async (): Promise<number> => {
 };
 
 export const reorderQuestions = async (questions: QuestionData[]) => {
-    const batch = writeBatch(db);
-    questions.forEach((question, index) => {
-        if (question.id) {
-            const docRef = doc(db, 'questions', question.id);
-            batch.update(docRef, { order: index + 1, part: question.part || 'I' });
-        }
-    });
-    return await batch.commit();
+    const chunkSize = 400;
+    for (let i = 0; i < questions.length; i += chunkSize) {
+        const chunk = questions.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach((question, index) => {
+            const globalIndex = i + index + 1;
+            if (question.id) {
+                const docRef = doc(db, 'questions', question.id);
+                batch.update(docRef, { order: globalIndex, part: question.part || 'I' });
+            }
+        });
+        await batch.commit();
+    }
 };
 
 export const getTotalMaxMarks = async (): Promise<number> => {

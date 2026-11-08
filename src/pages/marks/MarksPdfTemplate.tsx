@@ -109,11 +109,18 @@ export const MarksPdfTemplate = ({ marksData }: { marksData: MarksWithDetails })
                             {[
                                 ['Sunday School', marksData.sundaySchool],
                                 ['Forane', marksData.forane],
-                                ['Animator', marksData.animatorName],
+                                [
+                                    marksData.isConsolidated && (marksData.submissionCount || 1) > 1 
+                                        ? `Animators (Consolidated - ${marksData.submissionCount || marksData.animatorNames?.length || 1})` 
+                                        : 'Animator', 
+                                    marksData.animatorNames && marksData.animatorNames.length > 1
+                                        ? marksData.animatorNames.join(', ')
+                                        : marksData.animatorName
+                                ],
                                 ['Date', today],
                             ].map(([label, val]) => (
                                 <tr key={label}>
-                                    <td style={{ padding: '4px 0', fontWeight: 'bold', width: '120px' }}>{label}:</td>
+                                    <td style={{ padding: '4px 0', fontWeight: 'bold', width: '150px' }}>{label}:</td>
                                     <td style={{ padding: '4px 0' }}>{val}</td>
                                 </tr>
                             ))}
@@ -199,7 +206,7 @@ export const MarksPdfTemplate = ({ marksData }: { marksData: MarksWithDetails })
                                     <tr key={question.id}>
                                         <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '14px' }}>{currentIdx}</td>
                                         <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', fontSize: '15px' }}>{question.text}</td>
-                                        <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '14px' }}>{question.maxMark || ''}</td>
+                                        <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '14px' }}>{(question.maxMark && question.maxMark > 0) ? question.maxMark : '-'}</td>
                                         <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '14px' }}>{qMarks}</td>
                                     </tr>
                                 );
@@ -218,7 +225,7 @@ export const MarksPdfTemplate = ({ marksData }: { marksData: MarksWithDetails })
                                     <tr key={question.id}>
                                         <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '14px' }}>{currentIdx}</td>
                                         <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold', textAlign: 'left', fontSize: '15px' }}>{question.text}</td>
-                                        <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>{totalQMaxMark || '-'}</td>
+                                        <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>{totalQMaxMark > 0 ? totalQMaxMark : '-'}</td>
                                         <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>{totalQAwardedMark || '-'}</td>
                                     </tr>
                                 );
@@ -243,7 +250,7 @@ export const MarksPdfTemplate = ({ marksData }: { marksData: MarksWithDetails })
                                                     ) : ''}
                                                 </div>
                                             </td>
-                                            <td style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', fontSize: '13px' }}>{sf?.maxMark || '0'}</td>
+                                            <td style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', fontSize: '13px' }}>{(sf?.maxMark && sf.maxMark > 0) ? sf.maxMark : '-'}</td>
                                             <td style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', fontSize: '13px' }}>{sfMark ? sfMark : '-'}</td>
                                         </tr>
                                     );

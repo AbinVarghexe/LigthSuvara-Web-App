@@ -105,6 +105,10 @@ interface SchoolData {
   schoolName?: string;
   parish?: string;
   forane?: string;
+  category?: 'A' | 'B' | 'C';
+  maxAnimators?: number;
+  assignedCount?: number;
+  remainingSlots?: number;
 }
 
 interface ForaneParish {
@@ -187,6 +191,16 @@ export function AnimatorsList() {
   const [editSchoolSearch, setEditSchoolSearch] = useState<string>("");
   const [assignForaneFilter, setAssignForaneFilter] = useState<string>("all");
   const [assignSchoolSearch, setAssignSchoolSearch] = useState<string>("");
+
+  const formatSchoolDisplayName = (school: SchoolData | UserData) => {
+    const sName = ((school as any).schoolname || (school as any).schoolName || (school as any).name || (school as any).fullName || "").trim();
+    const pName = ((school as any).parish || (school as any).parishName || "").trim();
+    if (!pName) return sName;
+    if (!sName) return pName;
+    if (sName.toLowerCase().includes(pName.toLowerCase())) return sName;
+    if (pName.toLowerCase().includes(sName.toLowerCase())) return pName;
+    return `${sName} - ${pName}`;
+  };
 
   const fetchData = async () => {
     try {
@@ -278,6 +292,16 @@ export function AnimatorsList() {
   const filteredUnassignedSchools = useMemo(() => {
     return unassignedSchools.filter((school) => {
       if (!selectedAnimator) return true;
+
+      // Do not allow assigning the same school to this animator more than once in this year
+      if (
+        selectedAnimator.assignments?.some(
+          (a) => a.schoolUserId === school.id && a.year === selectedYear
+        )
+      ) {
+        return false;
+      }
+
       const homeParish = selectedAnimator.parishName?.toLowerCase().trim() || "";
       const schoolName = (school.schoolname || school.schoolName || "").toLowerCase().trim();
       const schoolParish = (school.parish || "").toLowerCase().trim();
@@ -305,15 +329,15 @@ export function AnimatorsList() {
         schoolForane.includes(search)
       );
     });
-  }, [unassignedSchools, selectedAnimator, assignForaneFilter, assignSchoolSearch]);
+  }, [unassignedSchools, selectedAnimator, selectedYear, assignForaneFilter, assignSchoolSearch]);
 
   useEffect(() => {
     fetchData();
   }, [selectedYear]);
 
   const handleCreateAnimator = async () => {
-    if (!formData.email || !formData.password || !formData.name || !formData.parishId) {
-      toast.error("Please fill all required fields");
+    if (!formData.email || !formData.password || !formData.name) {
+      toast.error("Please fill all required fields (Name, Email, Password)");
       return;
     }
 
@@ -327,8 +351,8 @@ export function AnimatorsList() {
         formData.email,
         formData.password,
         formData.name,
-        formData.parishId,
-        formData.parishName,
+        formData.parishId || "",
+        formData.parishName || "",
         formData.phoneNumber,
         formData.address,
       );
@@ -681,7 +705,7 @@ export function AnimatorsList() {
 
               <div className="space-y-2">
                 <Label htmlFor="school">
-                  School *
+                  Home Sunday School / Parish (Optional)
                   {createForaneFilter !== "all" && (
                     <span className="ml-1 text-xs font-normal text-muted-foreground">
                       ({filteredSchoolsForCreate.length} schools in {createForaneFilter})
@@ -689,8 +713,16 @@ export function AnimatorsList() {
                   )}
                 </Label>
                 <Select
-                  value={formData.parishId}
+                  value={formData.parishId || "none"}
                   onValueChange={(value) => {
+                    if (value === "none") {
+                      setFormData({
+                        ...formData,
+                        parishId: "",
+                        parishName: "",
+                      });
+                      return;
+                    }
                     const selectedSchool = schoolUsers.find((s) => s.id === value);
                     setFormData({
                       ...formData,
@@ -706,7 +738,7 @@ export function AnimatorsList() {
                   }}
                 >
                   <SelectTrigger id="school">
-                    <SelectValue placeholder="Select school" />
+                    <SelectValue placeholder="Select school (Optional)" />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
@@ -719,14 +751,17 @@ export function AnimatorsList() {
                         className="w-full text-xs px-2.5 py-1.5 rounded-md border border-input bg-background outline-none focus:ring-1 focus:ring-ring"
                       />
                     </div>
+                    <SelectItem value="none">
+                      <span className="text-muted-foreground italic">None / Not Assigned (Optional)</span>
+                    </SelectItem>
                     {filteredSchoolsForCreate.map((school) => {
-                      const name = school.schoolname || school.schoolName || school.name || school.fullName || school.email;
+                      const name = formatSchoolDisplayName(school);
                       return (
                         <SelectItem key={school.id} value={school.id}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span>{name}</span>
+                          <div className="flex items-center justify-between gap-2 w-full min-w-0 overflow-hidden">
+                            <span className="truncate">{name}</span>
                             {school.forane && (
-                              <span className="text-[11px] text-muted-foreground">
+                              <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
                                 • {school.forane}
                               </span>
                             )}
@@ -788,7 +823,7 @@ export function AnimatorsList() {
             <div className="text-2xl font-bold text-blue-600">
               {stats.fullyAssigned}
             </div>
-            <p className="text-sm text-gray-500">Fully Assigned (7/7)</p>
+            <p className="text-sm text-gray-500">Fully Assigned (10/10)</p>
           </CardContent>
         </Card>
       </div>
@@ -855,9 +890,13 @@ export function AnimatorsList() {
                           {animator.name}
                         </CardTitle>
                         <p className="text-sm text-gray-500">{animator.email}</p>
-                        {(animator.parishName || animator.parish) && (
+                        {(animator.parishName || animator.parish) ? (
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-0.5">
                             {animator.parishName || animator.parish}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic mt-0.5">
+                            No home parish
                           </p>
                         )}
                       </div>
@@ -870,7 +909,7 @@ export function AnimatorsList() {
                             : "outline"
                         }
                       >
-                        {selectedYear === "All" ? assignmentsForYear.length : `${assignmentsForYear.length}/7`}
+                        {selectedYear === "All" ? assignmentsForYear.length : `${assignmentsForYear.length}/10`}
                       </Badge>
                       {animator.disabled && (
                         <Badge variant="destructive" className="bg-red-600 hover:bg-red-700 text-xs font-semibold px-2 py-0.5">
@@ -928,7 +967,7 @@ export function AnimatorsList() {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {(selectedYear !== "All" && assignmentsForYear.length < 7) && (
+                    {(selectedYear !== "All" && assignmentsForYear.length < 10) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1017,13 +1056,13 @@ export function AnimatorsList() {
 
       {/* Assignment Dialog */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md md:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               Assign School to {selectedAnimator?.name}
             </DialogTitle>
             <DialogDescription>
-              Select a school to assign to this animator. Maximum 7 schools per
+              Select a school to assign to this animator. Maximum 10 schools per
               animator.
             </DialogDescription>
           </DialogHeader>
@@ -1057,8 +1096,31 @@ export function AnimatorsList() {
                 value={selectedSchoolId}
                 onValueChange={setSelectedSchoolId}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a school..." />
+                <SelectTrigger className="w-full overflow-hidden text-left">
+                  <SelectValue placeholder="Choose a school...">
+                    {(() => {
+                      const selSchool = unassignedSchools.find(s => s.id === selectedSchoolId);
+                      if (!selSchool) return undefined;
+                      const sName = formatSchoolDisplayName(selSchool);
+                      return (
+                        <div className="flex items-center gap-2 min-w-0 overflow-hidden text-left">
+                          <span className="truncate">{sName}</span>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-1.5 py-0 h-4 font-semibold shrink-0 ${
+                              selSchool.category === "A"
+                                ? "border-purple-200 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300"
+                                : selSchool.category === "B"
+                                ? "border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            }`}
+                          >
+                            Cat {selSchool.category || "C"} ({selSchool.remainingSlots ?? 1} left)
+                          </Badge>
+                        </div>
+                      );
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
                   <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
@@ -1076,18 +1138,35 @@ export function AnimatorsList() {
                       No eligible schools available
                     </SelectItem>
                   ) : (
-                    filteredUnassignedSchools.map((school) => (
-                      <SelectItem key={school.id} value={school.id}>
-                        <div className="flex items-center justify-between gap-2">
-                          <span>{school.schoolname || school.schoolName} - {school.parish}</span>
-                          {school.forane && (
-                            <span className="text-[11px] text-muted-foreground">
-                              • {school.forane}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))
+                    filteredUnassignedSchools.map((school) => {
+                      const schoolLabel = formatSchoolDisplayName(school);
+                      return (
+                        <SelectItem key={school.id} value={school.id}>
+                          <div className="flex items-center justify-between gap-3 w-full min-w-0 overflow-hidden">
+                            <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-1">
+                              <span className="truncate">{schoolLabel}</span>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] px-1.5 py-0 h-4 font-semibold shrink-0 ${
+                                  school.category === "A"
+                                    ? "border-purple-200 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300"
+                                    : school.category === "B"
+                                    ? "border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                }`}
+                              >
+                                Cat {school.category || "C"} ({school.remainingSlots ?? 1} slot{(school.remainingSlots ?? 1) !== 1 ? "s" : ""} left)
+                              </Badge>
+                            </div>
+                            {school.forane && assignForaneFilter === "all" && (
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                                • {school.forane}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })
                   )}
                 </SelectContent>
               </Select>
@@ -1185,10 +1264,18 @@ export function AnimatorsList() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-school">School *</Label>
+              <Label htmlFor="edit-school">Home Sunday School / Parish (Optional)</Label>
               <Select
-                value={editFormData.parishId}
+                value={editFormData.parishId || "none"}
                 onValueChange={(value) => {
+                  if (value === "none") {
+                    setEditFormData({
+                      ...editFormData,
+                      parishId: "",
+                      parishName: "",
+                    });
+                    return;
+                  }
                   const selectedSchool = schoolUsers.find((s) => s.id === value);
                   setEditFormData({
                     ...editFormData,
@@ -1201,7 +1288,7 @@ export function AnimatorsList() {
                 }}
               >
                 <SelectTrigger id="edit-school">
-                  <SelectValue placeholder="Select school" />
+                  <SelectValue placeholder="Select school (Optional)" />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
                   <div className="px-2 py-2 sticky top-0 bg-popover z-10 border-b">
@@ -1214,18 +1301,24 @@ export function AnimatorsList() {
                       className="w-full text-xs px-2.5 py-1.5 rounded-md border border-input bg-background outline-none focus:ring-1 focus:ring-ring"
                     />
                   </div>
-                  {filteredSchoolsForEdit.map((school) => (
-                    <SelectItem key={school.id} value={school.id}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span>{school.schoolname || school.schoolName || school.name || school.fullName || school.email}</span>
-                        {school.forane && (
-                          <span className="text-[11px] text-muted-foreground">
-                            • {school.forane}
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none">
+                    <span className="text-muted-foreground italic">None / Not Assigned (Optional)</span>
+                  </SelectItem>
+                  {filteredSchoolsForEdit.map((school) => {
+                    const name = formatSchoolDisplayName(school);
+                    return (
+                      <SelectItem key={school.id} value={school.id}>
+                        <div className="flex items-center justify-between gap-2 w-full min-w-0 overflow-hidden">
+                          <span className="truncate">{name}</span>
+                          {school.forane && (
+                            <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+                              • {school.forane}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                   {filteredSchoolsForEdit.length === 0 && (
                     <div className="py-4 text-center text-xs text-muted-foreground italic">
                       No Sunday schools found

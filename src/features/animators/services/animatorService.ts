@@ -134,8 +134,8 @@ export const createAnimator = async (
     email: string,
     password: string,
     name: string,
-    parishId: string,
-    parishName: string,
+    parishId?: string,
+    parishName?: string,
     phoneNumber?: string,
     address?: string
 ): Promise<string> => {
@@ -146,8 +146,8 @@ export const createAnimator = async (
             password,
             name,
             role: 'animator',
-            parishId,
-            parishName,
+            parishId: parishId || '',
+            parishName: parishName || '',
             phoneNumber: phoneNumber || '',
             address: address || '',
         } as any
@@ -180,8 +180,8 @@ export const createAnimator = async (
 
 export const promoteToAnimator = async (
     userId: string,
-    parishId: string,
-    parishName: string,
+    parishId?: string,
+    parishName?: string,
     phoneNumber?: string,
     address?: string
 ): Promise<void> => {
@@ -199,8 +199,8 @@ export const promoteToAnimator = async (
     // 2. Update user document to animator role and update other details
     await updateDoc(userDocRef, {
         role: 'animator',
-        parishId,
-        parishName,
+        parishId: parishId || '',
+        parishName: parishName || '',
         phoneNumber: phoneNumber || userData.phoneNumber || '',
         address: address || userData.address || '',
         // Make sure name is set since animator role uses 'name'
@@ -243,31 +243,54 @@ export const updateAnimator = async (
     }
 };
 
-// Add assignment to animator (max 7)
+// Add assignment to animator (max 10 per animator, with school category limits: A:3, B:2, C:1)
 export const addAssignment = async (
     animatorId: string,
     assignment: AnimatorAssignment
 ): Promise<void> => {
-    // Check if the school is already assigned to any animator for this specific year
-    const allAssignmentsSnapshot = await getDocs(collection(db, 'animator_assignments'));
-    const alreadyAssignedThisYear = allAssignmentsSnapshot.docs.some(docSnapshot => {
-        const assignments = docSnapshot.data()?.assignments || [];
-        return assignments.some((a: AnimatorAssignment) => 
-            a.schoolUserId === assignment.schoolUserId && a.year === assignment.year
-        );
-    });
-    if (alreadyAssignedThisYear) {
-        throw new Error('This school is already assigned to an animator for this academic year');
+    // 1. Fetch animator assignments doc
+    const assignmentDoc = await getDoc(doc(db, 'animator_assignments', animatorId));
+    const currentAssignments: AnimatorAssignment[] = assignmentDoc.exists()
+        ? (assignmentDoc.data()?.assignments || [])
+        : [];
+
+    if (currentAssignments.length >= 10) {
+        throw new Error('Animator already has maximum 10 assignments');
     }
 
-    const assignmentDoc = await getDoc(doc(db, 'animator_assignments', animatorId));
+    // 2. Prevent assigning the SAME school to the SAME animator more than once in the same year
+    const alreadyAssignedToThisAnimator = currentAssignments.some((a: AnimatorAssignment) => 
+        a.schoolUserId === assignment.schoolUserId && a.year === assignment.year
+    );
+    if (alreadyAssignedToThisAnimator) {
+        throw new Error('This school is already assigned to this animator for this academic year');
+    }
+
+    // 3. Fetch school data from users collection to determine category limit
+    const schoolDoc = await getDoc(doc(db, 'users', assignment.schoolUserId));
+    const schoolData = schoolDoc.exists() ? schoolDoc.data() : null;
+    const category: 'A' | 'B' | 'C' = schoolData?.category || 'C';
+    const maxAnimators: number = schoolData?.maxAnimators || (category === 'A' ? 3 : category === 'B' ? 2 : 1);
+
+    // 4. Count how many total animators are already assigned to this school for this academic year
+    const allAssignmentsSnapshot = await getDocs(collection(db, 'animator_assignments'));
+    let currentAssignedCount = 0;
+    allAssignmentsSnapshot.docs.forEach(docSnapshot => {
+        const assignments = docSnapshot.data()?.assignments || [];
+        if (assignments.some((a: AnimatorAssignment) => 
+            a.schoolUserId === assignment.schoolUserId && a.year === assignment.year
+        )) {
+            currentAssignedCount++;
+        }
+    });
+
+    if (currentAssignedCount >= maxAnimators) {
+        throw new Error(
+            `This school (Category ${category}) has already reached its maximum limit of ${maxAnimators} animator(s) for academic year ${formatAcademicYear(assignment.year)}`
+        );
+    }
 
     if (assignmentDoc.exists()) {
-        const currentAssignments = assignmentDoc.data()?.assignments || [];
-        if (currentAssignments.length >= 7) {
-            throw new Error('Animator already has maximum 7 assignments');
-        }
-
         await updateDoc(doc(db, 'animator_assignments', animatorId), {
             assignments: arrayUnion(assignment)
         });
@@ -295,7 +318,7 @@ export const removeAssignment = async (
     });
 };
 
-// Get schools without animator assignment for a specific year
+// Get schools that still have remaining animator capacity for a specific year
 export const getUnassignedSchools = async (year: string = getAcademicYear()) => {
     // Get all schools
     const schoolsQuery = query(
@@ -304,26 +327,43 @@ export const getUnassignedSchools = async (year: string = getAcademicYear()) => 
     );
     const schoolsSnapshot = await getDocs(schoolsQuery);
 
-    // Get all assignments
+    // Get all assignments across all animators
     const assignmentsSnapshot = await getDocs(collection(db, 'animator_assignments'));
-    const assignedSchoolIds = new Set<string>();
+    const schoolAssignmentCounts = new Map<string, number>();
 
     assignmentsSnapshot.docs.forEach(doc => {
         const assignments = doc.data()?.assignments || [];
         assignments.forEach((a: AnimatorAssignment) => {
             if (a.year === year) {
-                assignedSchoolIds.add(a.schoolUserId);
+                const current = schoolAssignmentCounts.get(a.schoolUserId) || 0;
+                schoolAssignmentCounts.set(a.schoolUserId, current + 1);
             }
         });
     });
 
-    // Filter schools without assignments
+    // Filter schools that still have available animator capacity (assignedCount < maxAnimators)
     return schoolsSnapshot.docs
-        .filter(doc => !assignedSchoolIds.has(doc.id))
-        .map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        .filter(doc => {
+            const data = doc.data();
+            const category: 'A' | 'B' | 'C' = data.category || 'C';
+            const maxAnimators: number = data.maxAnimators || (category === 'A' ? 3 : category === 'B' ? 2 : 1);
+            const currentCount = schoolAssignmentCounts.get(doc.id) || 0;
+            return currentCount < maxAnimators;
+        })
+        .map(doc => {
+            const data = doc.data();
+            const category: 'A' | 'B' | 'C' = data.category || 'C';
+            const maxAnimators: number = data.maxAnimators || (category === 'A' ? 3 : category === 'B' ? 2 : 1);
+            const currentCount = schoolAssignmentCounts.get(doc.id) || 0;
+            return {
+                id: doc.id,
+                ...data,
+                category,
+                maxAnimators,
+                assignedCount: currentCount,
+                remainingSlots: maxAnimators - currentCount
+            };
+        });
 };
 
 // Delete animator (remove user and assignments)
@@ -339,7 +379,7 @@ export const getAnimatorStats = async (year: string = getAcademicYear()) => {
     const animators = await getAnimators();
     const assignedInYear = animators.filter(a => a.assignments.some(asg => asg.year === year));
     const unassignedInYear = animators.filter(a => !a.assignments.some(asg => asg.year === year));
-    const fullyAssignedInYear = animators.filter(a => a.assignments.filter(asg => asg.year === year).length === 7);
+    const fullyAssignedInYear = animators.filter(a => a.assignments.filter(asg => asg.year === year).length >= 10);
     return {
         total: animators.length,
         assigned: assignedInYear.length,
@@ -354,8 +394,8 @@ export interface BulkAnimatorRow {
     password?: string;
     phoneNumber?: string;
     address?: string;
-    parishId: string;
-    parishName: string;
+    parishId?: string;
+    parishName?: string;
 }
 
 export const bulkCreateAnimators = async (
@@ -375,8 +415,8 @@ export const bulkCreateAnimators = async (
         email: a.email.trim().toLowerCase(),
         password: a.password || 'Suvara@123',
         role: 'animator' as const,
-        parishId: a.parishId,
-        parishName: a.parishName,
+        parishId: a.parishId || '',
+        parishName: a.parishName || '',
         phoneNumber: a.phoneNumber?.trim() || '',
         address: a.address?.trim() || '',
     }));
