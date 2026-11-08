@@ -109,17 +109,25 @@ export const uploadProfileImage = async (userId: string, file: File): Promise<st
 };
 
 export const updateUserProfile = async (userId: string, data: Partial<UserData>) => {
+    // Strip undefined properties to ensure Firestore doesn't reject the update
+    const cleanedData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) {
+            cleanedData[key] = value;
+        }
+    }
+
     // Update Firestore
-    await updateDoc(doc(db, 'users', userId), data);
+    await updateDoc(doc(db, 'users', userId), cleanedData);
 
     // Update Auth Profile if imageUrl or displayName is provided
     if (auth.currentUser && auth.currentUser.uid === userId) {
         const profileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
-        if (data.fullName !== undefined) {
-            profileUpdates.displayName = data.fullName || null;
+        if (cleanedData.fullName !== undefined) {
+            profileUpdates.displayName = cleanedData.fullName || null;
         }
-        if (data.profileImageUrl !== undefined) {
-            profileUpdates.photoURL = data.profileImageUrl || null;
+        if (cleanedData.profileImageUrl !== undefined) {
+            profileUpdates.photoURL = cleanedData.profileImageUrl || null;
         }
         if (Object.keys(profileUpdates).length > 0) {
             await updateProfile(auth.currentUser, profileUpdates);

@@ -131,6 +131,7 @@ export function AnimatorsList() {
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<"all" | "assigned" | "unassigned" | "fullyAssigned">("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -527,12 +528,31 @@ export function AnimatorsList() {
     setIsAssignDialogOpen(true);
   };
 
-  const filteredAnimators = animators.filter(
-    (animator) =>
+  const filteredAnimators = animators.filter((animator) => {
+    const matchesSearch =
       animator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       animator.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (animator.address || "").toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+      (animator.address || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    const assignmentsInYear =
+      selectedYear === "All"
+        ? animator.assignments
+        : animator.assignments.filter((a) => a.year === selectedYear);
+
+    if (assignmentStatusFilter === "assigned") {
+      return assignmentsInYear.length > 0;
+    }
+    if (assignmentStatusFilter === "unassigned") {
+      return assignmentsInYear.length === 0;
+    }
+    if (assignmentStatusFilter === "fullyAssigned") {
+      return assignmentsInYear.length >= 10;
+    }
+
+    return true;
+  });
 
   if (loading) {
     return (
@@ -795,15 +815,29 @@ export function AnimatorsList() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards (Clickable Filter Pills) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+        <Card
+          onClick={() => setAssignmentStatusFilter("all")}
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            assignmentStatusFilter === "all"
+              ? "ring-2 ring-primary border-primary bg-primary/5"
+              : "hover:border-primary/50"
+          }`}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">{stats.total}</div>
             <p className="text-sm text-gray-500">Total Animators</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          onClick={() => setAssignmentStatusFilter("assigned")}
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            assignmentStatusFilter === "assigned"
+              ? "ring-2 ring-green-600 border-green-600 bg-green-50/50 dark:bg-green-950/20"
+              : "hover:border-green-500/50"
+          }`}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-green-600">
               {stats.assigned}
@@ -811,7 +845,14 @@ export function AnimatorsList() {
             <p className="text-sm text-gray-500">With Assignments</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          onClick={() => setAssignmentStatusFilter("unassigned")}
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            assignmentStatusFilter === "unassigned"
+              ? "ring-2 ring-orange-600 border-orange-600 bg-orange-50/50 dark:bg-orange-950/20"
+              : "hover:border-orange-500/50"
+          }`}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-orange-600">
               {stats.unassigned}
@@ -819,7 +860,14 @@ export function AnimatorsList() {
             <p className="text-sm text-gray-500">No Assignments</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          onClick={() => setAssignmentStatusFilter("fullyAssigned")}
+          className={`cursor-pointer transition-all hover:shadow-md ${
+            assignmentStatusFilter === "fullyAssigned"
+              ? "ring-2 ring-blue-600 border-blue-600 bg-blue-50/50 dark:bg-blue-950/20"
+              : "hover:border-blue-500/50"
+          }`}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-blue-600">
               {stats.fullyAssigned}
@@ -842,6 +890,24 @@ export function AnimatorsList() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <div className="w-full sm:w-[220px]">
+              <Select
+                value={assignmentStatusFilter}
+                onValueChange={(val: "all" | "assigned" | "unassigned" | "fullyAssigned") =>
+                  setAssignmentStatusFilter(val)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status ({stats.total})</SelectItem>
+                  <SelectItem value="assigned">With Assignments ({stats.assigned})</SelectItem>
+                  <SelectItem value="unassigned">No Assignments ({stats.unassigned})</SelectItem>
+                  <SelectItem value="fullyAssigned">Fully Assigned ({stats.fullyAssigned})</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="w-full sm:w-[240px]">
               <Select value={selectedYear} onValueChange={setSelectedYear}>
                 <SelectTrigger className="w-full">
@@ -861,12 +927,62 @@ export function AnimatorsList() {
         </CardContent>
       </Card>
 
+      {/* Active Filter Indicator */}
+      {assignmentStatusFilter !== "all" && (
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs py-1 px-2.5 flex items-center gap-1.5">
+              <span>Filter:</span>
+              <span className="font-semibold">
+                {assignmentStatusFilter === "assigned"
+                  ? "With Assignments"
+                  : assignmentStatusFilter === "unassigned"
+                  ? "No Assignments"
+                  : "Fully Assigned (10/10)"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAssignmentStatusFilter("all")}
+                className="ml-1 hover:text-red-600 rounded-full cursor-pointer"
+                title="Clear filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              Showing {filteredAnimators.length} of {stats.total} animators
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs h-7 text-muted-foreground hover:text-foreground cursor-pointer"
+            onClick={() => setAssignmentStatusFilter("all")}
+          >
+            Reset filter
+          </Button>
+        </div>
+      )}
+
       {/* Animators Grid */}
       {filteredAnimators.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-gray-500">
             <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No animators found</p>
+            <p>No animators found matching your filters</p>
+            {(assignmentStatusFilter !== "all" || searchTerm) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 cursor-pointer"
+                onClick={() => {
+                  setAssignmentStatusFilter("all");
+                  setSearchTerm("");
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

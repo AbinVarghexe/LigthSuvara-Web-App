@@ -223,17 +223,25 @@ export function UserDetail() {
 
     setActionLoading(true);
     try {
-      const updates: Partial<UserData> = {
-        fullName: editForm.fullName,
-        phoneNumber: user.role === "parish" ? "" : editForm.phoneNumber,
-        address: user.role === "animator" ? editForm.address : undefined,
+      const updates: Record<string, any> = {
+        fullName: editForm.fullName || "",
       };
+
+      if (user.role !== "parish") {
+        updates.phoneNumber = editForm.phoneNumber || "";
+      }
+
+      if (user.role === "animator") {
+        updates.name = editForm.fullName || "";
+        updates.address = editForm.address || "";
+      }
 
       // Handle school name and geographic fields
       if (user.role === "school") {
-        updates.schoolname = editForm.schoolname;
-        updates.forane = editForm.forane;
-        updates.parish = editForm.parish;
+        updates.schoolname = editForm.schoolname || "";
+        updates.schoolName = editForm.schoolname || "";
+        updates.forane = editForm.forane || "";
+        updates.parish = editForm.parish || "";
       }
 
       await updateUserProfile(user.id, updates);
@@ -241,9 +249,9 @@ export function UserDetail() {
       setUser({ ...user, ...updates });
       toast.success("User profile updated successfully");
       setShowEditDialog(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating user:", error);
-      toast.error("Failed to update user profile");
+      toast.error(error?.message || "Failed to update user profile");
     } finally {
       setActionLoading(false);
     }
