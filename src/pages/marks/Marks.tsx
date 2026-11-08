@@ -133,6 +133,7 @@ export function Marks() {
   const [editingMarkId, setEditingMarkId] = useState<string | null>(null);
   const [editingMarkValue, setEditingMarkValue] = useState("");
   const [savingMark, setSavingMark] = useState(false);
+  const [loadingMarksId, setLoadingMarksId] = useState<string | null>(null);
 
   // Comparison States
   const [isComparing, setIsComparing] = useState(false);
@@ -186,6 +187,7 @@ export function Marks() {
 
   const handleViewDetails = async (marksId: string) => {
     try {
+      setLoadingMarksId(marksId);
       const details = await getMarksWithDetails(marksId);
       if (details) {
         setSelectedMarks(details);
@@ -202,6 +204,8 @@ export function Marks() {
     } catch (error) {
       console.error("Error fetching marks details:", error);
       toast.error("Failed to load marks details");
+    } finally {
+      setLoadingMarksId(null);
     }
   };
 
@@ -1859,13 +1863,18 @@ export function Marks() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  className={`h-8 w-8 ${loadingMarksId === mark.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
                                   onClick={() => handleViewDetails(mark.id!)}
+                                  disabled={loadingMarksId === mark.id}
                                 >
-                                  <Eye className="h-4 w-4" />
+                                  {loadingMarksId === mark.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>View Details</TooltipContent>
+                              <TooltipContent>{loadingMarksId === mark.id ? "Loading..." : "View Details"}</TooltipContent>
                             </Tooltip>
                             {mark.pdfUrl && (
                               <Tooltip>

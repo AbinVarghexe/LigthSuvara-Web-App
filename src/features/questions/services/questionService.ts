@@ -35,11 +35,22 @@ export interface QuestionData {
     createdAt?: Timestamp;
 }
 
+// In-memory cache for questions to eliminate redundant round-trips
+let questionsCache: QuestionData[] | null = null;
+
+export const clearQuestionsCache = () => {
+    questionsCache = null;
+};
+
 // Question CRUD Operations
-export const getQuestions = async () => {
+export const getQuestions = async (forceRefresh = false) => {
+    if (questionsCache && !forceRefresh) {
+        return questionsCache;
+    }
     const q = query(collection(db, 'questions'), orderBy('order', 'asc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as QuestionData[];
+    questionsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as QuestionData[];
+    return questionsCache;
 };
 
 export const getQuestion = async (questionId: string) => {
@@ -53,6 +64,7 @@ export const getQuestion = async (questionId: string) => {
 };
 
 export const createQuestion = async (questionData: Omit<QuestionData, 'id' | 'createdAt'>) => {
+    clearQuestionsCache();
     return await addDoc(collection(db, 'questions'), {
         ...questionData,
         createdAt: serverTimestamp()
@@ -60,11 +72,13 @@ export const createQuestion = async (questionData: Omit<QuestionData, 'id' | 'cr
 };
 
 export const updateQuestion = async (questionId: string, questionData: Partial<QuestionData>) => {
+    clearQuestionsCache();
     const docRef = doc(db, 'questions', questionId);
     return await updateDoc(docRef, questionData);
 };
 
 export const deleteQuestion = async (questionId: string) => {
+    clearQuestionsCache();
     return await deleteDoc(doc(db, 'questions', questionId));
 };
 
@@ -76,6 +90,7 @@ export const getNextQuestionOrder = async (): Promise<number> => {
 };
 
 export const reorderQuestions = async (questions: QuestionData[]) => {
+    clearQuestionsCache();
     const chunkSize = 400;
     for (let i = 0; i < questions.length; i += chunkSize) {
         const chunk = questions.slice(i, i + chunkSize);
@@ -97,6 +112,7 @@ export const getTotalMaxMarks = async (): Promise<number> => {
 };
 
 export const toggleMandatory = async (questionId: string, currentValue: boolean) => {
+    clearQuestionsCache();
     const docRef = doc(db, 'questions', questionId);
     return await updateDoc(docRef, { isMandatory: !currentValue });
 };

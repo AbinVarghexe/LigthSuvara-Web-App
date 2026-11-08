@@ -341,7 +341,11 @@ export const getMarksBySchool = async (schoolId: string): Promise<MarksData[]> =
 // Get single marks entry with details (with multi-animator consolidation)
 export const getMarksWithDetails = async (marksId: string): Promise<MarksWithDetails | null> => {
     const docRef = doc(db, 'marks', marksId);
-    const docSnap = await getDoc(docRef);
+    // Fetch mark document and questions in parallel
+    const [docSnap, questions] = await Promise.all([
+        getDoc(docRef),
+        getQuestions()
+    ]);
 
     if (!docSnap.exists()) return null;
 
@@ -351,7 +355,6 @@ export const getMarksWithDetails = async (marksId: string): Promise<MarksWithDet
         ...data,
         schoolId: data.schoolUserId || data.schoolId || ''
     } as MarksData;
-    const questions = await getQuestions();
 
     const labelsMap: Record<string, string> = {};
     let maxTotalMarks = 0;
@@ -369,27 +372,44 @@ export const getMarksWithDetails = async (marksId: string): Promise<MarksWithDet
         }
     });
 
-    // Find all peer submissions for the same school and academic year
+    // Find peer submissions for the same school and academic year using targeted queries
     let peerDocs: MarksData[] = [];
     if (marksData.year) {
-        const qPeers = query(
-            collection(db, 'marks'),
-            where('year', '==', marksData.year)
-        );
-        const peersSnap = await getDocs(qPeers);
-        peersSnap.docs.forEach(d => {
-            const dData = d.data();
-            const dSchoolId = dData.schoolUserId || dData.schoolId || '';
-            const matchSchool = marksData.schoolId && dSchoolId === marksData.schoolId;
-            const matchParish = marksData.parish && dData.parish && dData.parish.toLowerCase() === marksData.parish.toLowerCase();
-            if (matchSchool || matchParish) {
+        let peersSnap = null;
+        if (marksData.schoolId) {
+            peersSnap = await getDocs(query(
+                collection(db, 'marks'),
+                where('year', '==', marksData.year),
+                where('schoolId', '==', marksData.schoolId)
+            )).catch(() => null);
+
+            if (!peersSnap || peersSnap.empty) {
+                peersSnap = await getDocs(query(
+                    collection(db, 'marks'),
+                    where('year', '==', marksData.year),
+                    where('schoolUserId', '==', marksData.schoolId)
+                )).catch(() => null);
+            }
+        }
+
+        if ((!peersSnap || peersSnap.empty) && marksData.parish) {
+            peersSnap = await getDocs(query(
+                collection(db, 'marks'),
+                where('year', '==', marksData.year),
+                where('parish', '==', marksData.parish)
+            )).catch(() => null);
+        }
+
+        if (peersSnap && !peersSnap.empty) {
+            peersSnap.docs.forEach(d => {
+                const dData = d.data();
                 peerDocs.push({
                     id: d.id,
                     ...dData,
-                    schoolId: dSchoolId
+                    schoolId: dData.schoolUserId || dData.schoolId || ''
                 } as MarksData);
-            }
-        });
+            });
+        }
     }
 
     if (peerDocs.length === 0) {

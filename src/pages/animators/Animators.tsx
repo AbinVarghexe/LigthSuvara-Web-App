@@ -205,13 +205,13 @@ export function AnimatorsList() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [animatorsData, schoolsData, statsData, usersData, foranesSnap] = await Promise.all([
+      const [animatorsData, schoolsData, usersData, foranesSnap] = await Promise.all([
         getAnimators(),
         getUnassignedSchools(selectedYear),
-        getAnimatorStats(selectedYear),
         getUsers(),
         getDocs(query(collection(db, "foranes"), orderBy("name"))).catch(() => null),
       ]);
+      const statsData = await getAnimatorStats(selectedYear, animatorsData);
       setAnimators(animatorsData);
       setUnassignedSchools(schoolsData as SchoolData[]);
       setStats(statsData);
@@ -530,7 +530,8 @@ export function AnimatorsList() {
   const filteredAnimators = animators.filter(
     (animator) =>
       animator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animator.email.toLowerCase().includes(searchTerm.toLowerCase()),
+      animator.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (animator.address || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   if (loading) {
@@ -887,7 +888,7 @@ export function AnimatorsList() {
                       </Avatar>
                       <div>
                         <CardTitle className="text-lg">
-                          {animator.name}
+                          {animator.name}{animator.address ? ` ${animator.address}` : ""}
                         </CardTitle>
                         <p className="text-sm text-gray-500">{animator.email}</p>
                         {(animator.parishName || animator.parish) ? (
@@ -1029,7 +1030,7 @@ export function AnimatorsList() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Animator</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete {animator.name}?
+                                Are you sure you want to delete {animator.name}{animator.address ? ` ${animator.address}` : ""}?
                                 This will also remove all their assignments.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
@@ -1059,7 +1060,7 @@ export function AnimatorsList() {
         <DialogContent className="sm:max-w-md md:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              Assign School to {selectedAnimator?.name}
+              Assign School to {selectedAnimator?.name}{selectedAnimator?.address ? ` ${selectedAnimator.address}` : ""}
             </DialogTitle>
             <DialogDescription>
               Select a school to assign to this animator. Maximum 10 schools per
@@ -1833,7 +1834,9 @@ export function AnimatorProfilesView() {
                     </div>
                     <div>
                       <h3 className="font-medium text-foreground flex items-center gap-2 flex-wrap">
-                        <span>{user.name || "Unnamed User"}</span>
+                        <span>
+                          {user.name || "Unnamed User"}{user.address ? ` ${user.address}` : ""}
+                        </span>
                       </h3>
                       <p className="text-sm text-muted-foreground truncate max-w-[180px]">
                         {user.email}

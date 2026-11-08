@@ -62,25 +62,22 @@ export interface AnimatorWithUser {
 
 // Get all animators with their assignments
 export const getAnimators = async (): Promise<AnimatorWithUser[]> => {
-    // Get all users with role 'animator'
-    const usersQuery = query(
-        collection(db, 'users'),
-        where('role', '==', 'animator')
-    );
-    const usersSnapshot = await getDocs(usersQuery);
+    // Fetch users and assignments in parallel using bulk collection queries (avoids N+1 sequential requests)
+    const [usersSnapshot, assignmentsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('role', '==', 'animator'))),
+        getDocs(collection(db, 'animator_assignments'))
+    ]);
 
-    const animators: AnimatorWithUser[] = [];
+    const assignmentsMap = new Map<string, AnimatorAssignment[]>();
+    assignmentsSnapshot.docs.forEach(doc => {
+        assignmentsMap.set(doc.id, doc.data()?.assignments || []);
+    });
 
-    for (const userDoc of usersSnapshot.docs) {
+    return usersSnapshot.docs.map(userDoc => {
         const userData = userDoc.data();
+        const assignments = assignmentsMap.get(userDoc.id) || [];
 
-        // Get animator assignments
-        const assignmentDoc = await getDoc(doc(db, 'animator_assignments', userDoc.id));
-        const assignments = assignmentDoc.exists()
-            ? (assignmentDoc.data()?.assignments || [])
-            : [];
-
-        animators.push({
+        return {
             id: userDoc.id,
             uid: userDoc.id,
             email: userData.email || '',
@@ -94,10 +91,8 @@ export const getAnimators = async (): Promise<AnimatorWithUser[]> => {
             role: userData.role || 'animator',
             disabled: userData.disabled || false,
             assignments
-        });
-    }
-
-    return animators;
+        };
+    });
 };
 
 // Get single animator with assignments
@@ -320,15 +315,15 @@ export const removeAssignment = async (
 
 // Get schools that still have remaining animator capacity for a specific year
 export const getUnassignedSchools = async (year: string = getAcademicYear()) => {
-    // Get all schools
+    // Fetch schools and assignments in parallel
     const schoolsQuery = query(
         collection(db, 'users'),
         where('role', '==', 'school')
     );
-    const schoolsSnapshot = await getDocs(schoolsQuery);
-
-    // Get all assignments across all animators
-    const assignmentsSnapshot = await getDocs(collection(db, 'animator_assignments'));
+    const [schoolsSnapshot, assignmentsSnapshot] = await Promise.all([
+        getDocs(schoolsQuery),
+        getDocs(collection(db, 'animator_assignments'))
+    ]);
     const schoolAssignmentCounts = new Map<string, number>();
 
     assignmentsSnapshot.docs.forEach(doc => {
@@ -375,8 +370,8 @@ export const deleteAnimator = async (animatorId: string): Promise<void> => {
 };
 
 // Get assignment statistics for a specific year
-export const getAnimatorStats = async (year: string = getAcademicYear()) => {
-    const animators = await getAnimators();
+export const getAnimatorStats = async (year: string = getAcademicYear(), preloadedAnimators?: AnimatorWithUser[]) => {
+    const animators = preloadedAnimators || (await getAnimators());
     const assignedInYear = animators.filter(a => a.assignments.some(asg => asg.year === year));
     const unassignedInYear = animators.filter(a => !a.assignments.some(asg => asg.year === year));
     const fullyAssignedInYear = animators.filter(a => a.assignments.filter(asg => asg.year === year).length >= 10);
