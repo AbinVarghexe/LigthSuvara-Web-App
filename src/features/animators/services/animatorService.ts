@@ -35,6 +35,7 @@ export interface AnimatorAssignment {
     parish: string;
     forane: string;
     year: string;
+    assignedDate?: string; // YYYY-MM-DD
 }
 
 export interface AnimatorAssignmentData {
@@ -285,9 +286,22 @@ export const addAssignment = async (
         );
     }
 
+    // Sanitize assignment object so no undefined properties are sent to Firestore
+    const cleanedAssignment: any = {
+        unitId: assignment.unitId,
+        schoolUserId: assignment.schoolUserId,
+        schoolname: assignment.schoolname,
+        parish: assignment.parish,
+        forane: assignment.forane,
+        year: assignment.year,
+    };
+    if (assignment.assignedDate && assignment.assignedDate.trim()) {
+        cleanedAssignment.assignedDate = assignment.assignedDate.trim();
+    }
+
     if (assignmentDoc.exists()) {
         await updateDoc(doc(db, 'animator_assignments', animatorId), {
-            assignments: arrayUnion(assignment)
+            assignments: arrayUnion(cleanedAssignment)
         });
     } else {
         // Create new assignment document
@@ -298,7 +312,7 @@ export const addAssignment = async (
         await setDoc(doc(db, 'animator_assignments', animatorId), {
             animatorName: userData.name || userData.fullName || '',
             animatorEmail: userData.email || '',
-            assignments: [assignment]
+            assignments: [cleanedAssignment]
         });
     }
 };
@@ -308,9 +322,46 @@ export const removeAssignment = async (
     animatorId: string,
     assignment: AnimatorAssignment
 ): Promise<void> => {
-    await updateDoc(doc(db, 'animator_assignments', animatorId), {
-        assignments: arrayRemove(assignment)
+    const docRef = doc(db, 'animator_assignments', animatorId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return;
+    const currentAssignments: AnimatorAssignment[] = snap.data()?.assignments || [];
+    const filtered = currentAssignments.filter(a => !(
+        a.schoolUserId === assignment.schoolUserId && 
+        a.year === assignment.year
+    ));
+    await updateDoc(docRef, { assignments: filtered });
+};
+
+// Update assignment date for an animator's specific school assignment
+export const updateAssignmentDate = async (
+    animatorId: string,
+    schoolUserId: string,
+    year: string,
+    newDate?: string
+): Promise<void> => {
+    const docRef = doc(db, 'animator_assignments', animatorId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return;
+    const currentAssignments: AnimatorAssignment[] = snap.data()?.assignments || [];
+    const updated = currentAssignments.map(a => {
+        if (a.schoolUserId === schoolUserId && a.year === year) {
+            const copy: any = {
+                unitId: a.unitId,
+                schoolUserId: a.schoolUserId,
+                schoolname: a.schoolname,
+                parish: a.parish,
+                forane: a.forane,
+                year: a.year
+            };
+            if (newDate && newDate.trim()) {
+                copy.assignedDate = newDate.trim();
+            }
+            return copy;
+        }
+        return a;
     });
+    await updateDoc(docRef, { assignments: updated });
 };
 
 // Get schools that still have remaining animator capacity for a specific year

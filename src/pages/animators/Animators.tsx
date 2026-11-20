@@ -20,6 +20,9 @@ import {
   Sparkles,
   Upload,
   FileSpreadsheet,
+  Calendar,
+  CalendarDays,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   Card,
@@ -76,6 +79,7 @@ import {
   createAnimator,
   addAssignment,
   removeAssignment,
+  updateAssignmentDate,
   getUnassignedSchools,
   deleteAnimator,
   getAnimatorStats,
@@ -88,6 +92,7 @@ import {
 import { Marks } from "../marks/Marks";
 import { Questions } from "../questions/Questions";
 import { ExcelAnimatorUpload } from "../../features/animators/components/ExcelAnimatorUpload";
+import { AssignmentSchedulePreview } from "../../features/animators/components/AssignmentSchedulePreview";
 import { UserData, getUsers, resetUserPasswordByAdmin, toggleUserDisabledStatus } from "../../features/users/services/userService";
 import { Link } from "react-router";
 import {
@@ -134,6 +139,7 @@ export function AnimatorsList() {
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<"all" | "assigned" | "unassigned" | "fullyAssigned">("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedAnimator, setSelectedAnimator] =
@@ -183,6 +189,88 @@ export function AnimatorsList() {
 
   // Assignment form state
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const [assignedDate, setAssignedDate] = useState<string>("");
+
+  // Edit Assignment Date dialog state
+  const [isEditDateDialogOpen, setIsEditDateDialogOpen] = useState<boolean>(false);
+  const [editingAssignment, setEditingAssignment] = useState<{
+    animatorId: string;
+    animatorName: string;
+    assignment: AnimatorAssignment;
+  } | null>(null);
+  const [editAssignmentDateValue, setEditAssignmentDateValue] = useState<string>("");
+  const [updatingAssignmentDate, setUpdatingAssignmentDate] = useState<boolean>(false);
+
+  // Date filtering and sorting
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [customDateFilter, setCustomDateFilter] = useState<string>("");
+  const [sortBy, setSortBy] = useState<
+    "nameAsc" | "nameDesc" | "dateAsc" | "dateDesc" | "assignmentsDesc" | "assignmentsAsc"
+  >("nameAsc");
+
+  // Format YYYY-MM-DD to "Nov 7, 2026"
+  const formatDateDisplay = (dateStr?: string): string => {
+    if (!dateStr) return "";
+    try {
+      const parts = dateStr.split("-").map(Number);
+      if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        return d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Distinct scheduled dates across all loaded animators for current year
+  const uniqueAssignmentDates = useMemo(() => {
+    const datesSet = new Set<string>();
+    animators.forEach((a) => {
+      a.assignments.forEach((asg) => {
+        if ((selectedYear === "All" || asg.year === selectedYear) && asg.assignedDate) {
+          datesSet.add(asg.assignedDate);
+        }
+      });
+    });
+    return Array.from(datesSet).sort();
+  }, [animators, selectedYear]);
+
+  const openEditDateDialog = (animator: AnimatorWithUser, assignment: AnimatorAssignment) => {
+    setEditingAssignment({
+      animatorId: animator.id,
+      animatorName: `${animator.name}${animator.address ? ` ${animator.address}` : ""}`,
+      assignment,
+    });
+    setEditAssignmentDateValue(assignment.assignedDate || "");
+    setIsEditDateDialogOpen(true);
+  };
+
+  const handleSaveAssignmentDate = async () => {
+    if (!editingAssignment) return;
+    try {
+      setUpdatingAssignmentDate(true);
+      await updateAssignmentDate(
+        editingAssignment.animatorId,
+        editingAssignment.assignment.schoolUserId,
+        editingAssignment.assignment.year,
+        editAssignmentDateValue.trim() || undefined
+      );
+      toast.success("Assignment date updated successfully");
+      setIsEditDateDialogOpen(false);
+      setEditingAssignment(null);
+      fetchData();
+    } catch (error: any) {
+      console.error("Error updating assignment date:", error);
+      toast.error(error.message || "Failed to update assignment date");
+    } finally {
+      setUpdatingAssignmentDate(false);
+    }
+  };
 
   // Forane and School filtering states for dialogs
   const [foranesList, setForanesList] = useState<string[]>([]);
@@ -443,6 +531,7 @@ export function AnimatorsList() {
       parish: school.parish || "",
       forane: school.forane || "",
       year: selectedYear,
+      ...(assignedDate.trim() ? { assignedDate: assignedDate.trim() } : {}),
     };
 
     try {
@@ -450,6 +539,7 @@ export function AnimatorsList() {
       toast.success("School assigned successfully");
       setIsAssignDialogOpen(false);
       setSelectedSchoolId("");
+      setAssignedDate("");
       setSelectedAnimator(null);
       fetchData();
     } catch (error: any) {
@@ -525,34 +615,137 @@ export function AnimatorsList() {
 
   const openAssignDialog = (animator: AnimatorWithUser) => {
     setSelectedAnimator(animator);
+    setSelectedSchoolId("");
+    setAssignedDate("");
+    setAssignForaneFilter("all");
+    setAssignSchoolSearch("");
     setIsAssignDialogOpen(true);
   };
 
-  const filteredAnimators = animators.filter((animator) => {
-    const matchesSearch =
-      animator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animator.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (animator.address || "").toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredAnimators = useMemo(() => {
+    let result = animators.filter((animator) => {
+      const matchesSearch =
+        animator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        animator.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (animator.address || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    const assignmentsInYear =
-      selectedYear === "All"
-        ? animator.assignments
-        : animator.assignments.filter((a) => a.year === selectedYear);
+      const assignmentsInYear =
+        selectedYear === "All"
+          ? animator.assignments
+          : animator.assignments.filter((a) => a.year === selectedYear);
 
-    if (assignmentStatusFilter === "assigned") {
-      return assignmentsInYear.length > 0;
-    }
-    if (assignmentStatusFilter === "unassigned") {
-      return assignmentsInYear.length === 0;
-    }
-    if (assignmentStatusFilter === "fullyAssigned") {
-      return assignmentsInYear.length >= 10;
-    }
+      if (assignmentStatusFilter === "assigned") {
+        if (assignmentsInYear.length === 0) return false;
+      } else if (assignmentStatusFilter === "unassigned") {
+        if (assignmentsInYear.length > 0) return false;
+      } else if (assignmentStatusFilter === "fullyAssigned") {
+        if (assignmentsInYear.length < 10) return false;
+      }
 
-    return true;
-  });
+      // Date filtering
+      if (dateFilter !== "all") {
+        if (dateFilter === "hasDate") {
+          const hasAnyDate = assignmentsInYear.some((a) => !!a.assignedDate);
+          if (!hasAnyDate) return false;
+        } else if (dateFilter === "noDate") {
+          const hasAnyDate = assignmentsInYear.some((a) => !!a.assignedDate);
+          if (hasAnyDate) return false;
+        } else if (dateFilter === "custom") {
+          if (customDateFilter) {
+            const hasMatchingDate = assignmentsInYear.some(
+              (a) => a.assignedDate === customDateFilter
+            );
+            if (!hasMatchingDate) return false;
+          }
+        } else {
+          // Specific date string
+          const hasMatchingDate = assignmentsInYear.some(
+            (a) => a.assignedDate === dateFilter
+          );
+          if (!hasMatchingDate) return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Sorting
+    result = [...result].sort((a, b) => {
+      const assignmentsA =
+        selectedYear === "All"
+          ? a.assignments
+          : a.assignments.filter((asg) => asg.year === selectedYear);
+      const assignmentsB =
+        selectedYear === "All"
+          ? b.assignments
+          : b.assignments.filter((asg) => asg.year === selectedYear);
+
+      if (sortBy === "nameAsc") {
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === "nameDesc") {
+        return b.name.localeCompare(a.name);
+      }
+      if (sortBy === "assignmentsDesc") {
+        return assignmentsB.length - assignmentsA.length || a.name.localeCompare(b.name);
+      }
+      if (sortBy === "assignmentsAsc") {
+        return assignmentsA.length - assignmentsB.length || a.name.localeCompare(b.name);
+      }
+      if (sortBy === "dateAsc") {
+        // Earliest assignment date first
+        const datesA = assignmentsA
+          .map((asg) => asg.assignedDate)
+          .filter((d): d is string => !!d)
+          .sort();
+        const datesB = assignmentsB
+          .map((asg) => asg.assignedDate)
+          .filter((d): d is string => !!d)
+          .sort();
+
+        const dateA = datesA[0] || null;
+        const dateB = datesB[0] || null;
+
+        if (dateA && dateB) {
+          const comp = dateA.localeCompare(dateB);
+          if (comp !== 0) return comp;
+          return a.name.localeCompare(b.name);
+        }
+        if (dateA && !dateB) return -1;
+        if (!dateA && dateB) return 1;
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === "dateDesc") {
+        // Latest assignment date first
+        const datesA = assignmentsA
+          .map((asg) => asg.assignedDate)
+          .filter((d): d is string => !!d)
+          .sort();
+        const datesB = assignmentsB
+          .map((asg) => asg.assignedDate)
+          .filter((d): d is string => !!d)
+          .sort();
+
+        const dateA = datesA[datesA.length - 1] || null;
+        const dateB = datesB[datesB.length - 1] || null;
+
+        if (dateA && dateB) {
+          const comp = dateB.localeCompare(dateA);
+          if (comp !== 0) return comp;
+          return a.name.localeCompare(b.name);
+        }
+        if (dateA && !dateB) return -1;
+        if (!dateA && dateB) return 1;
+        return a.name.localeCompare(b.name);
+      }
+
+      return 0;
+    });
+
+    return result;
+  }, [animators, searchTerm, assignmentStatusFilter, selectedYear, dateFilter, customDateFilter, sortBy]);
 
   if (loading) {
     return (
@@ -568,7 +761,15 @@ export function AnimatorsList() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Animator Management
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => setIsPreviewDialogOpen(true)}
+            className="border-purple-600/30 text-purple-700 hover:bg-purple-50 dark:border-purple-700/50 dark:text-purple-300 dark:hover:bg-purple-950/40 cursor-pointer"
+          >
+            <CalendarDays className="w-4 h-4 mr-2 text-purple-600 dark:text-purple-400" />
+            Schedule Preview
+          </Button>
           <Button
             variant="outline"
             onClick={() => setIsUploadDialogOpen(true)}
@@ -878,8 +1079,9 @@ export function AnimatorsList() {
       </div>
 
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
+        <CardContent className="p-4 space-y-3">
+          {/* Row 1: Search, Status Filter, Academic Year */}
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
@@ -924,31 +1126,186 @@ export function AnimatorsList() {
               </Select>
             </div>
           </div>
+
+          {/* Row 2: Assignment Date Filter & Sorting */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+            {/* Filter by Date */}
+            <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground shrink-0">
+                <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                <span>Assignment Date:</span>
+              </div>
+              <div className="w-full sm:w-[260px]">
+                <Select
+                  value={dateFilter}
+                  onValueChange={(val) => {
+                    setDateFilter(val);
+                    if (val !== "custom") setCustomDateFilter("");
+                  }}
+                >
+                  <SelectTrigger className="w-full text-xs h-9">
+                    <SelectValue placeholder="Filter by date..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="all">All Dates</SelectItem>
+                    <SelectItem value="hasDate">Has Scheduled Date</SelectItem>
+                    <SelectItem value="noDate">No Scheduled Date</SelectItem>
+                    <SelectItem value="custom">Pick Specific Date...</SelectItem>
+                    {uniqueAssignmentDates.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40">
+                          Scheduled Dates ({uniqueAssignmentDates.length})
+                        </div>
+                        {uniqueAssignmentDates.map((dateStr) => {
+                          const count = animators.filter((a) =>
+                            a.assignments.some(
+                              (asg) =>
+                                (selectedYear === "All" || asg.year === selectedYear) &&
+                                asg.assignedDate === dateStr
+                            )
+                          ).length;
+                          return (
+                            <SelectItem key={dateStr} value={dateStr}>
+                              {formatDateDisplay(dateStr)} ({count} animator{count !== 1 ? "s" : ""})
+                            </SelectItem>
+                          );
+                        })}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {dateFilter === "custom" && (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="date"
+                    value={customDateFilter}
+                    onChange={(e) => setCustomDateFilter(e.target.value)}
+                    className="h-9 text-xs w-full sm:w-auto"
+                  />
+                  {customDateFilter && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                      onClick={() => setCustomDateFilter("")}
+                      title="Clear custom date"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Sort animators */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground shrink-0">
+                <ArrowUpDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Sort:</span>
+              </div>
+              <div className="w-full sm:w-[240px]">
+                <Select
+                  value={sortBy}
+                  onValueChange={(val: any) => setSortBy(val)}
+                >
+                  <SelectTrigger className="w-full text-xs h-9">
+                    <SelectValue placeholder="Sort animators" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nameAsc">Name (A → Z)</SelectItem>
+                    <SelectItem value="nameDesc">Name (Z → A)</SelectItem>
+                    <SelectItem value="dateAsc">Assignment Date (Earliest First)</SelectItem>
+                    <SelectItem value="dateDesc">Assignment Date (Latest First)</SelectItem>
+                    <SelectItem value="assignmentsDesc">Assignments (Most First)</SelectItem>
+                    <SelectItem value="assignmentsAsc">Assignments (Least First)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Active Filter Indicator */}
-      {assignmentStatusFilter !== "all" && (
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs py-1 px-2.5 flex items-center gap-1.5">
-              <span>Filter:</span>
-              <span className="font-semibold">
-                {assignmentStatusFilter === "assigned"
-                  ? "With Assignments"
-                  : assignmentStatusFilter === "unassigned"
-                  ? "No Assignments"
-                  : "Fully Assigned (10/10)"}
-              </span>
-              <button
-                type="button"
-                onClick={() => setAssignmentStatusFilter("all")}
-                className="ml-1 hover:text-red-600 rounded-full cursor-pointer"
-                title="Clear filter"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+      {/* Active Filter Indicators */}
+      {(assignmentStatusFilter !== "all" || dateFilter !== "all" || searchTerm || sortBy !== "nameAsc") && (
+        <div className="flex items-center justify-between px-1 flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium">Active Filters:</span>
+            {assignmentStatusFilter !== "all" && (
+              <Badge variant="secondary" className="text-xs py-1 px-2.5 flex items-center gap-1.5">
+                <span>Status:</span>
+                <span className="font-semibold">
+                  {assignmentStatusFilter === "assigned"
+                    ? "With Assignments"
+                    : assignmentStatusFilter === "unassigned"
+                    ? "No Assignments"
+                    : "Fully Assigned (10/10)"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentStatusFilter("all")}
+                  className="ml-1 hover:text-red-600 rounded-full cursor-pointer"
+                  title="Clear status filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+
+            {dateFilter !== "all" && (
+              <Badge variant="secondary" className="text-xs py-1 px-2.5 flex items-center gap-1.5 border border-purple-200 dark:border-purple-800 bg-purple-50 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300">
+                <Calendar className="h-3 w-3 text-purple-600" />
+                <span>Date:</span>
+                <span className="font-semibold">
+                  {dateFilter === "hasDate"
+                    ? "Has Scheduled Date"
+                    : dateFilter === "noDate"
+                    ? "No Scheduled Date"
+                    : dateFilter === "custom"
+                    ? customDateFilter ? formatDateDisplay(customDateFilter) : "Custom"
+                    : formatDateDisplay(dateFilter)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFilter("all");
+                    setCustomDateFilter("");
+                  }}
+                  className="ml-1 hover:text-red-600 rounded-full cursor-pointer"
+                  title="Clear date filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+
+            {sortBy !== "nameAsc" && (
+              <Badge variant="outline" className="text-xs py-1 px-2 flex items-center gap-1 text-muted-foreground">
+                <ArrowUpDown className="h-3 w-3" />
+                <span>
+                  {sortBy === "nameDesc"
+                    ? "Name Z-A"
+                    : sortBy === "dateAsc"
+                    ? "Earliest Date"
+                    : sortBy === "dateDesc"
+                    ? "Latest Date"
+                    : sortBy === "assignmentsDesc"
+                    ? "Most Assignments"
+                    : "Least Assignments"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSortBy("nameAsc")}
+                  className="ml-1 hover:text-red-600 cursor-pointer"
+                  title="Reset sort"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+
             <span className="text-xs text-muted-foreground">
               Showing {filteredAnimators.length} of {stats.total} animators
             </span>
@@ -957,9 +1314,15 @@ export function AnimatorsList() {
             variant="ghost"
             size="sm"
             className="text-xs h-7 text-muted-foreground hover:text-foreground cursor-pointer"
-            onClick={() => setAssignmentStatusFilter("all")}
+            onClick={() => {
+              setAssignmentStatusFilter("all");
+              setDateFilter("all");
+              setCustomDateFilter("");
+              setSortBy("nameAsc");
+              setSearchTerm("");
+            }}
           >
-            Reset filter
+            Reset all
           </Button>
         </div>
       )}
@@ -970,13 +1333,16 @@ export function AnimatorsList() {
           <CardContent className="py-12 text-center text-gray-500">
             <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No animators found matching your filters</p>
-            {(assignmentStatusFilter !== "all" || searchTerm) && (
+            {(assignmentStatusFilter !== "all" || dateFilter !== "all" || searchTerm || sortBy !== "nameAsc") && (
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-3 cursor-pointer"
                 onClick={() => {
                   setAssignmentStatusFilter("all");
+                  setDateFilter("all");
+                  setCustomDateFilter("");
+                  setSortBy("nameAsc");
                   setSearchTerm("");
                 }}
               >
@@ -1048,36 +1414,69 @@ export function AnimatorsList() {
                         {assignmentsForYear.map((assignment, index) => (
                           <div
                             key={index}
-                            className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                            className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700/60 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                           >
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <School className="h-4 w-4 text-gray-400 shrink-0" />
+                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                              <School className="h-4 w-4 text-blue-500 shrink-0" />
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium truncate">
+                                <p className="text-sm font-semibold truncate text-gray-900 dark:text-gray-100">
                                   {assignment.schoolname}
                                 </p>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-xs text-gray-500 truncate">
+                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  <span className="text-xs text-gray-500 truncate">
                                     {assignment.parish}
-                                  </p>
+                                  </span>
                                   {assignment.year && (
-                                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                    <span className="text-[11px] bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 px-1.5 py-0.5 rounded font-medium shrink-0">
                                       {formatAcademicYear(assignment.year)}
                                     </span>
+                                  )}
+                                  {assignment.assignedDate ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditDateDialog(animator, assignment)}
+                                      title="Click to change assignment date"
+                                      className="inline-flex items-center gap-1 text-[11px] bg-purple-100 hover:bg-purple-200 text-purple-800 dark:bg-purple-950/70 dark:hover:bg-purple-900/80 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer"
+                                    >
+                                      <Calendar className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                                      <span>{formatDateDisplay(assignment.assignedDate)}</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditDateDialog(animator, assignment)}
+                                      title="Click to schedule a date"
+                                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-purple-600 bg-gray-100 dark:bg-gray-700/50 hover:bg-purple-50 dark:hover:bg-purple-950/40 px-1.5 py-0.5 rounded border border-dashed border-gray-300 dark:border-gray-600 transition-colors cursor-pointer"
+                                    >
+                                      <Calendar className="h-2.5 w-2.5" />
+                                      <span>+ Add Date</span>
+                                    </button>
                                   )}
                                 </div>
                               </div>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                handleRemoveAssignment(animator.id, assignment)
-                              }
-                            >
-                              <X className="h-4 w-4 text-red-500" />
-                            </Button>
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50 cursor-pointer"
+                                title="Edit assignment date"
+                                onClick={() => openEditDateDialog(animator, assignment)}
+                              >
+                                <Calendar className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
+                                title="Remove assignment"
+                                onClick={() =>
+                                  handleRemoveAssignment(animator.id, assignment)
+                                }
+                              >
+                                <X className="h-3.5 w-3.5 text-red-500" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1288,6 +1687,22 @@ export function AnimatorsList() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="assign-date">Assignment Date</Label>
+                <span className="text-xs text-muted-foreground">Optional</span>
+              </div>
+              <Input
+                id="assign-date"
+                type="date"
+                value={assignedDate}
+                onChange={(e) => setAssignedDate(e.target.value)}
+                className="w-full"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Set the date on which this animator is scheduled to visit this Sunday school.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1302,6 +1717,91 @@ export function AnimatorsList() {
             >
               Assign School
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Assignment Date Dialog */}
+      <Dialog
+        open={isEditDateDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDateDialogOpen(open);
+          if (!open) {
+            setEditingAssignment(null);
+            setEditAssignmentDateValue("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-purple-600" />
+              Manage Assignment Date
+            </DialogTitle>
+            <DialogDescription>
+              {editingAssignment?.animatorName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+              <p className="font-semibold text-foreground">
+                {editingAssignment?.assignment.schoolname}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {editingAssignment?.assignment.parish}{" "}
+                {editingAssignment?.assignment.year
+                  ? `• Academic Year ${formatAcademicYear(editingAssignment.assignment.year)}`
+                  : ""}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-assigned-date">Scheduled Date</Label>
+              <Input
+                id="edit-assigned-date"
+                type="date"
+                value={editAssignmentDateValue}
+                onChange={(e) => setEditAssignmentDateValue(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Pick a date or clear to leave this assignment unscheduled.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex sm:justify-between items-center gap-2">
+            {editAssignmentDateValue ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40"
+                onClick={() => setEditAssignmentDateValue("")}
+              >
+                Clear Date
+              </Button>
+            ) : (
+              <div />
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDateDialogOpen(false)}
+                disabled={updatingAssignmentDate}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveAssignmentDate}
+                disabled={updatingAssignmentDate}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {updatingAssignmentDate ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Calendar className="w-4 h-4 mr-2" />
+                )}
+                Save Date
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1554,6 +2054,14 @@ export function AnimatorsList() {
         onClose={() => setIsUploadDialogOpen(false)}
         onUploadComplete={fetchData}
         existingAnimators={animators}
+      />
+
+      {/* Assignment Schedule Preview Modal */}
+      <AssignmentSchedulePreview
+        open={isPreviewDialogOpen}
+        onOpenChange={setIsPreviewDialogOpen}
+        animators={animators}
+        selectedYear={selectedYear}
       />
     </div>
   );
